@@ -670,6 +670,7 @@ pub fn build_for(
                 domain.port = Some(decl);
                 conformance::add_entries(&built.ts, &mut domain, &mut names)?;
                 conformance::add_callers(model, &mut domain, &mut names)?;
+                conformance::claim_unimplemented(&domain, &mut names)?;
             }
             Err(e) if port => return Err(e),
             Err(_) => {}

@@ -2177,3 +2177,104 @@ type StaticUseCase interface {
 	// CommitStatic stores what PrepareStatic returned in one transaction.
 	CommitStatic(write StaticResult) error
 }
+
+// ── The unimplemented port: embed it to build before every method exists ──
+
+// ErrUnimplemented is what the methods of UnimplementedConformancePort return: the service has not
+// implemented the call yet. Conform stops a trace at such a call and reports the calls by use
+// case; `rdra-ish check --code=run` lists them, and --deny-incomplete fails on any.
+var ErrUnimplemented = errors.New("rdra-ish: not implemented")
+
+// UnimplementedConformancePort implements every use case's contract by returning ErrUnimplemented.
+// Embed it in a service to build before every method exists: a method the service declares takes the place of the embedded one, and `check --code=run` reports each call that still reaches it.
+type UnimplementedConformancePort struct{}
+
+// PrepareReturn returns ErrUnimplemented.
+func (UnimplementedConformancePort) PrepareReturn(MatchId) (w ReturnOutcome, err error) {
+	return w, ErrUnimplemented
+}
+
+// CommitReturn returns ErrUnimplemented.
+func (UnimplementedConformancePort) CommitReturn(ReturnOutcome) error {
+	return ErrUnimplemented
+}
+
+// PrepareDelete returns ErrUnimplemented.
+func (UnimplementedConformancePort) PrepareDelete(MatchId, Switch) (w DeleteOutcome, err error) {
+	return w, ErrUnimplemented
+}
+
+// CommitDelete returns ErrUnimplemented.
+func (UnimplementedConformancePort) CommitDelete(DeleteOutcome) error {
+	return ErrUnimplemented
+}
+
+// PrepareSuper returns ErrUnimplemented.
+func (UnimplementedConformancePort) PrepareSuper(MatchId) (w SuperOutcome, err error) {
+	return w, ErrUnimplemented
+}
+
+// CommitSuper returns ErrUnimplemented.
+func (UnimplementedConformancePort) CommitSuper(SuperOutcome) error {
+	return ErrUnimplemented
+}
+
+// PrepareCrate returns ErrUnimplemented.
+func (UnimplementedConformancePort) PrepareCrate(MatchId) (w CrateOutcome, err error) {
+	return w, ErrUnimplemented
+}
+
+// CommitCrate returns ErrUnimplemented.
+func (UnimplementedConformancePort) CommitCrate(CrateOutcome) error {
+	return ErrUnimplemented
+}
+
+// PrepareDefault returns ErrUnimplemented.
+func (UnimplementedConformancePort) PrepareDefault(MatchId) (w DefaultOutcome, err error) {
+	return w, ErrUnimplemented
+}
+
+// CommitDefault returns ErrUnimplemented.
+func (UnimplementedConformancePort) CommitDefault(DefaultOutcome) error {
+	return ErrUnimplemented
+}
+
+// PrepareType returns ErrUnimplemented.
+func (UnimplementedConformancePort) PrepareType(FuncId) (w TypeOutcome, err error) {
+	return w, ErrUnimplemented
+}
+
+// CommitType returns ErrUnimplemented.
+func (UnimplementedConformancePort) CommitType(TypeOutcome) error {
+	return ErrUnimplemented
+}
+
+// PrepareClass returns ErrUnimplemented.
+func (UnimplementedConformancePort) PrepareClass(FuncId) (w ClassOutcome, err error) {
+	return w, ErrUnimplemented
+}
+
+// CommitClass returns ErrUnimplemented.
+func (UnimplementedConformancePort) CommitClass(ClassOutcome) error {
+	return ErrUnimplemented
+}
+
+// PrepareNew returns ErrUnimplemented.
+func (UnimplementedConformancePort) PrepareNew(FunctionId, FuncId, ModId, MatchId, string, string, string, string, string, string, Kind) (w NewOutcome, err error) {
+	return w, ErrUnimplemented
+}
+
+// CommitNew returns ErrUnimplemented.
+func (UnimplementedConformancePort) CommitNew(NewOutcome) error {
+	return ErrUnimplemented
+}
+
+// PrepareStatic returns ErrUnimplemented.
+func (UnimplementedConformancePort) PrepareStatic(FunctionId, string) (w StaticResult, err error) {
+	return w, ErrUnimplemented
+}
+
+// CommitStatic returns ErrUnimplemented.
+func (UnimplementedConformancePort) CommitStatic(StaticResult) error {
+	return ErrUnimplemented
+}

@@ -385,9 +385,17 @@ fn contracts_are_built_and_printed_without_the_harness() {
     }
     let rust = generated(Lang::Rust);
     assert!(rust.contains("pub trait PayUseCase {"));
-    assert!(!rust.contains("ConformancePort"));
+    assert!(!rust.contains("trait ConformancePort"));
     let go = generated(Lang::Go);
-    assert!(!go.contains("ConformancePort"));
+    assert!(!go.contains("type ConformancePort"));
+    // The unimplemented port comes with the contracts, without the harness's Seed and Snapshot.
+    assert!(rust.contains("pub trait UnimplementedPayUseCase {}"));
+    assert!(rust.contains("impl<T: UnimplementedPayUseCase> PayUseCase for T {"));
+    assert!(go.contains("type UnimplementedConformancePort struct{}"));
+    assert!(!go.contains("func (UnimplementedConformancePort) Seed("));
+    let ts = generated(Lang::TypeScript);
+    assert!(ts.contains("export class UnimplementedConformancePort {"));
+    assert!(!ts.contains("  seed = "));
 }
 
 /// The declared refinements of the sample: `paid_at` present in `paid` by the invariant,

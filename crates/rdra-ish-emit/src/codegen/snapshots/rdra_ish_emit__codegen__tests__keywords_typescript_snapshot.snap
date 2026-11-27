@@ -1493,3 +1493,43 @@ export type StaticUseCase = {
   readonly prepareStatic: (function_: FunctionId, functionDefault: string) => Promise<Result<StaticResult, StaticError>>;
   readonly commitStatic: (write: StaticResult) => Promise<Result<void, StaticError>>;
 };
+
+// ── The unimplemented port: extend it to build before every member exists ──
+
+/**
+ * What the members of `UnimplementedConformancePort` reject with: the service has not implemented the call
+ * yet. `conform` stops a trace at such a call and reports the calls by use case;
+ * `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any.
+ */
+export class Unimplemented extends globalThis.Error {
+  constructor(member: string) {
+    super(`rdra-ish: not implemented: ${member}`);
+    this.name = "Unimplemented";
+  }
+}
+
+/**
+ * Every use case's contract, each member rejecting with `Unimplemented`.
+ * Extend it to build before every member exists: a member the service declares takes
+ * the place of this one, and `check --code=run` reports each call that still reaches it.
+ */
+export class UnimplementedConformancePort {
+  prepareReturn = (_match: MatchId): Promise<Result<ReturnOutcome, ReturnError>> => Promise.reject(new Unimplemented("prepareReturn"));
+  commitReturn = (_write: ReturnOutcome): Promise<Result<void, ReturnError>> => Promise.reject(new Unimplemented("commitReturn"));
+  prepareDelete = (_match: MatchId, _switch_: Switch): Promise<Result<DeleteOutcome, DeleteError>> => Promise.reject(new Unimplemented("prepareDelete"));
+  commitDelete = (_write: DeleteOutcome): Promise<Result<void, DeleteError>> => Promise.reject(new Unimplemented("commitDelete"));
+  prepareSuper = (_match: MatchId): Promise<Result<SuperOutcome, SuperError>> => Promise.reject(new Unimplemented("prepareSuper"));
+  commitSuper = (_write: SuperOutcome): Promise<Result<void, SuperError>> => Promise.reject(new Unimplemented("commitSuper"));
+  prepareCrate = (_match: MatchId): Promise<Result<CrateOutcome, CrateError>> => Promise.reject(new Unimplemented("prepareCrate"));
+  commitCrate = (_write: CrateOutcome): Promise<Result<void, CrateError>> => Promise.reject(new Unimplemented("commitCrate"));
+  prepareDefault = (_match: MatchId): Promise<Result<DefaultOutcome, DefaultError>> => Promise.reject(new Unimplemented("prepareDefault"));
+  commitDefault = (_write: DefaultOutcome): Promise<Result<void, DefaultError>> => Promise.reject(new Unimplemented("commitDefault"));
+  prepareType = (_func: FuncId): Promise<Result<TypeOutcome, TypeError>> => Promise.reject(new Unimplemented("prepareType"));
+  commitType = (_write: TypeOutcome): Promise<Result<void, TypeError>> => Promise.reject(new Unimplemented("commitType"));
+  prepareClass = (_func: FuncId): Promise<Result<ClassOutcome, ClassError>> => Promise.reject(new Unimplemented("prepareClass"));
+  commitClass = (_write: ClassOutcome): Promise<Result<void, ClassError>> => Promise.reject(new Unimplemented("commitClass"));
+  prepareNew = (_parentFunction: FunctionId, _parentFunc: FuncId, _parentMod: ModId, _matchId: MatchId, _matchType: string, _matchNew: string, _matchFunc: string, _matchSelf: string, _matchCrate: string, _matchSuper: string, _matchKind: Kind): Promise<Result<NewOutcome, NewError>> => Promise.reject(new Unimplemented("prepareNew"));
+  commitNew = (_write: NewOutcome): Promise<Result<void, NewError>> => Promise.reject(new Unimplemented("commitNew"));
+  prepareStatic = (_function_: FunctionId, _functionDefault: string): Promise<Result<StaticResult, StaticError>> => Promise.reject(new Unimplemented("prepareStatic"));
+  commitStatic = (_write: StaticResult): Promise<Result<void, StaticError>> => Promise.reject(new Unimplemented("commitStatic"));
+}

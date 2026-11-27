@@ -4,6 +4,24 @@
 
 ### Added
 
+- `codegen` (default output changes): the domain code has an unimplemented port, a stand-in
+  for every contract that a service takes while it is unfinished, so it builds before every
+  method exists (dogfood G6; docs/design/algebraic-codegen.md, "The unimplemented port"). Go:
+  `UnimplementedConformancePort` to embed, whose methods return `ErrUnimplemented`.
+  TypeScript: `UnimplementedConformancePort` to extend, whose members reject with
+  `Unimplemented`. Rust: a marker trait `Unimplemented<Contract>` per contract (`impl
+  UnimplementedPayUseCase for Service {}`), whose blanket impl panics with
+  `unimplemented!`. With `--conformance`, Go's and TypeScript's also stand in for
+  `Seed`/`seed` and `Snapshot`/`snapshot`. The harness stops a trace at a call that reached
+  the stand-in and counts it; `check --code=run` adds `unimplemented: <n> use cases (...)` to
+  the coverage statement and warns `CodeUnimplemented`, an error with `--deny-incomplete`; a
+  self-check mutant stopped so is counted as stopped, not survived. `check --code=build`
+  reports nothing of it. Every Go, Rust and TypeScript output with contracts grows by the
+  stand-in (samples: +1 to +7 %), the names `UnimplementedConformancePort`,
+  `ErrUnimplemented`, `Unimplemented` and `Unimplemented<Contract>` are claimed, Rust's
+  `ConformanceReport` is no longer `Copy`, and the default `run` command of a domain table
+  shows the test's output (Go `-v`, Rust `--nocapture`), as an adapter table's did.
+
 - The conformance traces try every refusal of the model and check its kind (#439, PR 4). The
   format line is now `# rdra-ish conformance traces 4`, so traces and harnesses of an earlier
   version must be generated again (`check --code=fresh` says they are stale).

@@ -530,3 +530,60 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
     assert_eq!(errors(&stderr), ["CodeMutantSurvived"], "{stderr}");
     assert!(stderr.contains("the absent-row mutant"), "{stderr}");
 }
+
+/// The unimplemented port (docs/design/algebraic-codegen.md): a service that embeds
+/// `domain.UnimplementedConformancePort` and declares no Cancel methods builds, and its run
+/// passes with the calls of Cancel listed by use case and a warning, which
+/// `--deny-incomplete` makes an error. Without its own Seed, the run fails at the first seed.
+#[test]
+fn a_service_embedding_the_unimplemented_port_builds_and_its_calls_are_reported() {
+    if !tool("go", CODEGEN) {
+        return;
+    }
+    let embed = (
+        "type Service struct {\n",
+        "type Service struct {\n\tdomain.UnimplementedConformancePort\n",
+    );
+    let dir = shop(
+        "unimplemented",
+        &[
+            embed,
+            (
+                "func (s *Service) PrepareCancel(",
+                "func (s *Service) prepareCancelLater(",
+            ),
+            (
+                "func (s *Service) CommitCancel(",
+                "func (s *Service) commitCancelLater(",
+            ),
+        ],
+    );
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"], None));
+    assert_eq!(code, Some(0), "{stdout}{stderr}");
+    assert!(
+        stdout.contains("  unimplemented: 1 use case (Cancel): "),
+        "{stdout}"
+    );
+    assert!(stderr.contains("warning[CodeUnimplemented]"), "{stderr}");
+    let (code, stdout, stderr) = outcome(&rdra(
+        &dir,
+        &["check", "model", "--code=run", "--deny-incomplete"],
+        None,
+    ));
+    assert_eq!(code, Some(1), "{stdout}{stderr}");
+    assert!(stderr.contains("error[CodeUnimplemented]"), "{stderr}");
+
+    let dir = shop(
+        "unimplemented-seed",
+        &[
+            embed,
+            ("func (s *Service) Seed(", "func (s *Service) seedLater("),
+        ],
+    );
+    let (code, _, stderr) = outcome(&rdra(&dir, &["check", "model", "--code=run"], None));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.contains("the service's Seed failed: rdra-ish: not implemented"),
+        "{stderr}"
+    );
+}

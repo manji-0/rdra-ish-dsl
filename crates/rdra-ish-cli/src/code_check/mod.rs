@@ -19,7 +19,9 @@ use std::process::Command;
 use anyhow::{Context, Result};
 use rdra_ish_core::project::{CodeTarget, Manifest};
 use rdra_ish_emit::codegen::adapter::{Ran, REPORT};
-use rdra_ish_emit::codegen::conformance::{mutants, Mutant, MutantKind, TRACES_ENV};
+use rdra_ish_emit::codegen::conformance::{
+    mutants, Mutant, MutantKind, TRACES_ENV, UNIMPLEMENTED_REPORT,
+};
 use rdra_ish_emit::codegen::ir::{ContractDecl, PortMethod};
 use rdra_ish_emit::codegen::probe::{ContractIndex, Probe};
 
@@ -208,6 +210,95 @@ fn build(backend: &dyn Backend, t: &Target<'_>) -> Option<Result<Stepped>> {
 /// What a step found, and the lines it adds to the coverage statement.
 type Stepped = (Vec<CodeDiagnostic>, Vec<String>);
 
+/// The calls a passing run stopped a trace at because the service returned the unimplemented
+/// port's error (docs/design/algebraic-codegen.md, "The unimplemented port"), from the line
+/// the harness prints: `<prefix> <traces> traces stopped at <action> <calls>, ...`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Unimplemented {
+    /// Traces stopped.
+    stopped: usize,
+    /// Each action, with the calls of it that stopped a trace.
+    actions: Vec<(String, usize)>,
+}
+
+/// The diagnostic of a run that stopped traces at unimplemented calls: a warning, which
+/// `--deny-incomplete` makes an error.
+const UNIMPLEMENTED_FINDING: &str = "CodeUnimplemented";
+
+impl Unimplemented {
+    /// The last such line of `output`, when it has one.
+    fn read(output: &str) -> Option<Unimplemented> {
+        let line = output.lines().rev().find_map(|l| {
+            l.find(UNIMPLEMENTED_REPORT)
+                .map(|at| &l[at + UNIMPLEMENTED_REPORT.len()..])
+        })?;
+        let (stopped, actions) = line.trim().split_once(" traces stopped at ")?;
+        let actions = actions
+            .split(", ")
+            .map(|a| {
+                let (name, n) = a.trim().rsplit_once(' ')?;
+                Some((name.to_string(), n.parse().ok()?))
+            })
+            .collect::<Option<Vec<_>>>()?;
+        Some(Unimplemented {
+            stopped: stopped.parse().ok()?,
+            actions,
+        })
+    }
+
+    /// The line of the coverage statement, and the finding: by use case, from the port's
+    /// actions; an action the port does not name stands for itself.
+    fn reported(&self, t: &Target<'_>) -> (String, CodeDiagnostic) {
+        let methods = t
+            .generated
+            .domain
+            .as_ref()
+            .and_then(|d| d.port.as_ref())
+            .map(|p| p.methods.as_slice())
+            .unwrap_or_default();
+        let mut usecases: Vec<(String, usize)> = Vec::new();
+        for (action, n) in &self.actions {
+            let uc = methods
+                .iter()
+                .find(|m| m.action == *action)
+                .map_or(action.as_str(), |m| m.usecase.as_str());
+            match usecases.iter_mut().find(|(u, _)| u == uc) {
+                Some((_, total)) => *total += n,
+                None => usecases.push((uc.to_string(), *n)),
+            }
+        }
+        let names: Vec<&str> = usecases.iter().map(|(u, _)| u.as_str()).collect();
+        let line = format!(
+            "  unimplemented: {} use case{} ({}): {} trace{} stopped at a call the service has not implemented",
+            names.len(),
+            if names.len() == 1 { "" } else { "s" },
+            names.join(", "),
+            self.stopped,
+            if self.stopped == 1 { "" } else { "s" },
+        );
+        let calls: Vec<String> = usecases
+            .iter()
+            .map(|(u, n)| format!("{u} ({n} call{})", if *n == 1 { "" } else { "s" }))
+            .collect();
+        let finding = CodeDiagnostic {
+            name: UNIMPLEMENTED_FINDING.to_string(),
+            message: format!(
+                "[code.{}]: the service has not implemented {}: the traces stopped at those calls, so nothing after them is checked",
+                t.name,
+                calls.join(", ")
+            ),
+            model: None,
+            code: None,
+            fix: Some(
+                "implement them in place of the unimplemented port's methods; --deny-incomplete fails the check on it"
+                    .to_string(),
+            ),
+            warning: true,
+        };
+        (line, finding)
+    }
+}
+
 /// The line of the coverage statement that says what a passing model adapter ran (#439), from
 /// the line its conformance test prints; empty for the generated port, whose test prints none.
 fn ran_line(t: &Target<'_>, stdout: &str, stderr: &str) -> Vec<String> {
@@ -247,7 +338,14 @@ fn run_step(backend: &dyn Backend, t: &Target<'_>) -> Option<Result<Stepped>> {
     Some((|| {
         let (ok, stdout, stderr) = execute(t, &command, None)?;
         if ok {
-            return Ok((Vec::new(), ran_line(t, &stdout, &stderr)));
+            let mut lines = ran_line(t, &stdout, &stderr);
+            let mut found = Vec::new();
+            if let Some(u) = Unimplemented::read(&format!("{stdout}\n{stderr}")) {
+                let (line, finding) = u.reported(t);
+                lines.push(line);
+                found.push(finding);
+            }
+            return Ok((found, lines));
         }
         // The whole output first: the diagnostic quotes one line of it.
         eprint!("{stdout}");
@@ -494,6 +592,9 @@ fn self_check(
     ));
     std::fs::create_dir_all(&dir).with_context(|| format!("failed to create {}", dir.display()))?;
     let mut survivors = Vec::new();
+    // Mutants whose trace stopped at an unimplemented call before its changed row: the run
+    // passed without reaching the row, which says nothing of the service.
+    let mut unreached = 0usize;
     let result = (|| -> Result<()> {
         for (i, m) in set.mutants.iter().enumerate() {
             let path = dir.join(format!("{i}-{}.txt", m.kind.name()));
@@ -502,6 +603,10 @@ fn self_check(
             let (ok, stdout, stderr) = execute(t, &command, Some(&path))?;
             let at = format!("traces line {}:", m.line);
             if !ok && format!("{stdout}\n{stderr}").contains(&at) {
+                continue;
+            }
+            if ok && Unimplemented::read(&format!("{stdout}\n{stderr}")).is_some() {
+                unreached += 1;
                 continue;
             }
             let what = if ok {
@@ -537,7 +642,7 @@ fn self_check(
         .collect();
     let mut line = format!(
         "  self-check: {} of {total} mutant traces failed at their changed row (seed {})",
-        total - survivors.len(),
+        total - survivors.len() - unreached,
         how.seed
     );
     let guards: Vec<&str> = set
@@ -547,6 +652,11 @@ fn self_check(
         .collect();
     if !guards.is_empty() {
         line.push_str(&format!("; guard-removed mutants: {}", guards.join(", ")));
+    }
+    if unreached > 0 {
+        line.push_str(&format!(
+            "; {unreached} stopped at an unimplemented call before their changed row"
+        ));
     }
     for (kind, why) in &set.none {
         line.push_str(&format!("; no {}: {why}", kind.name()));
@@ -659,6 +769,15 @@ pub(crate) fn run(
                 }
                 Some(result) => {
                     let (mut found, ran) = result?;
+                    if at == CodeLevel::Run && deny_incomplete {
+                        for d in found.iter_mut().filter(|d| d.name == UNIMPLEMENTED_FINDING) {
+                            d.warning = false;
+                            d.fix = Some(
+                                "implement them in place of the unimplemented port's methods"
+                                    .to_string(),
+                            );
+                        }
+                    }
                     if at == CodeLevel::Run {
                         let passed = found.iter().all(|d| d.warning);
                         let (lines, finding) = coverage(&t, deny_incomplete);

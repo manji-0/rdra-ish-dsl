@@ -448,3 +448,24 @@ type PlaceUseCase interface {
 	// function for it (#335), so the service writes it and keeps the obligations.
 	RunPlace(order OrderId) error
 }
+
+// ── The unimplemented port: embed it to build before every method exists ──
+
+// ErrUnimplemented is what the methods of UnimplementedConformancePort return: the service has not
+// implemented the call yet. Conform stops a trace at such a call and reports the calls by use
+// case; `rdra-ish check --code=run` lists them, and --deny-incomplete fails on any.
+var ErrUnimplemented = errors.New("rdra-ish: not implemented")
+
+// UnimplementedConformancePort implements every use case's contract by returning ErrUnimplemented.
+// Embed it in a service to build before every method exists: a method the service declares takes the place of the embedded one, and `check --code=run` reports each call that still reaches it.
+type UnimplementedConformancePort struct{}
+
+// RunShip returns ErrUnimplemented.
+func (UnimplementedConformancePort) RunShip(OrderId) error {
+	return ErrUnimplemented
+}
+
+// RunPlace returns ErrUnimplemented.
+func (UnimplementedConformancePort) RunPlace(OrderId) error {
+	return ErrUnimplemented
+}

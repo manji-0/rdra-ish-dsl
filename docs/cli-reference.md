@@ -131,7 +131,7 @@ The consistency checks cover:
 | `--code[=<LEVEL>]` | off; `fresh` when given bare | After a clean run, check the service code the [`[code]` tables](#the-code-tables) name: `fresh`, `build`, or `run`. Write the level with `=`. See [`check --code`](#check---code). |
 | `--mutants <N>` | `1` | With `--code=run` only (else exit 1): after a passing `--code=run`, run the run command again on `N` mutant traces of each kind and fail when one passes. `0` runs none. See [The self-check](#the-self-check). |
 | `--mutant-seed <SEED>` | `0` | With `--code=run` only (else exit 1): the seed that picks the mutant traces. The same model and seed pick the same ones. |
-| `--deny-incomplete` | off | With `--code=run` only (else exit 1; without `--code`, exit 2): fail when a table's traces are not complete: their BFS stopped at `conformance_states`, they leave refusals of the model untried, or they never run a use case of the port. See [What a run covers](#what-a-run-covers). |
+| `--deny-incomplete` | off | With `--code=run` only (else exit 1; without `--code`, exit 2): fail when a table's traces are not complete: their BFS stopped at `conformance_states`, they leave refusals of the model untried, or they never run a use case of the port; and when the run stopped traces at calls the service has not implemented (`CodeUnimplemented`). See [What a run covers](#what-a-run-covers). |
 | `--max-patterns <N>` | 2^(10 + 8·(n − 1)) for n = `--instance-count` (`1024`, `262144`, ...) | Cap on each entity's distinct patterns in its view's cone. Past it: the `PatternCapReached` error. A cone of a rule gathers no pattern, so the cap does not stop it. |
 | `--max-states <N>` | none | Cap on the joint states of one cone. Past it: the `StateCapReached` error, which names what the states vary in. |
 | `--memory <SIZE>` | `memory` under `[check]`, else `4GiB` | What the run may hold. A cone past it stops with the `MemoryCapReached` error. See [Memory limit](#memory-limit). |
@@ -237,9 +237,9 @@ table. The LSP never does.
 
 | Language | `build` | `run` |
 |---|---|---|
-| Rust | `cargo check --test <probe> --message-format=json` in `root` | `cargo test --test <probe> -- rdra_conformance`, with `--nocapture` after it for a model adapter |
+| Rust | `cargo check --test <probe> --message-format=json` in `root` | `cargo test --test <probe> -- rdra_conformance --nocapture` |
 | TypeScript | `tsc --noEmit --pretty false -p tsconfig.rdra.json` in `root` | `node <probe>` (Node 22.18 or later, by type stripping; the service imports name the `.ts` files) |
-| Go | `go test -count=1 -run ^$ -gcflags=-e ./<probe dir>` in `root` | `go test -count=1 -run ^TestRdraConformance$ ./<probe dir>`, with `-v` for a model adapter |
+| Go | `go test -count=1 -run ^$ -gcflags=-e ./<probe dir>` in `root` | `go test -count=1 -v -run ^TestRdraConformance$ ./<probe dir>` |
 
 `tsconfig.rdra.json` is a generated file that extends the project's tsconfig and holds only
 the probe. An older Node fails `run` with a `CodeConformance` that says so; a project that
@@ -294,6 +294,7 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
 | `CodeBuildFailed` | error | The build failed with no error rdra-ish reads. |
 | `CodeConformance` | error | `run`: the conformance test failed; the message is the harness's first difference. |
 | `CodeMutantSurvived` | error | `run`: a mutant trace of the self-check passed. The `code:` line says whether the run passed or failed at another row. |
+| `CodeUnimplemented` | warning; error with `--deny-incomplete` | `run`: the run passed, but traces stopped at calls that reached the [unimplemented port](#the-unimplemented-port); the message names their use cases and calls. |
 | `CodeCoverageIncomplete` | warning; error with `--deny-incomplete` | `run`: the BFS behind the traces stopped at `conformance_states`, so the moves past it are not run and no call is tried as refused; or the traces leave refusals of the model untried, or never run a use case of the port. |
 | `CodeObligationUnowned_<name>` | error | The obligation has no owner. |
 | `CodeObligationOwnerMissing_<name>` | error | Its owner names a file that does not exist. |
@@ -351,6 +352,36 @@ call the model refuses passes such a suite. The same warning names untried refus
 use cases never run. The exit status does not change unless `--deny-incomplete` is given.
 Raise `conformance_states` and run `codegen --code` again to complete a capped suite. The statement describes the traces, so it is the same when `run` in the table
 replaces the default command.
+
+#### The unimplemented port
+
+The domain code has a stand-in for every contract, which a service takes while it is
+unfinished, so it builds before every method exists: Go's `UnimplementedConformancePort` to
+embed, TypeScript's `UnimplementedConformancePort` class to extend, and Rust's
+`Unimplemented<Contract>` marker trait per contract (`impl UnimplementedPayUseCase for
+Service {}`), which gives the service the contract. With `--conformance`, Go's and
+TypeScript's also have `Seed` / `seed` and `Snapshot` / `snapshot`. Each method fails as the
+language says "not implemented": Go returns `ErrUnimplemented`, TypeScript rejects with
+`Unimplemented`, Rust panics with `unimplemented!`. A method the service declares takes the
+place of the stand-in's.
+
+`check --code=build` passes such a service: the build checks signatures, and cannot tell a
+stand-in from a method the service wrote. The run tells them apart. The harness stops a trace
+at a call that reached the stand-in (a call the model runs, a refused call, or either call
+of an interleaving), counts it, and goes on with the next trace; a `Seed` or `Snapshot`
+that reached it fails the run, as any store error does. A run that passes adds a line after
+the statement and a `CodeUnimplemented` warning, which `--deny-incomplete` makes an error:
+
+```
+  unimplemented: 1 use case (Cancel): 5 traces stopped at a call the service has not implemented
+warning[CodeUnimplemented]: [code.go]: the service has not implemented Cancel (5 calls): the traces stopped at those calls, so nothing after them is checked
+```
+
+The probe's test prints the line it is read from, `rdra-ish conformance: unimplemented: <n>
+traces stopped at <action> <calls>, ...`; a `run` command in the table that hides the test's
+output on a pass hides it too. A mutant of the self-check whose trace stopped at such a call
+before its changed row is counted as `stopped at an unimplemented call` on the `self-check`
+line, not as a survivor.
 
 A table with a [model adapter](#the-model-adapter) adds one line after the statement, read
 from the line the adapter's conformance test prints on a pass:

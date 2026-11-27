@@ -970,3 +970,44 @@ type PlaceUseCase interface {
 	// CommitPlace stores what PreparePlace returned in one transaction.
 	CommitPlace(write PlaceResult) error
 }
+
+// ── The unimplemented port: embed it to build before every method exists ──
+
+// ErrUnimplemented is what the methods of UnimplementedConformancePort return: the service has not
+// implemented the call yet. Conform stops a trace at such a call and reports the calls by use
+// case; `rdra-ish check --code=run` lists them, and --deny-incomplete fails on any.
+var ErrUnimplemented = errors.New("rdra-ish: not implemented")
+
+// UnimplementedConformancePort implements every use case's contract by returning ErrUnimplemented.
+// Embed it in a service to build before every method exists: a method the service declares takes the place of the embedded one, and `check --code=run` reports each call that still reaches it.
+type UnimplementedConformancePort struct{}
+
+// PreparePay returns ErrUnimplemented.
+func (UnimplementedConformancePort) PreparePay(OrderId, DateTime) (w PayOutcome, err error) {
+	return w, ErrUnimplemented
+}
+
+// CommitPay returns ErrUnimplemented.
+func (UnimplementedConformancePort) CommitPay(PayOutcome) error {
+	return ErrUnimplemented
+}
+
+// PrepareCancelOrder returns ErrUnimplemented.
+func (UnimplementedConformancePort) PrepareCancelOrder(OrderId) (w CancelOrderOutcome, err error) {
+	return w, ErrUnimplemented
+}
+
+// CommitCancelOrder returns ErrUnimplemented.
+func (UnimplementedConformancePort) CommitCancelOrder(CancelOrderOutcome) error {
+	return ErrUnimplemented
+}
+
+// PreparePlace returns ErrUnimplemented.
+func (UnimplementedConformancePort) PreparePlace(CustomerId, OrderId, PaymentMethod) (w PlaceResult, err error) {
+	return w, ErrUnimplemented
+}
+
+// CommitPlace returns ErrUnimplemented.
+func (UnimplementedConformancePort) CommitPlace(PlaceResult) error {
+	return ErrUnimplemented
+}
