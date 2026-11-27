@@ -927,6 +927,12 @@ impl TransitionSystem {
             (Target::AfterAssert(i), StateDiag::AfterAssertViolated { site, .. }) => {
                 *site == self.after[i].site
             }
+            (Target::Invariant(i), StateDiag::LiftFault { name, .. }) => {
+                *name == self.invariants[i].name
+            }
+            (Target::AfterAssert(i), StateDiag::LiftFault { site, .. }) => {
+                *site == self.after[i].site
+            }
             _ => false,
         }
     }
@@ -1044,7 +1050,8 @@ impl TransitionSystem {
             "the run evaluates the rule"
         );
         let violated = run.diagnostics().iter().any(
-            |d| matches!(&d.diag, StateDiag::ConstraintViolated { name, .. } if *name == inv.name),
+            // A violation that did not lift (P52) says nothing of the premises either.
+            |d| matches!(&d.diag, StateDiag::ConstraintViolated { name, .. } | StateDiag::LiftFault { name, .. } if *name == inv.name),
         );
         if violated {
             return None;
@@ -1091,7 +1098,7 @@ impl TransitionSystem {
             "the run evaluates the assert"
         );
         let violated = run.diagnostics().iter().any(
-            |d| matches!(&d.diag, StateDiag::AfterAssertViolated { name, .. } if *name == a.name),
+            |d| matches!(&d.diag, StateDiag::AfterAssertViolated { name, .. } | StateDiag::LiftFault { name, .. } if *name == a.name),
         );
         if violated {
             return None;

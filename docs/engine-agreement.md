@@ -204,6 +204,7 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `cap_temporal_budget_zero` | `--temporal-budget 0` stops the whole-model run before it decides | `--temporal-budget 0` | `PaidShipsUnfair` nd; `PaidShips` ok |
 | `cone_always_frees_slots` | `always` on a cone that frees slots |  | `NeverD` ok |
 | `cone_copy_from_parent` | A fair use case copies its parent's column into the cone |  | `IssueEventually`, `IssueEventuallyPlain` ok |
+| `cone_entity_mark_left_out` | An entity cone that leaves a raised mark out, and its state-model findings (P32) |  | `Deadlock_Order_status_placed`, `Deadlock_Payment_status_unpaid`, `Witness_Order_status_shipped`, `Witness_Payment_status_paid`, `Witness_Notice_status_received`, `Witness_Notice_status_read` cex |
 | `cone_handler_mark_left_out` | A handler whose raised mark the cone leaves out |  | `ShipsUnfair`, `ShipsFair`, `Deadlock_Order_status_paid` cex |
 | `cone_independent_loop` | An independent loop outside the cone keeps the whole model's `WF_vars(Next)` met |  | `PaidShipsUnfair` cex; `PaidShips` ok |
 | `cone_outside_monotone` | A var outside the cone that is monotone only because nothing deletes it |  | `PaidShipsStamp`, `PaidShipsNotes` ok |

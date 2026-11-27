@@ -515,19 +515,21 @@ pub(super) fn native_properties(
             unreachable!("a property's job")
         }
     };
-    let decide = |(k, plain): (usize, Option<Plain>)| match plain {
+    let decide = |(k, plain): (usize, Option<Plain>), caps: Caps| match plain {
         Some(plain) => native_property_after(job(k), caps, plain),
         None => native_property(ts, job(k), caps, orbits[k]),
     };
     let ks: Vec<usize> = at.iter().map(|(k, _)| *k).collect();
-    let ran = in_parallel(at, rdra_ish_core::jobs(), decide);
+    let ran = in_parallel(at, rdra_ish_core::jobs(), |job| decide(job, caps));
     let mut out: Vec<Option<Native>> = jobs.iter().map(|_| None).collect();
     let mut vacuous = Vec::new();
     for (k, (native, vacuity)) in ks.into_iter().zip(ran) {
         let (native, vacuity) = match native.crowded {
+            // Alone, with the whole room of the pool (`Caps::alone`): where its runs stop
+            // then depends on them alone, as at one job (P53).
             true => {
                 drop((native, vacuity));
-                decide((k, None))
+                decide((k, None), caps.alone())
             }
             false => (native, vacuity),
         };

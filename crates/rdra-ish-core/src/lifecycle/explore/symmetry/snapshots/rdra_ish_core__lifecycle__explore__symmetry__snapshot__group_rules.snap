@@ -10,22 +10,22 @@ Entity lines that name each rule or reason:
   IdAgainstLiteral: 0: fires in no cone
   JointTooLarge: 0: fires in no cone
   MixedIds: 0: fires in no cone
-  Observed:input: 30
-  Observed:named by T: 32 (kept without a witness of its own)
+  Observed:input: 25
+  Observed:named by T: 27 (kept without a witness of its own)
   Observed:named by an input: 2 (kept without a witness of its own)
-  Observed:named by obs: 20 (kept without a witness of its own)
+  Observed:named by obs: 19 (kept without a witness of its own)
   Observed:obs: 88
-  Observed:stub: 7 (kept without a witness of its own)
+  Observed:stub: 6 (kept without a witness of its own)
   OrderedId: 0: fires in no cone
   OwnerChoice: 0: fires in no cone
   OwnerLiteral: 0: fires in no cone
   PinnedStart: 0: fires in no cone (kept without a witness of its own)
-  Reduced:S: 266
-  Reduced:S action param: 271 (kept without a witness of its own)
-  Reduced:S var: 266 (kept without a witness of its own)
+  Reduced:S: 283
+  Reduced:S action param: 288 (kept without a witness of its own)
+  Reduced:S var: 283 (kept without a witness of its own)
   Reduced:bit key: 20 (kept without a witness of its own)
   Reduced:input: 10 (kept without a witness of its own)
-  Reduced:named by S: 83 (kept without a witness of its own)
+  Reduced:named by S: 88 (kept without a witness of its own)
   Reduced:named by an input: 2 (kept without a witness of its own)
   UnlinkedCreate: 0: fires in no cone
 
@@ -506,41 +506,58 @@ Entity lines that name each rule or reason:
 == samples/food-permit-ops
   [entity BusinessNotification] unreduced
     BusinessNotification[2] moves
-  [entity BusinessPermit] reduced, H at depth 1
-    BusinessPermit[2] stays G_T=named by S,bit key,S action param | H stays H=named by obs,input,stub,named by T
-    Disposition[2] stays G_T=S,S var,S action param | H stays H=obs
+  [entity BusinessPermit] reduced, H at depth 2
+    BusinessPermit[2] stays G_T=named by S,bit key,S action param
+    Disposition[2] stays G_T=S,S var,S action param
     Inspection[2] moves
+    MonitoringPlan[2] stays G_T=S,S var,S action param | H moves
     PermitApplication[2] moves
-  [entity ChangeNotice] reduced, H at depth 1
-    BusinessPermit[2] stays G_T=S,S var,S action param | H stays H=obs
+    SiteVisit[2] stays G_T=S,S var,S action param | H stays H=obs
+  [entity ChangeNotice] reduced, H at depth 3
+    BusinessPermit[2] stays G_T=S,S var,named by S,S action param
     ChangeNotice[2] moves
-    PermitApplication[2] stays G_T=S,S var,named by S,S action param | H moves
+    Disposition[2] stays G_T=S,S var,S action param
+    Inspection[2] stays G_T=S,S var,S action param
+    MonitoringPlan[2] stays G_T=S,S var,S action param | H moves
+    PermitApplication[2] stays G_T=S,S var,named by S,S action param
+    SiteVisit[2] stays G_T=S,S var,S action param | H stays H=obs
   [entity Consultation] unreduced
     Consultation[2] moves
   [entity Disposition] reduced, H at depth 2
-    BusinessPermit[2] stays G_T=S,S var,bit key,S action param
+    BusinessPermit[2] stays G_T=S,S var,named by S,bit key,S action param
     Disposition[2] stays G_T=S action param
+    Inspection[2] stays G_T=S,S var,S action param
     MonitoringPlan[2] stays G_T=S,S var,S action param | H moves
     PermitApplication[2] stays G_T=S,S var,named by S,S action param
     SiteVisit[2] stays G_T=S,S var,S action param | H stays H=obs
   [entity FeeSchedule] unreduced
     FeeSchedule[2] moves
-  [entity Inspection] reduced, H at depth 1
-    BusinessPermit[2] stays G_T=S,S var,bit key,S action param | H stays H=obs,input,named by T
+  [entity Inspection] reduced, H at depth 3
+    BusinessPermit[2] stays G_T=S,S var,named by S,bit key,S action param
+    Disposition[2] stays G_T=S,S var,S action param
     Inspection[2] moves
-    PermitApplication[2] stays G_T=input,named by S,S action param | H stays H=input,named by T
+    MonitoringPlan[2] stays G_T=S,S var,S action param | H moves
+    PermitApplication[2] stays G_T=input,named by S,S action param
+    SiteVisit[2] stays G_T=S,S var,S action param | H stays H=obs
   [entity MonitoringPlan] unreduced
     MonitoringPlan[2] moves
-  [entity PermitApplication] reduced, H at depth 1
-    BusinessPermit[2] stays G_T=S,S var,bit key,S action param | H stays H=obs,input,named by T
+  [entity PermitApplication] reduced, H at depth 3
+    BusinessPermit[2] stays G_T=S,S var,named by S,bit key,S action param
+    Disposition[2] stays G_T=S,S var,S action param
     Inspection[2] moves
-    PermitApplication[2] stays G_T=input,named by S,S action param | H stays H=input,named by T
+    MonitoringPlan[2] stays G_T=S,S var,S action param | H moves
+    PermitApplication[2] stays G_T=input,named by S,S action param
+    SiteVisit[2] stays G_T=S,S var,S action param | H stays H=obs
   [entity SiteVisit] unreduced
     MonitoringPlan[2] moves
     SiteVisit[2] moves
-  [entity SuccessionNotice] reduced, H at depth 1
-    BusinessPermit[2] stays G_T=S,S var,S action param | H stays H=obs
-    PermitApplication[2] stays G_T=S,S var,named by S,S action param | H moves
+  [entity SuccessionNotice] reduced, H at depth 3
+    BusinessPermit[2] stays G_T=S,S var,named by S,S action param
+    Disposition[2] stays G_T=S,S var,S action param
+    Inspection[2] stays G_T=S,S var,S action param
+    MonitoringPlan[2] stays G_T=S,S var,S action param | H moves
+    PermitApplication[2] stays G_T=S,S var,named by S,S action param
+    SiteVisit[2] stays G_T=S,S var,S action param | H stays H=obs
     SuccessionNotice[2] moves
   [Forbidden_Disposition_0, Forbidden_Disposition_1] reduced, H at depth 1
     BusinessPermit[2] stays G_T=S,S var,S action param | H stays H=obs
@@ -585,7 +602,7 @@ Entity lines that name each rule or reason:
     Investigation[2] stays G_T=S,S var,S action param | H moves
     Payment[2] moves
     Settlement[2] stays G_T=S,S var,S action param | H stays H=obs
-  [entity ClaimCase] reduced, H at depth 1
+  [entity ClaimCase, entity Investigation, entity Settlement] reduced, H at depth 1
     Claim[2] stays G_T=S,S var,named by S,S action param | H stays H=obs
     ClaimCase[2] stays G_T=named by S,bit key,S action param | H stays H=named by obs,input,stub,named by T
     Investigation[2] moves
@@ -598,10 +615,6 @@ Entity lines that name each rule or reason:
     Investigation[2] stays G_T=S,S var,S action param | H moves
     Payment[2] stays G_T=S,S var,S action param
     Settlement[2] stays G_T=S,S var,S action param | H stays H=obs
-  [entity Investigation, entity Settlement, Forbidden_ClaimCase_3, Forbidden_Settlement_6, Forbidden_Settlement_7, MultiForbidden_ClaimCase_1, MultiForbidden_Settlement_5, MultiForbidden_Settlement_6, Unique_Investigation_ClaimCase, Unique_Settlement_ClaimCase] unreduced
-    ClaimCase[2] moves
-    Investigation[2] moves
-    Settlement[2] moves
   [entity JibaisekiSurvey] unreduced
     ClaimCase[2] moves
     JibaisekiSurvey[2] moves
@@ -630,6 +643,10 @@ Entity lines that name each rule or reason:
   [Forbidden_Complaint_2] unreduced
     ClaimCase[2] moves
     Complaint[2] moves
+  [Forbidden_ClaimCase_3, Forbidden_Settlement_6, Forbidden_Settlement_7, MultiForbidden_ClaimCase_1, MultiForbidden_Settlement_5, MultiForbidden_Settlement_6, Unique_Investigation_ClaimCase, Unique_Settlement_ClaimCase] unreduced
+    ClaimCase[2] moves
+    Investigation[2] moves
+    Settlement[2] moves
   [Forbidden_Claim_4, property ClaimEventuallyDecided] reduced, H at depth 1
     Claim[2] stays G_T=S action param
     ClaimCase[2] stays G_T=S,S var,named by S,bit key,S action param | H stays H=obs,named by obs,input,named by T
@@ -1112,6 +1129,17 @@ Entity lines that name each rule or reason:
   [property IssueEventuallyPlain] unreduced
     Application[2] moves
     Permit[2] moves
+== engine_corpus/cone_entity_mark_left_out.rdra
+  [entity Notice] unreduced
+    Notice[2] moves
+    Payment[2] moves
+  [entity Order] unreduced
+    Notice[2] moves
+    Order[2] moves
+    Payment[2] moves
+  [entity Payment] unreduced
+    Notice[2] moves
+    Payment[2] moves
 == engine_corpus/cone_handler_mark_left_out.rdra
   [entity Order, property ShipsFair] unreduced
     Order[2] moves
@@ -1380,6 +1408,12 @@ Entity lines that name each rule or reason:
     Box[3] moves
   [entity Crate, Forbidden_Crate_1] unreduced
     Crate[3] moves
+== engine_corpus/safety_created_set_beside_transitions.rdra
+  [entity Flag] unreduced
+    Flag[2] moves
+  [entity Order, Forbidden_Order_0] unreduced
+    Flag[2] moves
+    Order[2] moves
 == engine_corpus/safety_delete_cascade.rdra
   [entity Order] unreduced
     Order[2] moves
@@ -1789,6 +1823,14 @@ Entity lines that name each rule or reason:
 == engine_corpus/sym_self_owned.rdra --instance-count 3
   [entity Task, Forbidden_Task_0] unreduced
     Task[3] moves
+== engine_corpus/width_nullable_enum_256.rdra
+  [entity Row, Forbidden_Row_0] unreduced
+    Row[2] moves
+== engine_corpus/width_nullable_int_top.rdra --int-range-max 255 --instance-count 1
+  [entity Item] unreduced
+    Item[1] stays
+  [Forbidden_Item_0] unreduced
+    Item[1] stays
 == engine_corpus/z3_cti_true_rule.rdra
   [entity Door, entity Light, MultiForbidden_Light_0] unreduced
     Door[2] moves
@@ -1799,6 +1841,9 @@ Entity lines that name each rule or reason:
     Light[3] moves
 == engine_corpus/z3_enum_bool_default_outside_values.rdra
   does not load: the model has errors
+== engine_corpus/z3_guarded_present_past_the_top.rdra --int-range-max 5 --instance-count 1
+  [entity Item, Forbidden_Item_0] unreduced
+    Item[1] stays
 == engine_corpus/z3_inductive.rdra
   [entity Order, Forbidden_Order_1] unreduced
     Order[2] moves

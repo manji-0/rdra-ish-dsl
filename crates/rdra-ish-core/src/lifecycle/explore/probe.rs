@@ -215,7 +215,7 @@ impl Numbering {
             let radix: Box<[u8]> = action
                 .params
                 .iter()
-                .map(|p| u8::try_from(ts.slots(p.entity)).unwrap_or(u8::MAX))
+                .map(|p| ts.entity(p.entity).slots.get())
                 .collect();
             let count = radix
                 .iter()

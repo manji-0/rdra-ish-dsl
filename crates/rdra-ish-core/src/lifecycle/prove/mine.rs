@@ -580,7 +580,7 @@ fn implied_by_pairs(triples: &Pairs) -> bool {
 }
 
 /// The largest `n` a count lemma states; the proof unrolls a count into `n + 1` distinct rows,
-/// exactly up to 8 (`.at_most(7, ..)` is the largest `at_most`).
+/// exactly up to 8 (`.at_most(7, ..)` and `.exactly(7, ..)` are the largest of theirs).
 const COUNT_MAX: u8 = 7;
 
 /// A count a guard makes of the children of a row its step moves: the key, the child columns

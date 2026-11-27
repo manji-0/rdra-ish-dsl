@@ -112,8 +112,10 @@ cell back; the arena, segment and table read back what they stored.
 
 Neither precondition is enforced today. (i) fails for a nullable Int column at `m = 255`
 and for an Enum column with 256 values and `@null` or with 257 or more values (open problem
-P54); (ii) fails for some cone states wider than 65,536 bits (open problem P50). Every claim
-below that reads a stored state ("by N1", "by N2") holds only under both.
+P54); (ii) failed for some cone states wider than 65,536 bits (open problem P50, fixed in
+#479: offsets are `u32` since, and their sum panics past `u32::MAX` bits, so (ii) holds of
+every state a run can hold). Every claim below that reads a stored state ("by N1", "by N2")
+holds only under both.
 
 *Evidence.* Kani proves the round trip, the patch path, and the arena and table operations
 on small widths (4 or 11 cells, widths up to 8 bits; the harnesses are listed in row N2).
@@ -161,7 +163,16 @@ bits):
 
 P50 needs large bounds: a cell of non-zero width past bit 65,535, about 8,192 cells of 8
 bits (for example 255 slots of an entity with 32 or more Int columns at `m = 255`). No
-sample comes near it, but D1 admits it and nothing rejects it. P54 below needs far less.
+sample comes near it, but D1 admits it and nothing rejected it. P54 below needs far less.
+
+*Fixed in #479.* `Packing` keeps offsets as `u32`, summed with a checked add that panics
+past `u32::MAX` bits; below the old limit the offsets are the same numbers, so no narrower
+state changes. Both reproductions give the verdicts of 8 instances at 255
+(`cli/tests/verify_cli.rs::a_state_past_bit_65535_keeps_its_verdicts`), and
+`packing.rs::tests::a_state_past_bit_65535_packs_patches_and_reads_back` checks the patch,
+the unpack and `Packing::cell` on either side of the first cell past bit 65,535. The same PR
+stops a run, as at the state cap, before it numbers a state `u32::MAX`, the marker of an
+unresolved move and of an unnumbered component.
 
 **Finding P54 (guarantee, reproduced by the review; fixed in #470, where the build rejects a
 column domain past 256 values as `DomainTooLarge`).** A value outside a byte is
@@ -209,7 +220,10 @@ following it (late layers whose moves reach only known states) gets a wrapped in
 the wrong sources, and liveness, `can_reach` and deadlocks read a graph that is not `G`.
 Each edge takes at least 4 bytes for its target and more for its binding, so the edges alone
 exceed `verify`'s default memory limit of 16 GiB, which stops the run first; a larger
-`--memory` reaches it. Not reproduced.
+`--memory` reaches it. Not reproduced. *Fixed in #479:* every edge number (`first`, the edge
+being pushed, a parent edge) goes through `edges.rs::edge_number`, which panics past the
+last `u32` below the `INITIAL` marker instead of wrapping
+(`edges.rs::tests::an_edge_number_past_u32_panics`).
 
 ## Memory accounting and the stop rule
 
@@ -319,10 +333,22 @@ Hence `Σ_j` agrees for all `j`, and with it everything the readers below comput
   (`cli/src/verify/bfs.rs::bfs_cones`, the `crowded` flag of `Native` in
   `cli/src/verify/native.rs`) use the other test: `cli/src/verify/bfs.rs::crowded` is
   `met_memory_limit`, true for any `MemoryCapReached` diagnostic, crowded in the pool or
-  not. Such a run is rerun against the command's pool itself, not an explicit room; in
-  `bfs_cones` the reruns go one at a time in `open` order (the property pass's order was not
-  read: unread@pin). That the pool holds the same bytes at that rerun whatever the job count is
-  the one step not shown (open problem P53). Evidence:
+  not. Until #484 such a run was rerun against the command's pool itself, not an explicit
+  room, and a safety cone with partner properties whose first, complete-to-the-end run met
+  the limit beside others fell back to its early-stopping run inside the parallel phase
+  without being marked: one thread printed `counterexample (65793 states)` where eight
+  printed `(15150 states)` (open problem P53, reproduced). Since #484 the first run's memory
+  stop marks the cone, and every rerun of both passes goes alone under `Caps::alone`, a child
+  pool with the room the command's pool has left (`MemoryPool::whole`), which refuses by its
+  own room whatever the parent holds. The reruns come after every run of the pass has ended,
+  and the results a pass keeps (`BfsCone`, `Plain`, `Native`, `Diag`, the entity pass's
+  `Bfs`) hold no charge, the quotient cache being dropped at the end of the entity pass; so
+  the room left is the whole room, which a debug build asserts at each rerun. A rerun's stop
+  point is then a function of the run alone (N4), the same as at one job, where every run of
+  a pass already had the pool to itself; a run that met no limit beside others meets none
+  alone, with at least as much room. Evidence:
+  `cli/tests/memory_cli.rs::safety_and_property_passes_stop_where_they_stop_one_at_a_time`
+  (1, 3, 8 jobs at 7, 8, 10 MiB; fails on main before #484),
   `cli/tests/memory_cli.rs::cones_side_by_side_stop_where_they_stop_one_at_a_time` and
   `::a_stopped_entity_cone_leaves_its_room_on_any_number_of_threads`.
 - *The table under probing* (step 3) holds only on the probe paths, which release builds
@@ -348,7 +374,7 @@ no workflow runs Miri.
 
 **N17 (Output independent of `RDRA_JOBS`).** Follows from N4 for each run, from the
 in-order collection of `in_parallel` results, and, for runs that met the memory limit, from
-the reruns above, up to P53's missing step. Evidence: as N4.
+the reruns above (P53 fixed in #484). Evidence: as N4.
 
 ## Safety
 
@@ -644,7 +670,7 @@ permutations, lifted by `explore/orbit.rs::lift`.
 
 | Check | Plain | Reduced | Symmetric |
 |---|---|---|---|
-| State rule, `after` | nothing: the trace is the stored path, printed as stored (`trace_violations`) | lifted; re-evaluated on the lifted last state, and if that no longer violates, the reduced message is kept without any fault (`ComponentRun::trace_violations`, `rebuilt` is `None`); a T step is checked against the cone's moves only by `debug_assert!`, an S step of a folded action is checked (`expect`), one taken by `in_cone_params` is not | replayed on the system the run explored (`orbit.rs::replays`, panics on failure), then lifted by `lift` when that system is reduced, without a further replay; re-evaluated on the lifted last state (`expect`, panics) |
+| State rule, `after` | nothing: the trace is the stored path, printed as stored (`trace_violations`) | lifted; re-evaluated on the lifted last state, and if that no longer violates, the violation becomes `LiftFault`, a tool error that leaves the check undecided on the cone (`ComponentRun::trace_violations`, `lifted`; since #487, P52; before, the reduced message was kept without any fault); a T step is checked against the cone's moves only by `debug_assert!`, an S step of a folded action is checked (`expect`), one taken by `in_cone_params` is not | replayed on the system the run explored (`orbit.rs::replays`, panics on failure), then lifted by `lift` when that system is reduced, without a further replay; re-evaluated on the lifted last state (`expect`, panics) |
 | `always` | re-evaluated on the stored path (`property_failure`, then `debug_assert!` on the position) | re-evaluated on the reduced path, then lifted with no re-evaluation (`decide_property`, `trace_along`) | lifted, replayed (panics on failure) and re-evaluated on the lifted path (`OrbitRun::decide_always`, `expect`) |
 | `stable`, `unchanged`, `precedes` | as `always`, plain | never reduced (`decide_property` restricts without reduction) | not run up to symmetry |
 | `eventually`, `leads_to` | replayed, formula re-evaluated, fairness re-checked (N11) | the reduced lasso is replayed on the reduced system and never printed; what prints is either the `WfNext` lasso lifted to the unreduced cone and replayed there (`decide_liveness_reduced`, `Spurious` otherwise), or the lasso of the rerun on the unreduced cone (`Cone_P_Full`); if that rerun stops, the property is `not decided` | replayed, re-evaluated and re-checked after lifting (`orbit/liveness.rs`, `LassoFault` on failure, `LassoFault::Unclosed` past 10,000 copies) |
@@ -790,12 +816,13 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   and each gives a wrong verdict within the documented bounds: the value encoding (P54, a
   wrong `ok` at one instance with a nullable Int at `m = 255` or a nullable Enum of 256
   values), the bit offsets of the packing (P50, a wrong `ok` past 65,535 bits), and the
-  edge index (P55, read only, past 2^32 edges). P50 and P54 are not the only conceivable
-  ones: this document did not audit every `as` cast in `explore/` and `build/`.
+  edge index (P55, read only, past 2^32 edges). P50 and P55 are fixed in #479, which also
+  audited the narrowing casts of the explore store (state numbers, edge numbers, slot
+  counts); `build/` was not audited.
 - **Fairness wording.** N9's (⇒) direction, hence every liveness `ok`, rests on assumption
   τ, which D20 states since #475 (P56).
-- **Determinism of memory stops beside other runs** rests on the reruns of N4; one step is
-  not shown for the CLI's passes (P53).
+- **Determinism of memory stops beside other runs** rests on the reruns of N4; the CLI's
+  passes rerun alone with an explicit room since #484 (P53).
 - **Reproductions** used binaries built in other worktrees, and those of P54 were run by
   the review rather than for this document (see the first paragraph); the issues that take
   P50, P51 and P54 up should reproduce them on a clean build.
@@ -827,7 +854,7 @@ each of its variants a fair action whose enabledness reads its mark (event-order
 
 New: P50 (packing past 65,535 bits; wrong `ok`, reproduced), P51 (`after` skips steps with
 `s' = s`; reproduced; the engines agree), P52 (a reduced safety trace whose lifted last
-state no longer violates keeps the reduced message silently), P53 (one step of memory-stop
+state no longer violates kept the reduced message silently; fixed in #487), P53 (one step of memory-stop
 determinism for the CLI's reruns is not shown), P54 (a value past a byte wraps when the
 build encodes it; wrong `ok` at one instance, reproduced by the review; its nullable-Int case
 is P40), P55 (the edge
@@ -865,7 +892,7 @@ after(Touch).assert(Order.flag == true)
 `rdra-ish verify` prints `Cone_AfterAssert_Touch_0 [AfterAssert_Touch_0]: ok (3 states)`.
 With `sets(Touch, Order.status == closed)` it prints `counterexample (7 states)`.
 
-**P50** (repro pending in repo, L5). One entity `Row` with `id: Int @pk` and 34 columns `c0` to `c33`, each
+**P50** (in the repository: `crates/rdra-ish-cli/tests/fixtures/wide_state/{two_creates,one_create}.rdra`, run by `verify_cli.rs::a_state_past_bit_65535_keeps_its_verdicts`, #479). One entity `Row` with `id: Int @pk` and 34 columns `c0` to `c33`, each
 `Int @default(0)`; every flag below is given to `verify`.
 
 1. One use case `Create` that creates a `Row` and `sets` every column to 1, and
