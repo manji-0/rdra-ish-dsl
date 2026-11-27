@@ -131,7 +131,7 @@ The consistency checks cover:
 | `--code[=<LEVEL>]` | off; `fresh` when given bare | After a clean run, check the service code the [`[code]` tables](#the-code-tables) name: `fresh`, `build`, or `run`. Write the level with `=`. See [`check --code`](#check---code). |
 | `--mutants <N>` | `1` | With `--code=run` only (else exit 1): after a passing `--code=run`, run the run command again on `N` mutant traces of each kind and fail when one passes. `0` runs none. See [The self-check](#the-self-check). |
 | `--mutant-seed <SEED>` | `0` | With `--code=run` only (else exit 1): the seed that picks the mutant traces. The same model and seed pick the same ones. |
-| `--deny-incomplete` | off | With `--code=run` only (else exit 1; without `--code`, exit 2): fail when a table's traces are not complete, that is, their BFS stopped at `conformance_states`. See [What a run covers](#what-a-run-covers). |
+| `--deny-incomplete` | off | With `--code=run` only (else exit 1; without `--code`, exit 2): fail when a table's traces are not complete: their BFS stopped at `conformance_states`, they leave refusals of the model untried, or they never run a use case of the port. See [What a run covers](#what-a-run-covers). |
 | `--max-patterns <N>` | 2^(10 + 8·(n − 1)) for n = `--instance-count` (`1024`, `262144`, ...) | Cap on each entity's distinct patterns in its view's cone. Past it: the `PatternCapReached` error. A cone of a rule gathers no pattern, so the cap does not stop it. |
 | `--max-states <N>` | none | Cap on the joint states of one cone. Past it: the `StateCapReached` error, which names what the states vary in. |
 | `--memory <SIZE>` | `memory` under `[check]`, else `4GiB` | What the run may hold. A cone past it stops with the `MemoryCapReached` error. See [Memory limit](#memory-limit). |
@@ -294,7 +294,7 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
 | `CodeBuildFailed` | error | The build failed with no error rdra-ish reads. |
 | `CodeConformance` | error | `run`: the conformance test failed; the message is the harness's first difference. |
 | `CodeMutantSurvived` | error | `run`: a mutant trace of the self-check passed. The `code:` line says whether the run passed or failed at another row. |
-| `CodeCoverageIncomplete` | warning; error with `--deny-incomplete` | `run`: the BFS behind the traces stopped at `conformance_states`, so the moves past it are not run and no call is tried as refused. |
+| `CodeCoverageIncomplete` | warning; error with `--deny-incomplete` | `run`: the BFS behind the traces stopped at `conformance_states`, so the moves past it are not run and no call is tried as refused; or the traces leave refusals of the model untried, or never run a use case of the port. |
 | `CodeObligationUnowned_<name>` | error | The obligation has no owner. |
 | `CodeObligationOwnerMissing_<name>` | error | Its owner names a file that does not exist. |
 | `CodeObligationUnknown_<name>` | warning | An owner names an obligation the model does not have. |
@@ -310,7 +310,9 @@ coverage of [code.rust]: bounded conformance to the model, not equivalence
   bound: 1 row created per entity, Int 0..5
   BFS: complete, 6 states; 6 reached by the traces' calls
   moves: 5 of 5 run
-  refused calls: 9 tried (calls on one existing row); interleaved commits: 7
+  refused calls: 11 tried (NotEnabled 10, Rejected 1); interleaved commits: 7
+  seeded at a reached state: 2 traces, each then one call (H1: seed and path agree)
+  never refused: 1 (Place)
   assumes: H1 the service answers from the tracked columns and the call alone; H2 every reachable call is tried; H3 seed and snapshot reach the real store; H4 every write goes through the port, one call one transaction; H5 the rules read tracked columns only
   cannot show: writes outside the port, locking, races, external effects, liveness, who issues a capability, data outside the model
 ```
@@ -319,24 +321,47 @@ When there is something to list, the `moves` line ends `; <n> left out (a tick, 
 with no function: <what> <n>, ...)`, counted by use case (`a tick` for the clock), and a
 `not compared:` line after the refused calls names what the harness
 does not compare (a counted trigger, a proposition, the clock).
+
+- **Refused calls.** In each state the traces try every call the model refuses: each binding
+  of the use case's rows to the rows there (a created row on the lowest free slot, never
+  when none is free), for every use case of the port. A row names the kind of refusal the
+  functions give, and the service must refuse with it: `NotEnabled` when no function runs
+  from the rows' states, `InvalidArgument` when an argument check fails, `Rejected` when a
+  condition does not hold. A call the functions would run, which the model refuses for a run
+  mark, a raise, or a rule the service keeps outside them, expects any kind (`any kind` in
+  the counts).
+- **`untried refusals:`** counts the refusals no trace tries: those of a use case with more
+  than 64 bindings in one state.
+- **`seeded at a reached state:`** counts the traces that seed a state the calls reach (one
+  with no run mark or raise, at most 16) and then make one call from it, which the other
+  traces make from the same state reached by calls. Each trace after the first seeds other
+  values in the columns the model does not track. Both check H1.
+- **`never run:`** names the port's use cases no row runs, and **`never refused:`** those no
+  row tries as refused.
+
+Ids are banded by entity: the `k`-th entity of the port numbers its rows from `100k + 1`
+(`Customer 1`, `Order 101`, `Shipment 201`), so a service that looks a row up by another
+entity's id finds none.
 A passing run means bounded conformance: under H1 to H5, the safety rules the model verified
 over tracked columns hold for runs driven through the port, with at most that many rows
 created per entity. It does not mean the service is equivalent to the model. When the BFS
 stopped at its cap, the `BFS` line says `stopped at its cap of <N> states`, the refused calls
 are `none tried`, and stderr gets `warning[CodeCoverageIncomplete]`: a service that runs a
-call the model refuses passes such a suite. The exit status does not change unless
-`--deny-incomplete` is given. Raise `conformance_states` and run `codegen --code` again to
-complete it. The statement describes the traces, so it is the same when `run` in the table
+call the model refuses passes such a suite. The same warning names untried refusals and
+use cases never run. The exit status does not change unless `--deny-incomplete` is given.
+Raise `conformance_states` and run `codegen --code` again to complete a capped suite. The statement describes the traces, so it is the same when `run` in the table
 replaces the default command.
 
 A table with a [model adapter](#the-model-adapter) adds one line after the statement, read
 from the line the adapter's conformance test prints on a pass:
 
 ```
-  ran: 9 traces, 19 calls, 9 refused calls, 7 interleaved commits
+  ran: 11 traces, 21 calls, 11 refused calls, 7 interleaved commits; 32 calls made again by prepare and commit
 ```
 
-An adapter without `prepare` and `commit` runs each interleaved commit as a plain call, and
+An adapter with `prepare` and `commit` runs the traces a second time with every call and
+refused call made by `prepare` and then `commit`, so a `commit` that never stores fails. An
+adapter without them runs each interleaved commit as a plain call, and
 the line ends `; 7 interleavings run as plain calls: the adapter has no prepare and commit, so
 conditional writes are not checked`. A `run` command that hides the test's output gets
 `ran: not reported`.
@@ -353,6 +378,7 @@ one row and with that row changed into something the model never does:
 | `call-refused` | A call the model runs (`C`), expected to be refused. |
 | `wrong-state` | A call expected to reach another state, one whose rows differ. |
 | `absent-row` | A call on one existing row that names an id no row has, expected to run as before. |
+| `guard-removed` | A call one condition rejects (`X Rejected`), expected to run, as the model without that guard runs it. One per condition the traces reject a call with. |
 
 The probe's conformance test reads its traces from the file `RDRA_ISH_TRACES` names, when the
 variable is set and not empty, instead of the file it names. The self-check sets the variable
@@ -360,10 +386,10 @@ for each mutant, and the real run clears it. A mutant counts as failed only when
 and its output names the changed row (`traces line <n>:`). The statement ends with one line:
 
 ```
-  self-check: 4 of 4 mutant traces failed at their changed row (seed 0)
+  self-check: 5 of 5 mutant traces failed at their changed row (seed 0); guard-removed mutants: Big
 ```
 
-When the traces give no mutant of a kind, the line says so (`; no refused-call-runs: the
+`guard-removed mutants:` names the conditions. When the traces give no mutant of a kind, the line says so (`; no refused-call-runs: the
 traces try no refused call` on traces whose BFS stopped at its cap). A mutant that passes is
 a `CodeMutantSurvived` error, and the exit code is 1. No mutant is equivalent to the real
 traces, so a conforming service never passes one:
@@ -2018,10 +2044,11 @@ the traces line and the rows only one side holds. It checks what is stored, not 
 
 **Traces.** A text file from a BFS of the whole system at `check`'s bounds, taking every move
 of a use case with a function in as few traces as a greedy walk finds, and in each state
-trying every one-row use case the model refuses, as a call that must fail. A BFS that stops at
+trying every call the model refuses, with the kind it must fail with (`X <kind> <call>`, `-`
+for any kind; see [What a run covers](#what-a-run-covers)). A BFS that stops at
 `--conformance-states` covers only what it reached and tries no refusal. The header says how
 many moves are covered and what the harness does not compare (a counted trigger, a comparison
-proposition, the clock). The file opens `# rdra-ish conformance traces 3`, then a fingerprint
+proposition, the clock). The file opens `# rdra-ish conformance traces 4`, then a fingerprint
 line.
 
 **Fingerprint.** The output's second line is `// rdra-ish codegen fingerprint: model=<hash>

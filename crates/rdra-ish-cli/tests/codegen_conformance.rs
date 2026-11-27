@@ -60,16 +60,16 @@ fn generate(lang: &str, dir: &Path, file: &str) {
 const FAULTS: [(&str, &str); 4] = [
     (
         "skip-core",
-        "after `Pay 1 2026-01-01T00:00:00Z`, the store differs from the model:\n  model only: Order 1 status=paid paid_at=+ qty=2 customer_id=1",
+        "after `Pay 101 2026-01-01T00:00:00Z`, the store differs from the model:\n  model only: Order 101 status=paid paid_at=+ qty=2 customer_id=1",
     ),
-    ("drop-row", "model only: Shipment 1 status=packed order_id=1"),
+    ("drop-row", "model only: Shipment 201 status=packed order_id=101"),
     (
         "accept-disabled",
-        "the model refuses `Cancel 1` here, and the service ran it",
+        "the model refuses `Cancel 101` here, and the service ran it",
     ),
     (
         "unconditional",
-        "the service committed `Place 1 1 card s`, prepared before `Place 1 1 card s` changed a row it writes",
+        "the service committed `Place 1 101 card s`, prepared before `Place 1 101 card s` changed a row it writes",
     ),
 ];
 
@@ -81,7 +81,7 @@ fn check(lang: &str, run: impl Fn(&str) -> Output) {
         "{lang}: the reference service fails:\n{out}"
     );
     assert!(
-        out.contains("ok 9 traces, 19 calls, 9 refusals, 7 interleavings"),
+        out.contains("ok 11 traces, 21 calls, 11 refusals, 7 interleavings"),
         "{lang}: the reference service checked less than expected:\n{out}"
     );
     for (fault, report) in FAULTS {

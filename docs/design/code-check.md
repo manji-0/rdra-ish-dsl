@@ -382,12 +382,12 @@ test can show (the [list above](#what-it-cannot-detect), shortened) in another. 
 gets `warning[CodeCoverageIncomplete]` and the exit status does not change; `--deny-incomplete`
 makes it an error. `codegen` prints the same statement after it writes the traces.
 
-`--deny-incomplete` fails on the cap only. A complete BFS with no refused call means the
-model refuses none of the calls the harness tries as refused, which are calls on one existing
-row; the model may still refuse a create or an action over several rows, which no trace
-tries (gap 2 of #439), and the statement says `calls on one existing row` for that reason.
-Counting those untried refusals, and failing `--deny-incomplete` on them, waits for PR 4
-(owner decision, 2026-11-27).
+Since PR 4 of #439 the traces try every refusal of the model in each reached state (gap 2):
+every binding of a use case's rows, creates on a free slot, and calls the functions would
+run but the model refuses for a mark, a raise or a rule. Each `X` row names the kind the
+functions refuse with, or `-` where they would run the call. `--deny-incomplete` fails on
+the cap, on refusals no trace tries (a use case with more than 64 bindings in a state), and
+on use cases of the port no trace runs (owner decision, 2026-11-27).
 
 ### The self-check by mutant traces
 
@@ -418,18 +418,18 @@ never changed (decision 1). The run is evidence only as a CI run (decision 11).
   the changed row (`traces line <n>:`). All three harnesses number the lines of the file the
   same way.
 
-**Guard removal is not built.** The plan in #439 also named traces from a model with one guard
-removed. Such a trace dies at its first row the model refuses:
+**Guard removal.** Traces from a model with one guard removed die at their first row the
+model refuses, a call the condition rejects. With every refusal tried (PR 4), each such call
+is an `X Rejected` row of the real traces, so the `guard-removed` mutant is that row expected
+to run: one per condition, named in the `self-check` line. The owner decided on 2026-11-27
+that guard removal comes with the wider refusals, and that a surviving mutant is an error by
+default.
 
-- When that row is a call on one existing row, the real traces already try it as `X`, so the
-  mutant is `refused-call-runs` again.
-- Otherwise it is a create or an action over several rows, which no trace tries as refused
-  (gap 2). Those are where guard removal adds something.
-- On the test fixture the only guard (`Big` on Cancel) is of the first kind.
-
-So guard removal belongs with the wider refusal tests of PR 4. The owner decided so on
-2026-11-27, and also that a surviving mutant is an error by default, and that
-`--deny-incomplete` fails on the cap only until PR 4 tries the other refusals.
+**Seed and path (H1).** A few reached states are seeded directly and followed by one call,
+which other traces make from the same state reached by calls; each trace after the first
+seeds other values in the columns the model does not track. A model adapter picks those
+values itself, so for it only the seeded states apply. Ids are banded by entity (`Order 101`,
+`Shipment 201`), so a lookup by another entity's id finds no row.
 
 ### The black-box model adapter
 
@@ -450,17 +450,18 @@ port. `codegen --adapter` (with `--conformance`) prints it in place of the domai
   a type of the core, so a project maps its own code to the model in a small adapter.
 - **The interface.** `reset`, `seed(ModelState)`, `observe() -> ModelState`, and
   `invoke(Call)`, which returns that the call ran or a refusal kind (`NotEnabled`,
-  `Rejected`, `InvalidArgument`, the variants of the core's use-case errors). The harness does
-  not check the kind yet: PR 4 does, and the kind is in the interface now so that PR 4 breaks
-  no adapter. `prepare(Call)` and `commit()` are optional, and only as a pair (in Rust a
+  `Rejected`, `InvalidArgument`, the variants of the core's use-case errors), which the
+  harness checks against the kind an `X` row names. `prepare(Call)` and `commit()` are
+  optional, and only as a pair (in Rust a
   `SplitAdapter` that `split()` returns, so a forgotten `commit` does not compile). Without
   them the harness runs an interleaved row (`I`) as its second call alone, which reaches the
   same state, and counts it as skipped: conditional writes go unchecked, and `--code=run`
   says so. `commit` takes no token of its prepare (the study had `commit(Pending)`): the
-  adapter holds one prepared write at a time, which is all an `I` row needs. Plain calls go
-  through `invoke` only, so a `commit` that always refuses passes the `I` rows; `invoke` must
-  do what `prepare` then `commit` do, and running a split adapter's `C` rows through the pair
-  is left as an option.
+  adapter holds one prepared write at a time, which is all an `I` row needs; the owner
+  decided on 2026-11-27 to revisit that only if a test holds more than one. A split adapter
+  runs the traces a second time with every `C` and `X` row made by `prepare` and then
+  `commit` (owner decision, 2026-11-27), so a `commit` that never stores fails there. Skipped
+  `I` rows do not fail `--deny-incomplete`: the `ran:` line counts them.
 - **The same traces, the same words.** The harness reads the traces the port's harness
   reads, abstracts `ModelState` to the same lines as the port's snapshot, and reports a
   difference in the same text (`traces line <n>:`). So the self-check runs through it

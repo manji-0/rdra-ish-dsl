@@ -261,6 +261,9 @@ const (
 )
 
 // String is the outcome in words.
+// adKinds is the outcome of each kind of refusal, as the traces spell it.
+var adKinds = map[string]Outcome{{"NotEnabled": NotEnabled, "Rejected": Rejected, "InvalidArgument": InvalidArgument}}
+
 func (o Outcome) String() string {{
 	switch o {{
 	case Ran:
@@ -312,16 +315,19 @@ type AdapterReport struct {{
 	Interleavings int
 	// Skipped counts the interleaved rows run as plain calls: the adapter is no SplitAdapter.
 	Skipped int
+	// Split counts the calls and refused calls made again by Prepare and then Commit: none
+	// when the adapter is no SplitAdapter.
+	Split int
 }}
 
 // Line is the line a conformance test prints on a pass, which `check --code=run` reads.
 func (r AdapterReport) Line() string {{
-	return fmt.Sprintf({line}, r.Traces, r.Calls, r.Refusals, r.Interleavings, r.Skipped)
+	return fmt.Sprintf({line}, r.Traces, r.Calls, r.Refusals, r.Interleavings, r.Skipped, r.Split)
 }}
 
 "#,
         line = string_literal(&format!(
-            "{REPORT}%d traces, %d calls, %d refusals, %d interleavings, %d interleavings skipped"
+            "{REPORT}%d traces, %d calls, %d refusals, %d interleavings, %d interleavings skipped, %d split calls"
         )),
     ));
 }
@@ -330,11 +336,43 @@ fn print_conform(out: &mut String) {
     out.push_str(&format!(
         r##"// Conform drives adapter along traces (the file `codegen --conformance` writes): it resets and
 // seeds each trace's initial state, makes each call, and after each compares what the store
-// holds with the state the model reaches. A call the model refuses must be refused and change
-// nothing, and so must a commit whose rows another call changed after its prepare. It returns
-// the first difference.
+// holds with the state the model reaches. A call the model refuses must be refused, with the
+// kind the traces name, and change nothing, and so must a commit whose rows another call
+// changed after its prepare. A SplitAdapter runs the traces again with each call made by
+// Prepare and then Commit. It returns the first difference.
 func Conform(adapter ModelAdapter, traces string) (AdapterReport, error) {{
+	report, err := adPass(adapter, traces, false)
+	if err != nil {{
+		return report, err
+	}}
+	if _, ok := adapter.(SplitAdapter); ok {{
+		again, err := adPass(adapter, traces, true)
+		if err != nil {{
+			return report, err
+		}}
+		report.Split = again.Calls + again.Refusals
+	}}
+	return report, nil
+}}
+
+// adRun makes call: by Invoke, or, with split, by the adapter's Prepare and then its Commit.
+func adRun(adapter ModelAdapter, c Call, split bool) Outcome {{
+	if s, ok := adapter.(SplitAdapter); ok && split {{
+		if o := s.Prepare(c); o != Ran {{
+			return o
+		}}
+		return s.Commit()
+	}}
+	return adapter.Invoke(c)
+}}
+
+// adPass is one run of traces, with each call made by adRun.
+func adPass(adapter ModelAdapter, traces string, viaSplit bool) (AdapterReport, error) {{
 	var report AdapterReport
+	how := ""
+	if viaSplit {{
+		how = " through prepare and commit"
+	}}
 	lines := strings.Split(traces, "\n")
 	if len(lines) == 0 || strings.TrimRight(lines[0], "\r ") != {format} {{
 		return report, errors.New("not a traces file of this version: generate the adapter and the traces again")
@@ -406,8 +444,8 @@ func Conform(adapter ModelAdapter, traces string) (AdapterReport, error) {{
 			if err != nil {{
 				return report, at(err)
 			}}
-			if o := adapter.Invoke(c); o != Ran {{
-				return report, at(fmt.Errorf("the model runs `%s` here, and the service refused it: %v", strings.Join(call, " "), o))
+			if o := adRun(adapter, c, viaSplit); o != Ran {{
+				return report, at(fmt.Errorf("the model runs `%s` here, and the service refused it%s: %v", strings.Join(call, " "), how, o))
 			}}
 			if err := adCompare(adAbstract(adapter.Observe()), next, "after `"+strings.Join(call, " ")+"`"); err != nil {{
 				return report, at(err)
@@ -415,12 +453,20 @@ func Conform(adapter ModelAdapter, traces string) (AdapterReport, error) {{
 			want = next
 			report.Calls++
 		case "X":
+			if len(rest) < 1 {{
+				return report, at(errors.New("a refused call without its kind"))
+			}}
+			kind, rest := rest[0], rest[1:]
 			c, err := adCall(rest)
 			if err != nil {{
 				return report, at(err)
 			}}
-			if adapter.Invoke(c) == Ran {{
-				return report, at(fmt.Errorf("the model refuses `%s` here, and the service ran it", strings.Join(rest, " ")))
+			o := adRun(adapter, c, viaSplit)
+			if o == Ran {{
+				return report, at(fmt.Errorf("the model refuses `%s` here, and the service ran it%s", strings.Join(rest, " "), how))
+			}}
+			if kind != "-" && adKinds[kind] != o {{
+				return report, at(fmt.Errorf("the model refuses `%s` here with %s, and the service refused it with %v", strings.Join(rest, " "), kind, o))
 			}}
 			if err := adCompare(adAbstract(adapter.Observe()), want, "after the refused `"+strings.Join(rest, " ")+"`"); err != nil {{
 				return report, at(err)
