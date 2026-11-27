@@ -188,6 +188,7 @@ violation_message(text, pattern_desc)
         StateDiag::StateCapReached { .. }
         | StateDiag::MemoryCapReached { .. }
         | StateDiag::TimeBudgetReached { .. }
+        | StateDiag::LiftFault { .. }
         | StateDiag::NoWitness { .. }
         | StateDiag::VacuousRule { .. }
         | StateDiag::NeverRuns { .. }
@@ -222,6 +223,7 @@ violation_message(text, pattern_desc)
         | StateDiag::TriggerNeverRuns { .. }
         | StateDiag::UncountedTrigger { .. }
         | StateDiag::DeleteLeavesChildren { .. }
+        | StateDiag::DeleteLeavesChildKeys { .. }
         | StateDiag::GuardReadsLaterStep { .. }
         | StateDiag::DrivenComparisonColumnWritten { .. }
         | StateDiag::DefaultOnVariationIgnored { .. } => d.to_string(),

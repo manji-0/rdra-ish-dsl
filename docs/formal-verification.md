@@ -701,8 +701,10 @@ in [Known verification gaps](#known-verification-gaps).
   removes one child row, so a delete the database would accept once one statement removes
   every child stays disabled while a second child exists. The lifecycle does not run
   `cascade`, `set_null`, or `set_default`: the delete removes the one row and the children
-  stay. Such a key gets no `DanglingKey_*`, and the info `DeleteLeavesChildren` names each
-  use case that deletes a `cascade` parent and not the child.
+  stay, while a database built from the SQL export runs the action. Such a key gets no
+  `DanglingKey_*`; the warning `DeleteLeavesChildren` names each use case that deletes a
+  `cascade` parent and not the child, and `DeleteLeavesChildKeys` each that deletes a
+  `set_null` or `set_default` parent and neither deletes the child nor moves its key.
 - **A use case is atomic per transaction group.** `Pay` that moves an Order and its Payment
   in one group is one step, so `cross_order_payment` passes. A use case whose writes span k
   groups is k steps of one run, with any other action between two of them, so

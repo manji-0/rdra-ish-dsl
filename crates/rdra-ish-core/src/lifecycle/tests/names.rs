@@ -230,6 +230,13 @@ fn one_of_each() -> Vec<StateDiag> {
             child: "Child".into(),
             site: site(),
         },
+        StateDiag::DeleteLeavesChildKeys {
+            usecase: "DeleteParent".into(),
+            parent: "Parent".into(),
+            child: "Child".into(),
+            action: crate::model::RefAction::SetNull,
+            site: site(),
+        },
         StateDiag::GuardReadsLaterStep {
             condition: "Captured".into(),
             usecase: "Pay".into(),
@@ -274,6 +281,11 @@ fn one_of_each() -> Vec<StateDiag> {
             one_instance: true,
             site: site(),
         },
+        StateDiag::LiftFault {
+            name: "Forbidden_Order_0".into(),
+            site: site(),
+            fault: crate::lifecycle::LassoFault::Satisfies,
+        },
     ];
     // Fails to compile when a variant is added without a value above.
     for d in &all {
@@ -295,6 +307,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::VacuousRule { .. }
             | StateDiag::AfterAssertViolated { .. }
+            | StateDiag::LiftFault { .. }
             | StateDiag::PropertyViolated { .. }
             | StateDiag::GoalUnreachable { .. }
             | StateDiag::NoWitness { .. }
@@ -322,6 +335,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::TriggerNeverRuns { .. }
             | StateDiag::UncountedTrigger { .. }
             | StateDiag::DeleteLeavesChildren { .. }
+            | StateDiag::DeleteLeavesChildKeys { .. }
             | StateDiag::GuardReadsLaterStep { .. }
             | StateDiag::DrivenComparisonColumnWritten { .. }
             | StateDiag::DefaultOnVariationIgnored { .. } => {}

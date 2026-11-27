@@ -674,3 +674,47 @@ fn a_run_that_stops_once_every_check_fails_evaluates_every_check() {
     let ts = TransitionSystem::build(&model_from(&src), Bounds::STATES, &Scope::ALL).ts;
     ts.run_checking(Caps::VERIFY.until_all_violated(), Checks::none());
 }
+
+/// A reduced run's violation whose lifted last state does not violate its check becomes a
+/// `LiftFault` of that check, an error, and never keeps the reduced message as a violation
+/// (P52); one whose lifted state does violate is reported as that state's violation.
+#[test]
+fn a_violation_that_does_not_lift_is_a_lift_fault() {
+    use crate::lifecycle::{Severity, StateDiag};
+
+    let after = "after(Pay).assert(Order.qty == 2)\n";
+    let src = format!("{SHOP}{BROKEN}{after}");
+    let ts = TransitionSystem::build(&model_from(&src), Bounds::VERIFY, &Scope::ALL).ts;
+    let run = ts.run_on(Caps::VERIFY, Checks::All, Threads::Fixed(0));
+    let violations: Vec<&StateDiag> = (run.diags.iter())
+        .map(|d| &d.diag)
+        .filter(|d| {
+            matches!(
+                d,
+                StateDiag::ConstraintViolated { .. } | StateDiag::AfterAssertViolated { .. }
+            )
+        })
+        .collect();
+    assert!(
+        violations
+            .iter()
+            .any(|d| matches!(d, StateDiag::AfterAssertViolated { .. })),
+        "an assert fails"
+    );
+    for reduced in violations {
+        assert_eq!(&super::lifted(Some(reduced.clone()), reduced), reduced);
+        let fault = super::lifted(None, reduced);
+        assert_eq!(
+            fault.name(&[]),
+            format!("LiftFault_{}", reduced.name(&[])),
+            "{fault}"
+        );
+        assert_eq!(fault.sites(), reduced.sites());
+        assert_eq!(fault.severity(), Severity::Error);
+        assert!(
+            fault.trace().is_none(),
+            "a fault prints no trace as a counterexample"
+        );
+        assert!(fault.to_string().starts_with("tool error:"), "{fault}");
+    }
+}

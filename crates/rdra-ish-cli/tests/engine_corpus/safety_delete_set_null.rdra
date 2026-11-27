@@ -4,7 +4,8 @@
 // lines, since the database would unlink them. CancelDraft marks the line it binds, which
 // the Order's key names, as orphaned in the same step, so the line is left present and
 // orphaned after Open, AddLine, Attach, CancelDraft, and Forbidden_OrderLine_0 fails. The
-// key gets no DanglingKey_* rule: the engine does not run the set_null. An engine that put
+// key gets no DanglingKey_* rule: the engine does not run the set_null, and the warning
+// DeleteLeavesChildKeys names CancelDraft. An engine that put
 // the restrict guard on a set_null key would never run CancelDraft while the line names the
 // Order and would answer ok. BFS refutes the rule, so the proof does not try it;
 // proof_equivalence checks that z3 would not prove it.

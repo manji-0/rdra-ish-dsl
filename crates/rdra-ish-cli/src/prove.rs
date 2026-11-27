@@ -27,14 +27,29 @@ pub(crate) struct ProofTally {
     pub rules: usize,
     pub unproved: usize,
     pub deny_unproved: bool,
+    /// The run had a scope flag, so the proof is of the system the scope leaves (`SCOPED`).
+    pub scoped: bool,
 }
+
+/// What every line that says a rule or lemma is proved ends with under a scope flag
+/// (`--buc`, `--entity`, `--without-usecase`, `--without-buc`, `--actor`). The prover encodes
+/// the system the scope leaves, which lacks the use cases it drops, so a proof there says
+/// nothing of the whole model. A counterexample or a CTI there is one of the whole model too,
+/// so those lines say nothing of the scope.
+const SCOPED: &str = " (in the selected scope)";
 
 impl ProofTally {
     /// The clause the OK line ends with.
     pub(crate) fn clause(&self) -> String {
         format!(
-            "{} of {} rules proved for any number of rows and any Int value",
-            self.proved, self.rules
+            "{} of {} rules proved for any number of rows and any Int value{}",
+            self.proved,
+            self.rules,
+            if self.scoped {
+                " in the selected scope"
+            } else {
+                ""
+            }
         )
     }
 }
@@ -103,6 +118,7 @@ pub(crate) struct Z3Tool<'a> {
 /// instances it maps to, is not tried: it reads `refuted:`, and is an error of BFS's, not an
 /// unproved rule. Returns what `ProofRun` holds; the caller prints its lines where the proof's
 /// place in the report is, whenever the proof ran.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn run_proof(
     ts: &TransitionSystem,
     twin: Option<&TransitionSystem>,
@@ -111,7 +127,9 @@ pub(crate) fn run_proof(
     refuted: &BTreeMap<usize, usize>,
     z3: Z3Tool<'_>,
     deny_unproved: bool,
+    scoped: bool,
 ) -> Result<ProofRun> {
+    let within = if scoped { SCOPED } else { "" };
     let lemmas = &marks.lemmas;
     let mut text = String::new();
     let (binary, version) = (z3.binary, z3.version.to_string());
@@ -155,12 +173,13 @@ pub(crate) fn run_proof(
     let out_of_scope = |v: &Verdict| matches!(v, Verdict::OutOfScope(_));
     // The counts, and the rules BFS refuted when there are any.
     let counts = |rs: &[&RuleProof]| {
+        let in_scope = if scoped { " in the selected scope" } else { "" };
         let refuted = match count(rs, |v| matches!(v, Verdict::Refuted)) {
             0 => String::new(),
             n => format!(", {n} refuted"),
         };
         format!(
-            "{} proved, {} unproved, {} out of scope{refuted}",
+            "{} proved{in_scope}, {} unproved, {} out of scope{refuted}",
             count(rs, proved),
             count(rs, unproved),
             count(rs, out_of_scope)
@@ -177,14 +196,19 @@ pub(crate) fn run_proof(
     };
     out!(
         text,
-        "proof{solver}: {} state rules{with_lemmas}, for any number of rows and any Int value",
-        rules.len()
+        "proof{solver}: {} state rules{with_lemmas}, for any number of rows and any Int value{}",
+        rules.len(),
+        if scoped {
+            ", in the selected scope"
+        } else {
+            ""
+        }
     );
     for r in yours.iter().chain(&rules) {
-        print_verdict(&mut text, ts, r, marks, refuted);
+        print_verdict(&mut text, ts, r, marks, refuted, within);
     }
     for lemma in &proof.lemmas {
-        out!(text, "lemma: {lemma}");
+        out!(text, "lemma: {lemma}{within}");
     }
     for loose in &proof.loose {
         out!(
@@ -214,6 +238,7 @@ pub(crate) fn run_proof(
         rules: rules.len(),
         unproved: count(&rules, unproved),
         deny_unproved,
+        scoped,
     };
     let with = |f: fn(&Verdict) -> bool| -> BTreeSet<usize> {
         proof
@@ -254,6 +279,7 @@ fn print_verdict(
     r: &RuleProof,
     marks: &Marks,
     refuted: &BTreeMap<usize, usize>,
+    within: &str,
 ) {
     let inv = &ts.invariants()[r.inv];
     let sql = match marks.unenforced.get(&r.inv) {
@@ -271,7 +297,7 @@ fn print_verdict(
         inv.name
     );
     match &r.verdict {
-        Verdict::Proved => out!(text, "proved: {name}"),
+        Verdict::Proved => out!(text, "proved: {name}{within}"),
         Verdict::OutOfScope(why) => out!(text, "out of scope: {name}: {why}"),
         Verdict::Refuted => {
             let n = refuted[&r.inv];
