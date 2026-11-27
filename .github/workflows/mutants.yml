@@ -1,10 +1,17 @@
 name: Mutants
-# cargo mutants over the native liveness ladder (#204). .cargo/mutants.toml holds the files
-# and the test command; docs/engine-agreement.md#mutation-run says when to run it and how to
-# read the survivors. On demand only: gh workflow run mutants.yml [-f shards=N] [-f re=REGEX]
+# cargo mutants over the native liveness ladder (#204), or with `-f config=tlc` over the TLA+
+# printer and the TLC reading and comparison code. .cargo/mutants.toml and
+# .cargo/mutants-tlc.toml hold the files and the test command; docs/engine-agreement.md#mutation-run
+# says when to run each and how to read the survivors. On demand only:
+# gh workflow run mutants.yml [-f config=tlc] [-f shards=N] [-f re=REGEX]
 on:
   workflow_dispatch:
     inputs:
+      config:
+        description: "liveness: the native ladder, tlc and z3 off PATH; tlc: the printer and the TLC reading code, tlc and z3 on PATH"
+        type: choice
+        options: [liveness, tlc]
+        default: liveness
       shards:
         description: Number of shards, one runner each
         default: "4"
@@ -63,7 +70,26 @@ jobs:
           SHARD: ${{ matrix.shard }}
           SHARDS: ${{ inputs.shards }}
           RE: ${{ inputs.re }}
+          CONFIG: ${{ inputs.config }}
         run: |
+          if [[ "$CONFIG" == tlc ]]; then
+            # TLC and z3 must be there: the corpus would skip them otherwise and catch less.
+            # No address-space cap: the JVM reserves more than 2 GiB of it at start. A
+            # mutant here changes printed text or how TLC's output is read, not how much
+            # the checker allocates. The unmutated tests take minutes, so a mutant past
+            # 15 minutes is a hang.
+            export RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_Z3=1
+            type -P tlc z3
+            filters=$(sed -n '/^additional_cargo_test_args/,/^]/p' .cargo/mutants-tlc.toml \
+              | grep -o '"[^"]*"' | tr -d '"' | grep -vx -- '--' | paste -sd' ' -)
+            # shellcheck disable=SC2086
+            cargo test --profile mutants -p rdra-ish-cli --lib --test engine_corpus --test verify_cli -- $filters
+            args=(--config .cargo/mutants-tlc.toml --in-place --baseline skip --timeout 900
+              --build-timeout 1200 --shard "$SHARD/$SHARDS" --sharding round-robin)
+            [[ -n "$RE" ]] && args+=(--re "$RE")
+            cargo mutants "${args[@]}" || { rc=$?; [[ $rc == 2 || $rc == 3 ]]; }
+            exit 0
+          fi
           PATH="$(tr ':' '\n' <<<"$PATH" | while IFS= read -r d; do
             [[ -n "$d" && ! -e "$d/tlc" && ! -e "$d/tlc2" && ! -e "$d/z3" ]] && printf '%s\n' "$d"
           done | paste -sd: -)"
@@ -105,6 +131,7 @@ jobs:
         shell: bash
         env:
           SHARDS: ${{ inputs.shards }}
+          CONFIG: ${{ inputs.config }}
         run: |
           count() { cat shards/*/"$1" 2>/dev/null | wc -l || true; }
           # A cancelled shard uploads nothing, so its mutants are missing from every count.
@@ -113,7 +140,7 @@ jobs:
           done | paste -sd' ' -)
           tested=0
           {
-            echo "## cargo mutants over the liveness ladder"
+            echo "## cargo mutants, config $CONFIG"
             echo
             if [[ -n "$missing" ]]; then
               echo "> [!WARNING]"
