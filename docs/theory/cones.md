@@ -603,7 +603,7 @@ are named and not derived here: that `Fold::holds` computes the folded guard exa
 definition), and that a fold's key binding (`Extended::cone_params` binds a dropped `T` parameter to
 slot 0) loses no successor. ∎
 
-*Evidence (P31, fixed in #PRNUM).* The fold equivalence is checked against the cone's own step
+*Evidence (P31, fixed in #521).* The fold equivalence is checked against the cone's own step
 relation, in both directions, on every reachable state of every complete reduced cone that folds
 (`core/tests/reduce.rs`). `::reduced_domain_cones_hold_each_fold_bit_where_its_action_runs`: the
 bit holds at the slot every move of a folded action binds its key to (for a node fold, the row its
