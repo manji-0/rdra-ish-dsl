@@ -460,7 +460,7 @@ impl TlaNames {
                         .collect(),
                 };
                 let mut values = HashMap::new();
-                for v in (0..d.domain.size(ts)).map(|v| Value(v as u8)) {
+                for v in (0..d.domain.size(ts)).map(Value::at) {
                     values.entry(render_value(&d.domain, v)).or_insert(v);
                 }
                 (keys, values)

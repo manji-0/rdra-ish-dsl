@@ -40,7 +40,7 @@ impl TransitionSystem {
         if self.entity(ent_id).birth == Birth::PreExisting {
             match decl.start {
                 Start::Base | Start::Identity => starts.push(decl.base),
-                Start::Any => starts.extend((0..decl.domain.size(self)).map(|i| Value(i as u8))),
+                Start::Any => starts.extend((0..decl.domain.size(self)).map(Value::at)),
             }
         } else {
             for (action, param) in self.creations(ent_id) {

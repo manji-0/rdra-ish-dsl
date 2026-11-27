@@ -922,6 +922,165 @@ forbidden(Item, stock == 0)
     assert!(!stderr.contains("Forbidden_Item_0"), "{stderr}");
 }
 
+/// A state cell holds 256 values. A nullable Int column holds null and `0..=max`: 257 values
+/// at `--int-range-max 255`, where a write of 255 wrapped to null, so every engine checked a
+/// model whose use case writes null, and a rule the model breaks at 255 was `ok` (and
+/// `proved` under `--prove`); at 254 it is a counterexample. Such a range is an error now,
+/// before any engine runs; 256 is no range at all, and a model without a nullable Int column
+/// still takes 255.
+#[test]
+fn a_nullable_int_column_takes_no_range_past_254() {
+    let src = |top: &str, null: &str| {
+        format!(
+            r#"entity Item "商品" {{ id: Int @pk  n: Int {null} }}
+usecase Add "追加"
+usecase Top "最大"
+creates(Add, Item)
+updates(Top, Item)
+sets(Top, Item.n == {top})
+forbidden(Item, n == {top})
+"#
+        )
+    };
+    for command in ["check", "verify"] {
+        let run = |name: &str, top: &str, null: &str, range: &str| {
+            run_on_source(
+                name,
+                &src(top, null),
+                &[command, "--int-range-max", range, "--instance-count", "1"],
+            )
+        };
+        let (code, _, stderr) = run("nullable-top-254", "254", "@null", "254");
+        assert_eq!(code, Some(1), "{command}: {stderr}");
+        assert!(stderr.contains("Forbidden_Item_0"), "{command}: {stderr}");
+
+        let (code, _, stderr) = run("nullable-top-255", "255", "@null", "255");
+        assert_eq!(code, Some(1), "{command}: {stderr}");
+        assert!(
+            stderr.contains("error[DomainTooLarge_Item_n]")
+                && stderr.contains("n takes 257 values, null and the Int range, more than the 256 a state holds; give --int-range-max 254 or less"),
+            "{command}: {stderr}"
+        );
+        assert!(!stderr.contains("Forbidden_Item_0"), "{command}: {stderr}");
+
+        let (code, _, stderr) = run("nullable-top-256", "256", "@null", "256");
+        assert_ne!(code, Some(0), "{command}: {stderr}");
+        assert!(
+            stderr.contains("--int-range-max must be at most 255"),
+            "{command}: {stderr}"
+        );
+
+        let (code, _, stderr) = run("int-top-255", "255", "", "255");
+        assert_eq!(code, Some(1), "{command}: {stderr}");
+        assert!(stderr.contains("Forbidden_Item_0"), "{command}: {stderr}");
+    }
+    // The TLA+ export renders values through the same system, so TLC would have checked the
+    // same wrapped write: it writes 254 at 254 and refuses 255.
+    let out = std::env::temp_dir().join(format!("rdra-nullable-top-{}.tla", std::process::id()));
+    for (top, writes) in [("254", true), ("255", false)] {
+        let _ = std::fs::remove_file(&out);
+        let (code, _, stderr) = run_on_source(
+            "nullable-top-tla",
+            &src(top, "@null"),
+            &[
+                "export",
+                "--kind",
+                "tla",
+                "-o",
+                out.to_str().unwrap(),
+                "--int-range-max",
+                top,
+            ],
+        );
+        match writes {
+            true => {
+                assert_eq!(code, Some(0), "{top}: {stderr}");
+                let tla = std::fs::read_to_string(&out).unwrap();
+                assert!(tla.contains("254"), "{tla}");
+            }
+            false => {
+                assert_eq!(code, Some(1), "{top}: {stderr}");
+                assert!(stderr.contains("error[DomainTooLarge_Item_n]"), "{stderr}");
+                assert!(!out.exists(), "a TLA+ module was written at 255");
+            }
+        }
+    }
+    let _ = std::fs::remove_file(&out);
+}
+
+/// The same for Enums, at the default bounds: a nullable Enum of 256 values (257 with null)
+/// wrote its last value as null, so `forbidden(Row, s != null)` was `ok` though `Create`
+/// writes the last value; an Enum of 257 values wrote its last as its first. Both are errors
+/// now, which stop `verify` before any engine runs (`check` lists the error beside what it
+/// finds). A nullable Enum of 255 values and an Enum of 256 still build, and the write breaks
+/// the rule there.
+#[test]
+fn an_enum_column_takes_no_more_values_than_a_state_holds() {
+    let src = |n: usize, null: &str, rule: &str| {
+        let values: Vec<String> = (0..n).map(|i| format!("v{i}")).collect();
+        format!(
+            r#"entity Row "行" {{ id: Int @pk  s: Enum({}) {null} }}
+usecase Create "作成"
+creates(Create, Row)
+sets(Create, Row.s == v{})
+forbidden(Row, {rule})
+"#,
+            values.join(","),
+            n - 1
+        )
+    };
+    for command in ["check", "verify"] {
+        for (n, null, rule, fits) in [
+            (255, "@null", "s != null", true),
+            (256, "@null", "s != null", false),
+            (256, "", "s != v0", true),
+            (257, "", "s != v0", false),
+        ] {
+            let name = format!("enum-{n}{}", null.trim_start_matches('@'));
+            let (code, _, stderr) = run_on_source(&name, &src(n, null, rule), &[command]);
+            assert_eq!(code, Some(1), "{command} {n} {null}: {stderr}");
+            match fits {
+                true => assert!(
+                    stderr.contains("Forbidden_Row_0") && !stderr.contains("DomainTooLarge"),
+                    "{command} {n} {null}: {stderr}"
+                ),
+                false => assert!(
+                    stderr.contains("error[DomainTooLarge_Row_s]")
+                        && stderr.contains("s takes 257 values, more than the 256 a state holds")
+                        && (command == "check" || !stderr.contains("Forbidden_Row_0")),
+                    "{command} {n} {null}: {stderr}"
+                ),
+            }
+        }
+    }
+    // The TLA+ export refuses the same columns, so TLC never checks the wrapped write.
+    let out = std::env::temp_dir().join(format!("rdra-enum-top-{}.tla", std::process::id()));
+    for (n, null, writes) in [
+        (255, "@null", true),
+        (256, "@null", false),
+        (257, "", false),
+    ] {
+        let _ = std::fs::remove_file(&out);
+        let (code, _, stderr) = run_on_source(
+            "enum-tla",
+            &src(n, null, "s != v0"),
+            &["export", "--kind", "tla", "-o", out.to_str().unwrap()],
+        );
+        assert_eq!(
+            code,
+            Some(if writes { 0 } else { 1 }),
+            "{n} {null}: {stderr}"
+        );
+        assert_eq!(out.exists(), writes, "{n} {null}: {stderr}");
+        assert_eq!(
+            stderr.contains("DomainTooLarge"),
+            !writes,
+            "{n} {null}: {stderr}"
+        );
+    }
+    let _ = std::fs::remove_file(&out);
+}
+
 /// An Enum or Bool `@default` outside the column's values stops the model from loading, so
 /// no engine explores from the first value (#187).
 #[test]

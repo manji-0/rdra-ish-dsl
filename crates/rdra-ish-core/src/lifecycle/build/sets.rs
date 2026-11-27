@@ -59,9 +59,7 @@ impl<'m> Builder<'m> {
             if let Some(ck) = ce.guard {
                 let values = match rhs {
                     EffectRhs::Value(v) => vec![v],
-                    EffectRhs::AnyNonNull => {
-                        (1..domain.size(&self.ts)).map(|i| Value(i as u8)).collect()
-                    }
+                    EffectRhs::AnyNonNull => (1..domain.size(&self.ts)).map(Value::at).collect(),
                     EffectRhs::None => continue,
                 };
                 self.guarded_set(a, uc, ce.entity, var, p, values, (ck, site));
@@ -75,7 +73,7 @@ impl<'m> Builder<'m> {
                         param: p,
                         values: (1..domain.size(&self.ts))
                             .map(|i| Choice {
-                                value: Value(i as u8),
+                                value: Value::at(i),
                                 site: Some(site.clone()),
                                 conds: Vec::new(),
                             })
@@ -286,7 +284,7 @@ impl<'m> Builder<'m> {
                 param: p,
                 values: (0..size)
                     .map(|i| Choice {
-                        value: Value(i as u8),
+                        value: Value::at(i),
                         site: Some(site.clone()),
                         conds: Vec::new(),
                     })
