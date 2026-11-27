@@ -393,8 +393,9 @@ The fix makes the cone exact for marks instead of checking traces:
 `cone.rs::TransitionSystem::target_cone` returns `exact_target_cone(target, false)` for an
 entity whose own cone would leave a mark out, so every cone that feeds the state-model findings
 and `RunsSoFar` has no left-out mark, and Theorem A1 or A8 applies to it given its freed
-slots. `core/tests/cone.rs::assert_cones_exact` asserts that no entity cone leaves a mark out on
-every sample it runs. A model of the shape below, a handler the cone takes while its raiser
+slots. `core/tests/cone.rs::assert_cones_exact` asserts that no entity cone that frees no slots
+leaves a mark out, on every sample it runs; `target_cone` makes every entity cone exact for
+marks, freed slots or not. A model of the shape below, a handler the cone takes while its raiser
 starts from a state never reached, is
 `core/tests/cone.rs::a_cone_that_leaves_a_mark_out_keeps_the_whole_systems_verdict_and_view`.
 The model as first written here, constructed by hand and not run: Order's exit `ShipOrder`
@@ -1179,16 +1180,16 @@ the row; a fixed or closed one carries its pull request.
 | A1 | Theorem A1 | full | D (equality on exact cones, inclusion on the others) | P32 (fixed, #477) |
 | A2 | Theorem A2; Corollary A28′; refinement of candidates | full (`ok` of universal checks; a vouched counterexample lifts, A28′); existential and branching findings are read on cones exact for marks | D | P1 (fixed, #477, #509), P32 (fixed, #477) |
 | A3 | Proposition A3 | full (`count_up`, `count_down`) | D | |
-| A4 | Theorem A4 (on the unreduced cone) | full | D | P1 (fixed, #477) |
-| A5 | Theorem A5 | sketch for parts 1 and 3 (read on the reduced cone: A8, A15); full for part 2 | D, unit tests | P1 (fixed, #477), P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
-| A6 | Proposition A6 | sketch for `always`, `eventually`, `leads_to` (A8); full for `stable`, `unchanged`, `precedes` | D | P1 (fixed, #477), P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
+| A4 | Theorem A4 (on the unreduced cone) | full | D | P1 (fixed, #477, #509) |
+| A5 | Theorem A5 | sketch for parts 1 and 3 (read on the reduced cone: A8, A15); full for part 2 | D, unit tests | P1 (fixed, #477, #509), P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
+| A6 | Proposition A6 | sketch for `always`, `eventually`, `leads_to` (A8); full for `stable`, `unchanged`, `precedes` | D | P1 (fixed, #477, #509), P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
 | A7 | Theorem A7 | full | D | |
 | A8 | Theorem A8 | sketch: Lemma 6 argued; (B1)–(B3) certified at run time | R, M, D | P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
 | A9 | — | none; no verdict rests on it since #480 | M (≤ 2,500,000 states), D | P7 (fixed, #480) |
 | A10, A11 | Lemma 6, point 5 | sketch (A11: that a count is never node-folded is read from `fold.rs::strip_links`) | M, D | P31 (partly fixed; fold evidence #516, #521) |
 | A12, A13, A14 | by reading | full (by construction) | D (A12, A13) | |
 | A15 | Theorem A15 | full relative to A8's hypotheses | R, D | P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
-| A16 | lift | none | R (every lifted step and look-up, every build), D | P20 (fixed, #518, #522, #529) |
+| A16 | lift | none | R (every lifted step and look-up, every build), D | P20 (fixed, #518, #522, #529, #531) |
 | A17 | — | none | M, D | |
 | A18 | Theorem A18 | full given (G1)–(G6) | M, D | P8 (prose fixed, #475), P30 (fixed, #488; outside guards refuted, #537) |
 | A19 | `DeletedRowOwner` | full (as the case (G5) removes) | D | |
@@ -1313,9 +1314,11 @@ the row; a fixed or closed one carries its pull request.
   fault. Since #531 the lasso lift of a run up to symmetry, `explore/orbit/liveness.rs::Product::lift`,
   returns `NoMove` for an edge that is not the move at its place or whose permutation does not take it to
   the stored target, which `lasso` reports as `LassoFault::Replay`. What still panics in a release build
-  at the pin is listed in the index's P20 row (#536): `reduce/lift.rs::lift_stop`'s `expect`s about its
-  caller and its walk's own graph, and in `explore/orbit/liveness.rs` `Product::new`'s permutations and
-  the look-ups of the pair search before the lift. None depends on the path being lifted. A failure there
+  at the pin is listed in the index's P20 row, with the reason each holds: `reduce/lift.rs::lift_stop`'s
+  `expect`s about its caller and its walk's own graph; the look-ups of the pair search and the lasso
+  search before a lift (`explore/orbit/liveness.rs`, `explore/liveness.rs`); preconditions of a caller;
+  the deadlock lift's trace slot; and one read of the lifted path, the last step of an `after` violation
+  in `explore/orbit.rs::run_orbits_annotating`, which holds whatever path is lifted. A failure there
   stops the command; none can print a trace that does not replay.
 - **Bounded results.** Everything here, escalation included, is a statement at a bound. `ok at n` at
   `β + 1` and `β + 2` adds two bounded results; it is not an induction.
@@ -1380,3 +1383,7 @@ Changes to statements of this document after it was first written, newest last.
   entities stays. A11's "a count is never node-folded" is read from `reduce/fold.rs`
   (`strip_links`) and loses its `unread@pin`. The summary gives P31 its index status, partly
   fixed, where it said fixed, and P11 and P30 their later pull requests.
+- **2026-11-28, second audit at `5f59fae2`.** `assert_cones_exact` checks that an entity cone leaves no mark out
+  only on cones that free no slots; the text said on every cone. "Panics left in the
+  lifts" follows the index's completed P20 list. A4, A5, A6 and A16 give P1 and P20 the
+  index status.

@@ -435,8 +435,8 @@ fails, and its parent path.
 *Proof.* Iff: by N1, `S_G = Reach(T)`. Shortest: admission order is BFS order, so the first
 violating state admitted has least depth, and its parent path has that length (N1). For
 `always`, `ComponentRun::decide_property` re-evaluates the path's states with
-`TransitionSystem::property_failure` and `debug_assert`s that the failure is at the last
-state; that holds because every earlier state of the path has a smaller `idx` and so
+`TransitionSystem::property_failure` and checks, in every build (a `PropertyVerdict::Fault`
+otherwise, #529), that the failure is at the last state; that holds because every earlier state of the path has a smaller `idx` and so
 breaks no binding. ∎ On a stopped graph a violation found is a path of `G`, hence a trace
 of `T`; no violation gives `Undecided`.
 
@@ -488,7 +488,7 @@ multi-source BFS per binding from the initial states where `trig ∧ p` fails, t
 states, and stops at the first state where `trig ∧ q` holds; the shortest path over all
 bindings is reported (the first binding on a tie). A BFS on the subgraph finds a shortest
 path in it, and a violation trace must lie in it, so the trace is shortest. ∎ The
-`debug_assert` in `decide_property` holds because a binding that failed earlier on the
+check in `decide_property` holds because a binding that failed earlier on the
 chosen path would have a shorter path of its own.
 
 ## Recoverability
@@ -756,10 +756,14 @@ Three consequences.
   initial S state of the start's class (a start with none is `ReplayError::NotInitial` since
   #529) and is not itself checked against the unreduced cone's initial states. Some code
   holds invariants of its own by release panics at the pin, each listed in the index's P20
-  row (#536): `reduce/lift.rs::lift_stop` (`expect`s about its caller, a reduced cone, and its
-  walk's own graph, marked in the code as unchecked invariants), and in
+  row with the reason it holds: `reduce/lift.rs::lift_stop` (`expect`s about its caller, a
+  reduced cone, and its walk's own graph, marked in the code as unchecked invariants); in
   `explore/orbit/liveness.rs` `Product::new`'s permutations and the look-ups of the pair search
-  before the lift (`lasso`, `thread_walk`, `walk_in`). None depends on the path being lifted.
+  before the lift (`lasso`, `thread_walk`, `walk_in`, `threads_covered`), and in
+  `explore/liveness.rs` their counterparts on a plain run (`edge_between`, `fair_loop`,
+  `walk_in`); preconditions of a caller; and the deadlock lift's trace slot. Only one reads the
+  lifted path, the last step of an `after` violation in
+  `explore/orbit.rs::run_orbits_annotating`, and it holds whatever path is lifted.
   A failure there stops the command; none can print a trace that does not replay. Until #531
   the lasso lift of `explore/orbit/liveness.rs` held its own with an `expect` and two
   `assert!`s (that an edge is the move at its place and that its permutation takes the move
@@ -1088,3 +1092,8 @@ Changes to statements of this document after it was first written, newest last.
   (`Product::lift` returns `NoMove`), and the release panics left are those of the index's
   P20 row (#536); the Counterexamples list, the Symmetric bullet and the P20 status say so.
   N15's `End::result` and the `Twin::EachEnabled` path were read and lose `unread@pin`.
+- **2026-11-28, second audit at `5f59fae2`.** N5's proof and the remark after N7 called the check in
+  `ComponentRun::decide_property` a `debug_assert`; since #529 it runs in every build and
+  gives a `PropertyVerdict::Fault`. The Counterexamples list adds the release panics of
+  `explore/liveness.rs` and the deadlock lift that the index's P20 row now lists, and no
+  longer says none is on the path being lifted.

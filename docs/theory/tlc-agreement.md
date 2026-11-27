@@ -518,7 +518,7 @@ compares; what the test shows when it passes is [test].
   skips TLC. 38 cases carry a `bfs=` list.
 - **Bounds.** TLC runs at the case's flags: 2 instances and Int `0..5` by
   default; 1 instance in the six cases with `--instance-count 1`; per-entity counts above
-  2 in three cases, each raising two entities (`presence_per_entity_slots`: Loan and Room at
+  2 in three cases, two entities raised in each of the first two and one in the third (`presence_per_entity_slots`: Loan and Room at
   3 over `--instance-count 1`; `safety_count_per_entity`: Loan at 4, Shelf at 3;
   `sym_per_entity_bounds`: Room at 3, Booking at 2); one entity held at 1 instance
   (`--instances X=1`, the others at 2) in four cases (`sym_arm_reorders`,
@@ -784,9 +784,10 @@ the sections it cites, and carries the tag of the statements it rests on.
    that its path breaks the property at its last state and, on a reduced system, reads an
    `always` again on the lifted last state (`PropertyVerdict::Fault`); since #531 the lasso
    lift of a run up to symmetry (`explore/orbit/liveness.rs::Product::lift`) returns `NoMove`
-   as well. What remains is narrower: the `expect`s and `panic!`s the index's P20 row lists
-   (`reduce/lift.rs::lift_stop`, `Product::new` and the pair search before the lasso lift),
-   none on the path being lifted, would stop the command rather than print a fault; and a
+   as well. What remains is narrower: the `expect`s and `panic!`s the index's P20 row lists, with
+   the reason each holds (`reduce/lift.rs::lift_stop`, `Product::new`, the searches before a
+   lasso lift, callers' preconditions, and one read of the lifted path that holds whatever path
+   is lifted), would stop the command rather than print a fault; and a
    wrong `ok` has no run-time guard at all. TLC sees a wrong `ok` only where a test or a user
    runs `--with-tlc`.
 3. **Bounds [read].** In CI, TLC runs at 3 or more instances only on the corpus (the three
@@ -978,3 +979,6 @@ Changes to statements of this document after it was first written, newest last.
   `explore/orbit.rs::lift_path` and the look-ups of `reduce/lift.rs::lift` as panicking, nor
   an `always` counterexample as checked by `debug_assert_eq!` only: since #529 both fault, and
   since #531 so does the symmetric lasso lift.
+- **2026-11-28, second audit at `5f59fae2`.** The Bounds item said each of the three per-entity cases raises
+  two entities; `sym_per_entity_bounds` raises Room only, Booking staying at 2. Residual
+  risk item 2 follows the index's completed P20 list.
