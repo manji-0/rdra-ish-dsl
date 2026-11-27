@@ -264,7 +264,7 @@ projects to a stutter, which D17 does not check. ∎
 Theorem A2 covers *universal* checks only: a violation in `T` gives a violation in `C`. The
 findings of an entity cone are existential or branching. `StateDiag::NoWitness`,
 `::NeverRuns`, `::ArmNeverTaken`, and `::ValueNeverChosen` say that no reachable state or edge
-has a property. `::Deadlock` says that no path leaves a state. An over-approximating `C`
+has a property. `::Deadlock` says that a reachable state is stuck: no path from it changes the lifecycle column or deletes the row ([semantics.md, D25](./semantics.md#d25)). An over-approximating `C`
 reaches more states and edges than `π_W(T)` does, so it can satisfy such a check that `T`
 fails, and it can also fail one that `T` satisfies. Those checks need exactness (Theorem A1),
 or A8's bisimulation on a reduced cone. Their soundness on a cone with a left-out mark is open
@@ -616,7 +616,8 @@ Then `~` is a divergence-blind stuttering bisimulation between `C` and `R` that 
 2. which `T_a` action labels an edge from a state with given `T_v ∪ obs` values (`NeverRuns`, arms
    taken, `after` assertions on `T_a` actions);
 3. whether from every reached state some path takes an edge that changes given `T_v` values
-   (deadlocks);
+   (deadlocks, as [semantics.md, D25](./semantics.md#d25) defines them: a silent cycle counts
+   as stuck, which this divergence-blind bisimulation keeps);
 4. every property `P` whose reads are in `T_v ∪ obs` and whose fair actions are in `T_a`, under
    `Plain`.
 
