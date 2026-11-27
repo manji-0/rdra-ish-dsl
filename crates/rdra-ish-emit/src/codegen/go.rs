@@ -893,9 +893,9 @@ fn print_error_details(out: &mut String) {
         out,
         "NotFound",
         "no row has the id the call names",
-        "reports a row the call names by id that does not exist: the service's load returns it, and the generated functions, which take rows already loaded, never do. ID is the id as text.",
-        &[("UseCase", "string"), ("Entity", "string"), ("ID", "string")],
-        "\"the use case \" + e.UseCase + \" found no \" + e.Entity + \" row with the id \" + e.ID",
+        "reports a row the call names by id that does not exist: the service's load returns it, and the generated functions, which take rows already loaded, never do. Id is the id as text.",
+        &[("UseCase", "string"), ("Entity", "string"), ("Id", "string")],
+        "\"the use case \" + e.UseCase + \" found no \" + e.Entity + \" row with the id \" + e.Id",
     );
     detail(
         out,

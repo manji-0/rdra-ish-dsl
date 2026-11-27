@@ -158,7 +158,7 @@ fn each_omission_is_a_named_diagnostic() {
             "Pay takes a bare integer for OrderId",
             |p| {
                 edit(p, "fn prepare_pay(&mut self, order: OrderId,", "fn prepare_pay(&mut self, order: i64,");
-                edit(p, "self.order(order, \"Pay\")", "self.order(OrderId::from(order), \"Pay\")");
+                edit(p, "self.order::<PayError>(order, \"Pay\")", "self.order::<PayError>(OrderId::from(order), \"Pay\")");
             },
             &[
                 "error[CodeSignature_Pay]: use case Pay takes other inputs than the model's",

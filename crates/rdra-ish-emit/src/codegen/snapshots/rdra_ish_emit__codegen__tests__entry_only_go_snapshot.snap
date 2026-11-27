@@ -176,16 +176,16 @@ func (e *NotEnabled) Is(target error) bool {
 // ErrNotFound is what errors.Is matches a *NotFound with.
 var ErrNotFound = errors.New("no row has the id the call names")
 
-// NotFound reports a row the call names by id that does not exist: the service's load returns it, and the generated functions, which take rows already loaded, never do. ID is the id as text.
+// NotFound reports a row the call names by id that does not exist: the service's load returns it, and the generated functions, which take rows already loaded, never do. Id is the id as text.
 type NotFound struct {
 	UseCase string
 	Entity  string
-	ID      string
+	Id      string
 }
 
 // Error says what happened.
 func (e *NotFound) Error() string {
-	return "the use case " + e.UseCase + " found no " + e.Entity + " row with the id " + e.ID
+	return "the use case " + e.UseCase + " found no " + e.Entity + " row with the id " + e.Id
 }
 
 // Is reports whether target is ErrNotFound.

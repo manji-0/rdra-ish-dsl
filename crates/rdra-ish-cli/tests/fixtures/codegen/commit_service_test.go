@@ -3,10 +3,12 @@
 // one call of the generated CommitWrites: the store implements CommitStore once, over every
 // entity, run mark and event, so no commit names a result's fields. An id is never used twice:
 // a deleted row's id stays taken, as the model's slot does. FAULT=keep-mark plants one bug: the
-// store never deletes a run mark.
+// store never deletes a run mark. With FAULT=store-fails the store fails to record an event,
+// and the helper returns a *StoreFailed that unwraps to the store's error.
 package domain_test
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -136,7 +138,13 @@ func (s *store) WriteMark(w domain.MarkWrite) (bool, error) {
 	return true, nil
 }
 
+// errEventLog is the store's error under FAULT=store-fails.
+var errEventLog = errors.New("the event log is down")
+
 func (s *store) RecordEvent(e domain.RaisedEvent) error {
+	if os.Getenv("FAULT") == "store-fails" {
+		return errEventLog
+	}
 	if e, ok := e.(domain.EvShipped); ok {
 		s.evShipped = append(s.evShipped, e)
 	}
@@ -150,6 +158,10 @@ func (sv *service) commit(w domain.Committable) error {
 	saved := sv.s.clone()
 	if err := domain.CommitWrites(sv.s, w); err != nil {
 		sv.s = saved
+		// The store's error stays reachable through the *StoreFailed.
+		if errors.Is(err, domain.ErrStoreFailed) && !errors.Is(err, errEventLog) {
+			panic("the cause of a StoreFailed is not reachable: " + err.Error())
+		}
 		return err
 	}
 	return nil
@@ -158,7 +170,7 @@ func (sv *service) commit(w domain.Committable) error {
 func notEnabled(usecase string) error { return &domain.NotEnabled{UseCase: usecase} }
 
 func notFound(usecase, entity string, id any) error {
-	return &domain.NotFound{UseCase: usecase, Entity: entity, ID: fmt.Sprint(id)}
+	return &domain.NotFound{UseCase: usecase, Entity: entity, Id: fmt.Sprint(id)}
 }
 
 func (sv *service) order(id domain.OrderId, usecase string) (domain.Order, error) {

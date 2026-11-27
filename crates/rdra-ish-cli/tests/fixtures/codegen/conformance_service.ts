@@ -6,6 +6,8 @@
 //   drop-row         Ship stores the order but not the shipment the core returns
 //   accept-disabled  Cancel cancels an order the core refuses, as if it were paid, unconditionally
 //   unconditional    every commit writes without checking what the row still is
+//   missing-not-enabled a call on an order that does not exist is NotEnabled, not NotFound
+//   store-fails      Place's commit fails in the store where its row changed
 import * as d from "./domain";
 
 // What the service needs of Node, declared here: the repository installs no @types/node.
@@ -59,6 +61,10 @@ function service(fault: string): d.ConformancePort {
     (rowsOrders.every(([id, e]) => holds(orders.get(id)?.status, e)) &&
       rowsShipments.every(([id, e]) => holds(shipments.get(id)?.status, e)));
 
+  /** The refusal of a call on an order that does not exist. */
+  const missing = (usecase: string, id: number): d.Result<never, d.NotEnabled | d.NotFound> =>
+    fault === "missing-not-enabled" ? notEnabled(usecase) : notFound(usecase, "Order", id);
+
   const order = (id: d.OrderId): d.Order | undefined => {
     const row = orders.get(id);
     return row === undefined ? undefined : stored(d.Order.fromRow(row));
@@ -85,14 +91,16 @@ function service(fault: string): d.ConformancePort {
         : d.place(customer, orderId, orderMethod, orderNote);
     },
     commitPlace: async (r) => {
-      if (!check([[r.order.id, r.order_expected]], [])) return notEnabled("Place");
+      if (!check([[r.order.id, r.order_expected]], [])) {
+        return fault === "store-fails" ? { ok: false, error: { kind: "StoreFailed", usecase: "Place", cause: "the connection was lost" } } : notEnabled("Place");
+      }
       orders.set(r.order.id, d.Order.toRow(r.order));
       return done;
     },
 
     preparePay: async (id, paidAt) => {
       const state = order(id);
-      return state === undefined ? notFound("Pay", "Order", id) : d.runPay(state, paidAt);
+      return state === undefined ? missing("Pay", id) : d.runPay(state, paidAt);
     },
     commitPay: async (r) => {
       if (!check([[r.order.id, r.order_expected]], [])) return notEnabled("Pay");
@@ -107,7 +115,7 @@ function service(fault: string): d.ConformancePort {
 
     prepareShip: async (id, shipmentId) => {
       const state = order(id);
-      return state === undefined ? notFound("Ship", "Order", id) : d.runShip(state, shipmentId);
+      return state === undefined ? missing("Ship", id) : d.runShip(state, shipmentId);
     },
     commitShip: async (r) => {
       if (!check([[r.order.id, r.order_expected]], [[r.shipment.id, r.shipment_expected]])) {
@@ -134,7 +142,7 @@ function service(fault: string): d.ConformancePort {
 
     prepareCancel: async (id) => {
       const state = order(id);
-      if (state === undefined) return notFound("Cancel", "Order", id);
+      if (state === undefined) return missing("Cancel", id);
       const ran = d.runCancel(state);
       if (!ran.ok && ran.error.kind === "NotEnabled" && fault === "accept-disabled") {
         const row = { ...d.Order.toRow(state), status: "paid" as const };

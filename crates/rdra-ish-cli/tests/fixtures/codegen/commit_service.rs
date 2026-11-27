@@ -2,13 +2,13 @@
 // for commit.rdra, whose every commit is one call of the generated `commit_writes`. The store
 // implements `CommitStore` once, over every entity, run mark and event, so no commit names a
 // result's fields. An id is never used twice: a deleted row's id stays taken, as the model's
-// slot does. FAULT=keep-mark plants one bug: the store never deletes a run mark.
+// slot does. FAULT=keep-mark plants one bug: the store never deletes a run mark. With
+// FAULT=store-fails the store fails to record an event, and the helper returns StoreFailed.
 #[path = "domain.rs"]
 #[allow(dead_code)] // the service uses part of the module
 mod domain;
 use domain::*;
 use std::collections::{BTreeMap, BTreeSet};
-use std::convert::Infallible;
 
 /// Every table, the run marks by (use case, entity, row id), and the raised events.
 #[derive(Clone, Default)]
@@ -65,9 +65,9 @@ impl Store {
 }
 
 impl CommitStore for Store {
-    type Error = Infallible;
+    type Error = String;
 
-    fn write_row(&mut self, write: RowWrite) -> Result<bool, Infallible> {
+    fn write_row(&mut self, write: RowWrite) -> Result<bool, String> {
         Ok(match write {
             RowWrite::Put { id, row, expected } => {
                 let ok = self.holds(&id, expected);
@@ -95,7 +95,7 @@ impl CommitStore for Store {
         })
     }
 
-    fn write_mark(&mut self, write: MarkWrite) -> Result<bool, Infallible> {
+    fn write_mark(&mut self, write: MarkWrite) -> Result<bool, String> {
         let (mark, delete) = match write {
             MarkWrite::Put(mark) => (mark, false),
             MarkWrite::Delete(mark) => (mark, true),
@@ -123,7 +123,10 @@ impl CommitStore for Store {
         Ok(true)
     }
 
-    fn record_event(&mut self, event: RaisedEvent) -> Result<(), Infallible> {
+    fn record_event(&mut self, event: RaisedEvent) -> Result<(), String> {
+        if std::env::var("FAULT").is_ok_and(|f| f == "store-fails") {
+            return Err("the event log is down".to_string());
+        }
         match event {
             RaisedEvent::EvShipped(e) => self.ev_shipped.push(e),
         }
@@ -143,6 +146,12 @@ impl Service {
         let saved = self.store.clone();
         commit_writes(&mut self.store, writes).map_err(|e| {
             self.store = saved;
+            if let CommitFailed::StoreFailed(failed) = &e {
+                // The cause stays reachable, and a clone is the same failure.
+                let source = std::error::Error::source(failed).map(|c| c.to_string());
+                assert_eq!(source.as_deref(), Some("the event log is down"));
+                assert_eq!(failed.clone(), *failed);
+            }
             e.into()
         })
     }

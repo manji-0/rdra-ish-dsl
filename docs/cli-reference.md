@@ -314,7 +314,7 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
 | `CodeCommonJs` | error | TypeScript: tsc compiles the probe and the domain code as CommonJS under `verbatimModuleSyntax` (TS1286, TS1287, TS1295); the one finding of that build. Fix: `"type": "module"` in `package.json`. |
 | `CodeConformance` | error | `run`: the conformance test failed. The `code:` line is the harness's first difference with its `model only:` and `store only:` rows; when the harness reported nothing, where the service panicked (Rust, Go) or what it threw (Node); else the output's last line. |
 | `CodeMutantSurvived` | error | `run`: a mutant trace of the self-check passed. The `code:` line says whether the run passed or failed at another row. |
-| `CodeCoverageIncomplete` | warning; error with `--deny-incomplete` | `run`: the BFS behind the traces stopped at `conformance_states`, so the moves past it are not run and no call is tried as refused; or the traces leave refusals of the model untried, or never run a use case of the port. |
+| `CodeCoverageIncomplete` | warning; error with `--deny-incomplete` | `run`: the BFS behind the traces stopped at `conformance_states`, so the moves past it are not run and no call on an existing row is tried as refused; or the traces leave refusals of the model untried, or never run a use case of the port. |
 | `CodeObligationUnowned_<name>` | error | The obligation has no owner. |
 | `CodeObligationOwnerMissing_<name>` | error | Its owner names a file that does not exist. |
 | `CodeObligationUnknown_<name>` | warning | An owner names an obligation the model does not have. |
@@ -439,7 +439,8 @@ and its output names the changed row (`traces line <n>:`). The statement ends wi
 ```
 
 `guard-removed mutants:` names the conditions. When the traces give no mutant of a kind, the line says so (`; no refused-call-runs: the
-traces try no refused call` on traces whose BFS stopped at its cap). A mutant that passes is
+traces try no refused call` on traces whose BFS stopped at its cap and that call no use case
+over one row with an id no row has). A mutant that passes is
 a `CodeMutantSurvived` error, and the exit code is 1. No mutant is equivalent to the real
 traces, so a conforming service never passes one:
 

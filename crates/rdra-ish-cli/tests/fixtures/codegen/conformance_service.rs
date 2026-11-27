@@ -8,6 +8,8 @@
 //   unconditional    every commit writes without checking what the row still is
 //   ignore-id        a call on an order or a shipment runs on the first one, whatever its id
 //   constant-observe the snapshot is what was seeded, whatever the calls stored
+//   missing-not-enabled a call on an order that does not exist is NotEnabled, not NotFound
+//   store-fails      Place's commit fails in the store where its row changed
 #[path = "domain.rs"]
 #[allow(dead_code)] // the service uses part of the module
 mod domain;
@@ -49,14 +51,21 @@ fn holds(tag: Option<&str>, expected: ExpectedSource) -> bool {
 
 impl Service {
     /// The order of `id`: `NotFound`, the 404 of an HTTP service, when no order has it.
-    fn order(&self, id: OrderId, usecase: &'static str) -> Result<Order, NotFound> {
+    fn order<E: From<NotFound> + From<NotEnabled>>(
+        &self,
+        id: OrderId,
+        usecase: &'static str,
+    ) -> Result<Order, E> {
         let row = if self.fault == "ignore-id" {
             self.orders.values().next()
         } else {
             self.orders.get(&id.get())
-        }
-        .cloned()
-        .ok_or_else(|| not_found(usecase, "Order", id.get()))?;
+        };
+        let row = match row {
+            Some(row) => row.clone(),
+            None if self.fault == "missing-not-enabled" => return Err(not_enabled(usecase)),
+            None => return Err(not_found(usecase, "Order", id.get()).into()),
+        };
         Ok(Order::from_row(row).expect("the store holds valid rows"))
     }
 
@@ -135,7 +144,14 @@ impl PlaceUseCase for Service {
 
     fn commit_place(&mut self, r: PlaceResult) -> Result<(), PlaceError> {
         let id = *r.order.id();
-        self.check("Place", &[(id, r.order_expected)], &[])?;
+        self.check("Place", &[(id, r.order_expected)], &[])
+            .map_err(|e| {
+                if self.fault == "store-fails" {
+                    StoreFailed::new("Place", "the connection was lost").into()
+                } else {
+                    PlaceError::from(e)
+                }
+            })?;
         self.orders.insert(id.get(), Order::Pending(r.order).into_row());
         Ok(())
     }
@@ -143,7 +159,7 @@ impl PlaceUseCase for Service {
 
 impl PayUseCase for Service {
     fn prepare_pay(&mut self, order: OrderId, order_paid_at: DateTime) -> Result<PayOutcome, PayError> {
-        run_pay(self.order(order, "Pay")?, order_paid_at)
+        run_pay(self.order::<PayError>(order, "Pay")?, order_paid_at)
     }
 
     fn commit_pay(&mut self, write: PayOutcome) -> Result<(), PayError> {
@@ -163,7 +179,7 @@ impl PayUseCase for Service {
 
 impl ShipUseCase for Service {
     fn prepare_ship(&mut self, order: OrderId, shipment_id: ShipmentId) -> Result<ShipOutcome, ShipError> {
-        run_ship(self.order(order, "Ship")?, shipment_id)
+        run_ship(self.order::<ShipError>(order, "Ship")?, shipment_id)
     }
 
     fn commit_ship(&mut self, write: ShipOutcome) -> Result<(), ShipError> {
@@ -214,7 +230,7 @@ impl SendUseCase for Service {
 
 impl CancelUseCase for Service {
     fn prepare_cancel(&mut self, order: OrderId) -> Result<CancelOutcome, CancelError> {
-        let state = self.order(order, "Cancel")?;
+        let state = self.order::<CancelError>(order, "Cancel")?;
         match run_cancel(state.clone()) {
             Err(CancelError::NotEnabled(_)) if self.fault == "accept-disabled" => {
                 let row = OrderRow {

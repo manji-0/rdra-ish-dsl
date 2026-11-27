@@ -3,7 +3,8 @@
 // generated `commitWrites` on the result's `writes`: the store implements `CommitStore` once,
 // over every entity, run mark and event, so no commit names a result's fields. An id is never
 // used twice: a deleted row's id stays taken, as the model's slot does.
-// FAULT=keep-mark plants one bug: the store never deletes a run mark.
+// FAULT=keep-mark plants one bug: the store never deletes a run mark. With FAULT=store-fails
+// the store fails to record an event, and the helper returns StoreFailed with its error.
 import * as d from "./domain";
 
 // What the service needs of Node, declared here: the repository installs no @types/node.
@@ -65,7 +66,7 @@ function holds(t: Tables, w: d.RowWrite): boolean {
   }
 }
 
-function store(t: Tables, keepMarks: boolean): d.CommitStore<never> {
+function store(t: Tables, keepMarks: boolean): d.CommitStore<string> {
   return {
     writeRow: async (w) => {
       if (!holds(t, w)) return ok(false);
@@ -94,6 +95,7 @@ function store(t: Tables, keepMarks: boolean): d.CommitStore<never> {
       return ok(true);
     },
     recordEvent: async (e) => {
+      if (process.env["FAULT"] === "store-fails") return { ok: false, error: "the event log is down" };
       t.evShipped.push(e);
       return ok(undefined);
     },

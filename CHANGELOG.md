@@ -185,7 +185,9 @@
   the port and of the model adapter require `NotFound` there; `NotEnabled` no longer passes.
   A `StoreFailed` fails a conformance run as a failure of the service. The model adapter's
   refusal kinds gain `NotFound` and `StoreFailed` (Go: `Outcome` constants; TypeScript:
-  `"notFound"`, `"storeFailed"`). The Verus output keeps its three cases. These items are
+  `"notFound"`, `"storeFailed"`). The Verus output keeps its three cases. A model type named
+  `NotFound` or `StoreFailed` (or, in Go, `ErrNotFound` or `ErrStoreFailed`) now fails
+  `codegen` with a `NameCollision`, as `NotEnabled` does. These items are
   outside the compatibility contract (docs/compatibility.md), so a minor release may change
   them. On the samples the Rust output grows 7% to 12% in lines (each use case's error gains
   two variants with their `Display`, `source` and `From` arms, and `From<CommitFailed>`), Go

@@ -12,6 +12,8 @@
 //	constant-observe the snapshot is what was seeded, whatever the calls stored
 //	seed-error       Seed returns an error, as a store that is down does
 //	snapshot-error   Snapshot returns an error
+//	missing-not-enabled a call on an order that does not exist is NotEnabled, not NotFound
+//	store-fails      Place's commit fails in the store where its row changed
 package svc
 
 import (
@@ -52,7 +54,7 @@ func notEnabled(usecase string) error { return &domain.NotEnabled{UseCase: useca
 
 // notFound is the error of a call that names a row no row has: an HTTP service's 404.
 func notFound(usecase, entity string, id any) error {
-	return &domain.NotFound{UseCase: usecase, Entity: entity, ID: fmt.Sprint(id)}
+	return &domain.NotFound{UseCase: usecase, Entity: entity, Id: fmt.Sprint(id)}
 }
 
 // holds tells whether a row, by its tag ("" and absent when there is none), is still what a
@@ -95,6 +97,9 @@ func (s *Service) order(id domain.OrderId, usecase string) (domain.Order, error)
 	row, ok := s.orders[id]
 	if s.fault == "ignore-id" {
 		row, ok = first(s.orders)
+	}
+	if !ok && s.fault == "missing-not-enabled" {
+		return nil, notEnabled(usecase)
 	}
 	if !ok {
 		return nil, notFound(usecase, "Order", id)
@@ -158,6 +163,9 @@ func (s *Service) PreparePlace(parent domain.CustomerId, id domain.OrderId, meth
 func (s *Service) CommitPlace(r domain.PlaceResult) error {
 	id := r.Order.Id()
 	if !s.orderHolds(id, r.OrderExpected) {
+		if s.fault == "store-fails" {
+			return &domain.StoreFailed{UseCase: "Place", Cause: errors.New("the connection was lost")}
+		}
 		return notEnabled("Place")
 	}
 	s.orders[id] = domain.OrderToRow(r.Order)

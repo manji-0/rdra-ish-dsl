@@ -128,7 +128,7 @@ impl Traces {
         let mut why = Vec::new();
         if !self.complete {
             why.push(format!(
-                "the conformance BFS stopped at its cap of {} states: the moves past it are not run and no call is tried as refused, so a service that runs a call the model refuses passes",
+                "the conformance BFS stopped at its cap of {} states: the moves past it are not run and no call on an existing row is tried as refused, so a service that runs a call the model refuses passes",
                 self.cap
             ));
         } else if self.untried.total() > 0 {
