@@ -11,8 +11,7 @@ is. It owns rows T1 to T16 of the [claims inventory](./claims.md#d-agreement-wit
 uses the notation of [semantics.md](./semantics.md) (D1 to D23) without redefining it.
 
 The code was read at commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
-2026-11-28), later than the index's pin `b83b9544`; the revision after review was checked
-against the same commit. `git diff --stat b83b9544 fb6928c7` over the whole tree, read
+2026-11-28), later than the index's pin `b83b9544`. `git diff --stat b83b9544 fb6928c7` over the whole tree, read
 against the paths this document cites, shows three cited files changed, none in a part this
 document relies on: `scripts/verify-relevant.sh` adds the Claude Code plugin and LSP files
 to the paths that skip the verification checks; `CHANGELOG.md` gains entries under
@@ -28,7 +27,8 @@ other cited scripts (`verify-samples.sh`, `reduction-diff.py`, `tlc-roots.txt`,
 directory's own documents) is outside what this document cites. Paths follow the convention of the
 [claims inventory](./claims.md#how-to-read-a-row): `core` is
 `crates/rdra-ish-core/src/lifecycle`, `cli` is `crates/rdra-ish-cli`, `emit` is
-`crates/rdra-ish-emit/src`.
+`crates/rdra-ish-emit/src`. How the document changed after it was first written is in
+[Errata](#errata).
 
 **The central point [read].** Agreement with TLC is evidence, not a theorem. No part of the TLA+
 translation is proved. What exists is (1) an argument, written here for the first time,
@@ -57,7 +57,8 @@ at the start of a subsection or on the sentence that introduces a list or table 
 until the next tag. Tags combine with `;` (`[paper; test]` means both kinds of support),
 and a tag may carry a qualifier after a colon or `;` (`[assumed: TLC]`, `[read; not
 reproduced]`, `[paper; see Status]`, `[test; no paper argument; …]`); the class is always
-one of the five above. The Related work section cites literature and carries no tag.
+one of the five above. The Related work section cites literature and the Errata section
+records changes to this document; neither carries a tag.
 
 ---
 
@@ -818,3 +819,11 @@ document or by the code at the pinned commit. [read]
 | P22 | New (prose): D17 omits that a step with `s' = s` is checked by neither engine. Both halves read; `Probe::Loop` is set in every build. |
 | P23 | New (evidence): the per-run comparison pairs the native `WfNext` run on the reduced cone (`decide_liveness_reduced`) with TLC's `_WF` module printed from the unreduced cone, so Proposition 0 does not apply on that path. |
 | P24 | New (evidence): for a `Transition` with a multi-target source, the printer's and the native effect application agree only under a builder invariant on effect order that nothing enforces as such; one shape was not found to be excluded, and on it the post-guards reconcile the two only when the `transitions` arms carry `.when` guards. |
+
+## Errata
+
+Changes to statements of this document after it was first written, newest last.
+
+- **2026-11-28, after an adversarial review** (commits `b75044db`, `25185bd9`, and
+  `7227d440`). The revisions that followed the review were checked against the same commit as
+  the first version, `fb6928c7`.

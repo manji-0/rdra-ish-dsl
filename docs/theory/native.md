@@ -24,8 +24,9 @@ commit's (`diff -rq`), its `crates/rdra-ish-emit/src` differs only under `codege
 core or CLI source file there is newer than the binary. The reproductions of P54 were run
 by the independent review of this document, on a release binary of another sibling worktree
 (possibly the same one) whose core and CLI `src` it checked against the same sources with
-`diff -rq`; they were not re-run for this revision, because that binary no longer exists. The models and commands are in [Reproductions](#reproductions);
-each run takes under a second.
+`diff -rq`; that binary no longer exists, so they were not re-run for the current text. The models
+and commands are in [Reproductions](#reproductions); each run takes under a second. How the
+document changed after it was first written is in [Errata](#errata).
 
 ---
 
@@ -789,7 +790,7 @@ each of its variants a fair action whose enabledness reads its mark (event-order
 - **Not re-read here:** `cli/src/verify/end.rs` (N15); `reduce/lift.rs::lift_stop` beyond
   `MAX_WALK` and `Spurious::NoLoop`; `explore/orbit.rs::lift_path` and
   `orbit/liveness.rs` beyond their certification steps (the "Symmetric" bullet of the lift's
-  mechanics was not re-checked against their bodies for this revision); the
+  mechanics rests on the first version's reading of them; see [Errata](#errata)); the
   `Twin::EachEnabled` path; `fasthash.rs` beyond the rule quoted in N2; and
   `cli/src/verify/native.rs::native_property_after` beyond the order of its runs.
 - **P10 confirmed.** `cli/src/verify/bfs.rs::BfsCone::verdict` returns `counterexample`
@@ -864,3 +865,15 @@ of 255, or with `n: Int @default(0)`, the same command prints `counterexample`. 
 case replaces `n` with `s: Enum(v0, v1, …, v255) @null` (256 declared values), sets
 `Row.s == v255`, and forbids `Row.s != null`, at the default bounds: `ok`; with `v254`,
 `counterexample`.
+
+## Errata
+
+Changes to statements of this document after it was first written, newest last.
+
+- **2026-11-28, after an independent review** (commits `5cd4c35e`, `02e5b48f`, and
+  `12baa870`). The review ran the P54 reproductions on its own release binary; the revisions
+  that followed did not re-run them, because that binary no longer exists. The "Symmetric"
+  bullet of [The lift's mechanics](#the-lifts-mechanics) was written in the first version
+  (`6e1451a1`) from a reading of `explore/orbit.rs::lift_path` and `orbit/liveness.rs` up to
+  their certification steps; the revisions after the review did not re-check it against their
+  bodies.
