@@ -850,13 +850,20 @@ fn print_functions(cx: &Cx<'_>, out: &mut String) {
     }
 }
 
-/// The cases every use-case error is a union of: `NotEnabled`, `Rejected`, `InvalidArgument`.
+/// The cases every use-case error is a union of: `NotEnabled`, `NotFound`, `Rejected`,
+/// `InvalidArgument`, `StoreFailed`.
 fn print_error_cases(out: &mut String) {
     out.push_str(&doc1(
         "The rows are in states the use case does not run from. Only a dispatcher returns it.",
     ));
     out.push_str(
         "export type NotEnabled = Readonly<{ kind: \"NotEnabled\"; usecase: string }>;\n\n",
+    );
+    out.push_str(&doc1(
+        "A row the call names does not exist. Only the service's load returns it; the functions take rows already loaded.",
+    ));
+    out.push_str(
+        "export type NotFound = Readonly<{ kind: \"NotFound\"; usecase: string; entity: string; id: string }>;\n\n",
     );
     out.push_str(&doc1(
         "A condition of the use case did not hold: the use case does not run.",
@@ -872,6 +879,12 @@ fn print_error_cases(out: &mut String) {
     ));
     out.push_str(
         "export type InvalidArgument = Readonly<{ kind: \"InvalidArgument\"; message: string }>;\n\n",
+    );
+    out.push_str(&doc1(
+        "The store failed: no answer of the use case. Only the service's load or commit returns it; `cause` is the store's error.",
+    ));
+    out.push_str(
+        "export type StoreFailed = Readonly<{ kind: \"StoreFailed\"; usecase: string; cause: unknown }>;\n\n",
     );
 }
 
@@ -921,15 +934,16 @@ fn print_marks(domain: &DomainModel, out: &mut String) {
 /// The error type of each use case: the union of the ways it fails.
 fn print_errors(domain: &DomainModel, out: &mut String) {
     for e in &domain.errors {
-        let mut cases = vec!["NotEnabled"];
+        let mut cases = vec!["NotEnabled", "NotFound"];
         if e.rejects {
             cases.push("Rejected");
         }
         if e.invalid_argument {
             cases.push("InvalidArgument");
         }
+        cases.push("StoreFailed");
         out.push_str(&doc1(&format!(
-            "What {} can fail with: NotEnabled from a dispatcher{}{}.",
+            "What {} can fail with: NotEnabled from a dispatcher, NotFound from the service's load{}{}, StoreFailed from the service's store.",
             e.usecase,
             if e.rejects {
                 ", Rejected by a condition"

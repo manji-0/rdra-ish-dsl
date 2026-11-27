@@ -270,7 +270,7 @@ fn each_fault_fails_the_run() {
     );
     assert!(
         text_slashed(&out)
-            .contains("rdra-ish conformance: ok 11 traces, 21 calls, 11 refusals, 7 interleavings")
+            .contains("rdra-ish conformance: ok 11 traces, 21 calls, 13 refusals, 7 interleavings")
             || text_slashed(&out).contains("OK: code: what the model requires, at --code=run"),
         "{}",
         text_slashed(&out)
@@ -417,7 +417,7 @@ fn a_model_adapter_conforms_whatever_the_domain_code_became() {
     let all = text_slashed(&out);
     assert!(out.status.success(), "{all}");
     assert!(
-        all.contains("  ran: 11 traces, 21 calls, 11 refused calls, 7 interleaved commits; 32 calls made again by prepare and commit\n"),
+        all.contains("  ran: 11 traces, 21 calls, 13 refused calls, 7 interleaved commits; 34 calls made again by prepare and commit\n"),
         "{all}"
     );
     assert!(

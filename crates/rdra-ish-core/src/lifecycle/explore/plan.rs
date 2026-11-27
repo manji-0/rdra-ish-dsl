@@ -22,6 +22,11 @@ pub(crate) struct Plan {
     /// Per `pre` item, what it reads (`perf::Kind`), for the evaluator counts of #300.
     #[cfg(feature = "perf")]
     pub pre_kinds: Box<[super::perf::Kind]>,
+    /// Per state byte, whether a var of `action_writes` holds it: the cells a step of the
+    /// action may change. A debug or `shadow` build checks every step against it
+    /// (`TransitionSystem::check_writes`).
+    #[cfg(any(debug_assertions, feature = "shadow"))]
+    pub writes: Box<[bool]>,
 }
 
 /// A conjunct that reads one var of one param's row: it holds on a slot exactly when the
@@ -129,7 +134,51 @@ impl TransitionSystem {
             pre_kinds: pre.iter().map(super::perf::Kind::of).collect(),
             pre: pre.into(),
             post: post.into(),
+            #[cfg(any(debug_assertions, feature = "shadow"))]
+            writes: self.written_cells(action),
         }
+    }
+
+    /// The state bytes the vars of `action_writes(action)` hold.
+    #[cfg(any(debug_assertions, feature = "shadow"))]
+    fn written_cells(&self, action: &Action) -> Box<[bool]> {
+        let mut cells = vec![false; self.width];
+        for var in self.action_writes(action).iter() {
+            let at = self.offset(*var);
+            let n = self.slots_of(&self.var(*var).kind);
+            cells[at..at + n].fill(true);
+        }
+        cells.into()
+    }
+
+    /// Checks that a step of `act` from `s` to `next` changes only bytes of vars
+    /// `action_writes` names (open problem P35): the cone's closure (Lemma 2 of
+    /// docs/theory/cones.md) reads `Wr(a)` as every var a step of `a` can change, so a step
+    /// that changes another var would make a cone drop a writer it needs. Panics, naming the
+    /// action and the var, when one does.
+    #[cfg(any(debug_assertions, feature = "shadow"))]
+    pub(crate) fn check_writes(
+        &self,
+        act: crate::lifecycle::types::ActId,
+        s: &StateSlice,
+        next: &StateSlice,
+    ) {
+        let writes = &self.plans()[act.index()].writes;
+        for (cell, (a, b)) in s.0.iter().zip(next.0.iter()).enumerate() {
+            if a != b && !writes[cell] {
+                let var = (self.var_ids())
+                    .filter(|v| self.offset(*v) <= cell)
+                    .max_by_key(|v| self.offset(*v))
+                    .expect("a var holds every byte");
+                panic!(
+                    "shadow: step of {} changes {}, which action_writes leaves out",
+                    self.actions[act.index()].name,
+                    self.var_name(var)
+                );
+            }
+        }
+        #[cfg(feature = "shadow")]
+        crate::shadow::compared(crate::shadow::Twin::Writes);
     }
 
     /// The test of a conjunct `one_row` maps to `(param, var)`: `eval` itself, run on every

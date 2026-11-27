@@ -67,7 +67,7 @@ fn generate_both(lang: &str, dir: &Path, domain: &str, adapter: &str, extra: &[&
 }
 
 /// The faults of the reference service, and what the harness reports for each.
-const FAULTS: [(&str, &str); 4] = [
+const FAULTS: [(&str, &str); 6] = [
     (
         "skip-core",
         "after `Pay 101 2026-01-01T00:00:00Z`, the store differs from the model:\n  model only: Order 101 status=paid paid_at=+ qty=2 customer_id=1",
@@ -80,6 +80,14 @@ const FAULTS: [(&str, &str); 4] = [
     (
         "unconditional",
         "the service committed `Place 1 101 card s`, prepared before `Place 1 101 card s` changed a row it writes",
+    ),
+    (
+        "missing-not-enabled",
+        "here with NotFound, and the service refused it with ",
+    ),
+    (
+        "store-fails",
+        "the service failed on `Place 1 101 card s`: the store failed",
     ),
 ];
 
@@ -94,7 +102,7 @@ fn check(lang: &str, run: impl Fn(&str, bool) -> Output) {
         "{lang}: the reference adapter fails:\n{out}"
     );
     assert!(
-        out.contains("rdra-ish conformance: ok 11 traces, 21 calls, 11 refusals, 7 interleavings, 0 interleavings skipped, 32 split calls"),
+        out.contains("rdra-ish conformance: ok 11 traces, 21 calls, 13 refusals, 7 interleavings, 0 interleavings skipped, 34 split calls"),
         "{lang}: the reference adapter checked less than expected:\n{out}"
     );
     // A commit that never stores refuses every interleaved commit as it should; the calls
@@ -124,7 +132,7 @@ fn check(lang: &str, run: impl Fn(&str, bool) -> Output) {
         let out = text(&unsplit);
         assert!(unsplit.status.success(), "{lang} unsplit {fault}:\n{out}");
         assert!(
-            out.contains("rdra-ish conformance: ok 11 traces, 21 calls, 11 refusals, 0 interleavings, 7 interleavings skipped, 0 split calls"),
+            out.contains("rdra-ish conformance: ok 11 traces, 21 calls, 13 refusals, 0 interleavings, 7 interleavings skipped, 0 split calls"),
             "{lang} unsplit {fault}:\n{out}"
         );
     }
