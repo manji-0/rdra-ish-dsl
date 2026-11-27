@@ -160,6 +160,20 @@ impl Builder<'_> {
                 } else {
                     Domain::Int
                 };
+                // Null and `0..=255` do not fit the `u8` a value is: 255 would read as null.
+                if col.is_nullable && self.bounds.int_max == u8::MAX {
+                    let site = Site::bare(ModelRef::Column {
+                        entity: ek,
+                        column: col.name.clone(),
+                    });
+                    self.diag(
+                        vec![ek],
+                        StateDiag::IntRangeLeavesNoNull {
+                            column: col.name.clone(),
+                            site,
+                        },
+                    );
+                }
                 let unset = if col.is_nullable {
                     Value::NULL
                 } else {

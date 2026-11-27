@@ -274,7 +274,8 @@ impl Domain {
         }
         match self {
             Domain::Int => Some(Value(n as u8)),
-            Domain::NullableInt => Some(Value(n as u8 + 1)),
+            // At int_max 255 the top has no value (`IntRangeLeavesNoNull`): never wrap to null.
+            Domain::NullableInt => (n as u8).checked_add(1).map(Value),
             _ => None,
         }
     }

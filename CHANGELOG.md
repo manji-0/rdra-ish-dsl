@@ -400,6 +400,10 @@
   clippy.
 - A time budget (`Caps::until`) on the entity cones `check` explores leaves their findings
   undecided (`UndecidedWhy::TimeBudget`) instead of panicking.
+- A nullable Int column at `--int-range-max 255` is an error, `IntRangeLeavesNoNull`: null and
+  `0..255` are one value more than a state cell holds, and the top value wrapped to null in
+  writes and rules alike, so a rule the model breaks at 255 printed `ok` and `proved`. Such a
+  column takes 254 at most; a model without one still takes 255.
 
 ## v3.0.0 - 2026-11-26
 

@@ -922,6 +922,60 @@ forbidden(Item, stock == 0)
     assert!(!stderr.contains("Forbidden_Item_0"), "{stderr}");
 }
 
+/// A nullable Int column holds null and `0..=max`: `max + 2` values, one more than a `u8` holds
+/// at `--int-range-max 255`. There the literal 255 wrapped to null, in the write and in the rule
+/// alike, so every engine checked a model whose use case writes null: a rule the model breaks
+/// at 255 was `ok` (and `proved` under `--prove`), where at 254 it is a counterexample. Such a
+/// range is an error now, before any engine runs; 254 is the largest a nullable Int column
+/// takes, and 256 is no range at all. A model without a nullable Int column still takes 255.
+#[test]
+fn a_nullable_int_column_takes_no_range_past_254() {
+    let src = |top: &str, null: &str| {
+        format!(
+            r#"entity Item "商品" {{ id: Int @pk  n: Int {null} }}
+usecase Add "追加"
+usecase Top "最大"
+creates(Add, Item)
+updates(Top, Item)
+sets(Top, Item.n == {top})
+forbidden(Item, n == {top})
+"#
+        )
+    };
+    for command in ["check", "verify"] {
+        let run = |name: &str, top: &str, null: &str, range: &str| {
+            run_on_source(
+                name,
+                &src(top, null),
+                &[command, "--int-range-max", range, "--instance-count", "1"],
+            )
+        };
+        let (code, _, stderr) = run("nullable-top-254", "254", "@null", "254");
+        assert_eq!(code, Some(1), "{command}: {stderr}");
+        assert!(stderr.contains("Forbidden_Item_0"), "{command}: {stderr}");
+
+        let (code, _, stderr) = run("nullable-top-255", "255", "@null", "255");
+        assert_eq!(code, Some(1), "{command}: {stderr}");
+        assert!(
+            stderr.contains("error[IntRangeLeavesNoNull_Item_n]")
+                && stderr.contains("n is a nullable Int, which holds null and 0..254"),
+            "{command}: {stderr}"
+        );
+        assert!(!stderr.contains("Forbidden_Item_0"), "{command}: {stderr}");
+
+        let (code, _, stderr) = run("nullable-top-256", "256", "@null", "256");
+        assert_ne!(code, Some(0), "{command}: {stderr}");
+        assert!(
+            stderr.contains("--int-range-max must be at most 255"),
+            "{command}: {stderr}"
+        );
+
+        let (code, _, stderr) = run("int-top-255", "255", "", "255");
+        assert_eq!(code, Some(1), "{command}: {stderr}");
+        assert!(stderr.contains("Forbidden_Item_0"), "{command}: {stderr}");
+    }
+}
+
 /// An Enum or Bool `@default` outside the column's values stops the model from loading, so
 /// no engine explores from the first value (#187).
 #[test]

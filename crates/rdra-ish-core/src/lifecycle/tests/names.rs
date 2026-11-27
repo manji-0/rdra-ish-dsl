@@ -36,6 +36,10 @@ fn one_of_each() -> Vec<StateDiag> {
             parent_slots: 1,
             site: site(),
         },
+        StateDiag::IntRangeLeavesNoNull {
+            column: "amount".into(),
+            site: site(),
+        },
         StateDiag::CountAboveBound {
             rule: "Quantifier_Claim_0".into(),
             entity: "Estimate".into(),
@@ -278,6 +282,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::NoCreationPath
             | StateDiag::PreExistingChildOfCreatedParent { .. }
             | StateDiag::IdentityStartSlots { .. }
+            | StateDiag::IntRangeLeavesNoNull { .. }
             | StateDiag::CountAboveBound { .. }
             | StateDiag::MinCardOfPreExistingParent { .. }
             | StateDiag::MinCardNeedsCreate { .. }

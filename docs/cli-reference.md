@@ -138,7 +138,7 @@ The consistency checks cover:
 | `--memory <SIZE>` | `memory` under `[check]`, else `4GiB` | What the run may hold. A cone past it stops with the `MemoryCapReached` error. See [Memory limit](#memory-limit). |
 | `--instance-count <N>` | `1` | Slots per entity, `1..=255`. A violation that needs two rows of an entity shows only from `2`. A larger value raises the default `--max-patterns`. |
 | `--instances <ENTITY=N>` | `instances` under `[check]` | One entity's slots, `1..=255`; repeatable. See [Per-entity instance counts](#per-entity-instance-counts). |
-| `--int-range-max <N>` | `5` | The Int domain is `0..=N`, `1..=255`. |
+| `--int-range-max <N>` | `5` | The Int domain is `0..=N`, `1..=255`; at most `254` when the model has a nullable Int column (`IntRangeLeavesNoNull`). |
 | `--buc`, `--entity`, `--without-usecase`, `--without-buc`, `--actor` `<ID>` | whole model | Check part of the model; each repeatable. See [Partial runs](#partial-runs). |
 
 **Output.** stderr opens with a `bounds:` line (the slots per entity, the Int range, the state
@@ -1431,7 +1431,7 @@ rdra-ish export <INPUTS...> [--kind <KIND>] [-o <OUT>] [--dialect postgres|sqlit
 | `--dialect` | `postgres` | `sql` only: `postgres` or `sqlite`. |
 | `--instance-count <N>` | `2` | `tla` only: slots per entity, `1..=255`; `1` warns (one id cannot tell instances apart). |
 | `--instances <ENTITY=N>` | `instances` under `[verify]` | `tla` only: one entity's slots; repeatable. See [Per-entity instance counts](#per-entity-instance-counts). |
-| `--int-range-max <N>` | `5` | `tla` only: `IntRange == 0..N`, `1..=255`. |
+| `--int-range-max <N>` | `5` | `tla` only: `IntRange == 0..N`, `1..=255`; at most `254` with a nullable Int column. |
 
 **Output path.** For every kind but `tla`, a path with an extension is used as is; otherwise
 the kind's suffix is appended: `out.openapi.json`, `out.asyncapi.json`, `out.schema.dbml`,
@@ -1548,7 +1548,7 @@ rdra-ish verify <INPUTS...> [--with-tlc [--tlc-jar <PATH>] [--tlc-jobs <N>] [--t
 | `-o`, `--out <DIR>` | none; a temp dir under `--with-tlc` | Write the specs for a TLC run by hand; see [Specs](#with-tlc). The native checker reads none of them. |
 | `--instance-count <N>` | `2` | Slots per entity, `1..=255`; `1` warns. |
 | `--instances <ENTITY=N>` | `instances` under `[verify]` | One entity's slots; repeatable. See [Per-entity instance counts](#per-entity-instance-counts). |
-| `--int-range-max <N>` | `5` | `IntRange == 0..N`, `1..=255`. |
+| `--int-range-max <N>` | `5` | `IntRange == 0..N`, `1..=255`; at most `254` with a nullable Int column. |
 | `--max-states <N>` | none | State cap of every BFS run (entity, safety, and property cones, `_Full` and `_WF` included, and the whole-model run). A run past it is `not decided`. Under `--with-tlc` TLC's whole-model run keeps 2,097,152 states without it; its cone runs have no cap. |
 | `--max-patterns <N>` | `256` | Accepted for scripts; no `verify` run builds an entity view, so it stops nothing. |
 | `--memory <SIZE>` | `memory` under `[verify]`, else `16GiB` | BFS takes all of it; under `--with-tlc`, half, and the TLC runs the rest (at least `64MiB`). See [Memory limit](#memory-limit). |
