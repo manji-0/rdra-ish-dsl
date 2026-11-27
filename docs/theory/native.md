@@ -19,9 +19,10 @@ brought up to date with `c97c88ef` after the final audit of docs/theory: the cod
 fixes of P19, P20, P50, P51, P52, P53, P54 and P55 changed (#470, #478, #479, #484, #487,
 #494, #510, #518, #522) was re-read at `c97c88ef`, and for every other function, type and
 constant this document names, its definition at `fb6928c7` was compared with the one at
-`c97c88ef`. A definition that did not change, or changed only by a checked narrowing cast
-(`id8`, `id32`, #513), reads as it did; one that changed otherwise was re-read or carries
-`unread@pin`. `#525`, the last merge before the pin, changes only `cli/src/prove.rs`,
+`c97c88ef`, by a script that matched definitions by name, and every difference that was not a
+narrowing cast was read. A definition that did not change, or changed only by a checked
+narrowing cast (`id8`, `id32`, #513), reads as it did; one that changed otherwise was re-read
+or the statement that cites it carries `unread@pin`. `#525`, the last merge before the pin, changes only `cli/src/prove.rs`,
 `cli/src/cli.rs` and prose, none of which this document cites. Code is cited as in
 [semantics.md](./semantics.md): paths are relative to `crates/rdra-ish-core/src/lifecycle/`
 unless they start with `cli/` (`crates/rdra-ish-cli/`) or name the crate root (`core-root/`,
@@ -127,9 +128,11 @@ than 256 values is the build error `DomainTooLarge` and gets no variable
 (`build/vars.rs`, #470), and `types.rs::Domain::of_number` returns no value past a byte
 instead of wrapping. (ii): `build/mod.rs` sums the packed bits of the whole system in a `u64`
 (`explore/packing.rs::packed_bits`) and stops with the build error `StateTooWide` past
-`MOST_PACKED_BITS = u32::MAX` (#510), so every offset of every cone, a restriction of that
-system, fits the `u32`; `offsets` also panics on overflow of its checked add, which the build
-error keeps out of reach (#479). Before these fixes neither held: (i) failed for a nullable
+`MOST_PACKED_BITS = u32::MAX` (#510), so every offset of a cone, a restriction of that system,
+fits the `u32`. For a system the build does not make directly (a reduced cone, which holds
+representatives and fold bits, or the extended sub-lifecycle of a reduction), the guard is the
+checked add of `offsets`, which panics past `u32::MAX` bits rather than wrap (#479); this
+document does not show that those systems stay within the whole system's width. Before these fixes neither held: (i) failed for a nullable
 Int column at `m = 255` and for an Enum column with 256 values and `@null` or with 257 or more
 values (P54), and (ii), then an offset of at most 65,535 in a `u16`, failed for some cone
 states wider than 65,536 bits (P50). Every claim below that reads a stored state ("by N1",
@@ -720,9 +723,9 @@ for a deadlock or `can_reach`.
 | Check | Plain | Reduced | Symmetric |
 |---|---|---|---|
 | State rule, `after` | replayed (`explore/mod.rs::ComponentRun::trace_violations`, `trace_of`; `LiftFault` carrying `LassoFault::Replay` on failure, since #518); not re-evaluated: the violation was evaluated at admission on the same states | replayed on the reduced system, then lifted step by step (`LiftFault` on failure, since #522); re-evaluated on the lifted last state, and a lifted state that no longer violates is `LiftFault` carrying `LassoFault::Satisfies` (#487, P52) | lifted (`lift_path`), replayed on the system the run explored, lifted through the reduction when that system is reduced (`explore/orbit.rs`, `LiftFault` on either failure, since #522); re-evaluated on the lifted last state (`LassoFault::Satisfies` as in the reduced column) |
-| `always` | re-evaluated on the stored path (`explore/properties.rs::ComponentRun::decide_property`: `property_failure`, which `expect`s a failure, then `debug_assert_eq!` on its position), then replayed (`trace_along`; `PropertyVerdict::Fault` with `LassoFault::Replay` on failure, since #522) | re-evaluated on the reduced path as in the plain column, then replayed on the reduced system and lifted step by step (`trace_along`); not re-evaluated on the lifted path | only on a cone the reduction leaves whole (`cli/verify/native.rs::native_property`): lifted, replayed (`LassoFault::Replay`) and re-evaluated on the lifted path (`OrbitRun::decide_always`, `LassoFault::Satisfies`) |
+| `always` | re-evaluated on the stored path (`explore/properties.rs::ComponentRun::decide_property`: `property_failure`, which `expect`s a failure, then `debug_assert_eq!` on its position), then replayed (`trace_along`; `PropertyVerdict::Fault` with `LassoFault::Replay` on failure, since #522) | re-evaluated on the reduced path as in the plain column, then replayed on the reduced system and lifted step by step (`trace_along`); not re-evaluated on the lifted path | only on a cone the reduction leaves whole (`cli/verify/jobs.rs::PropertyJob::symmetric`), so no lift through a reduction is needed: lifted, replayed (`LassoFault::Replay`) and re-evaluated on the lifted path (`OrbitRun::decide_always`, `LassoFault::Satisfies`) |
 | `stable`, `unchanged`, `precedes` | as `always`, plain | never reduced (`decide_property` restricts without reduction) | not run up to symmetry |
-| `eventually`, `leads_to` | replayed, formula re-evaluated, fairness re-checked (N11; `LassoFault` on failure) | the reduced lasso is never printed; what prints is either the `WfNext` lasso lifted to the unreduced cone and replayed, re-evaluated and fairness-checked there (`decide_liveness_reduced`; `Spurious` otherwise, `Spurious::Fails` for a lift that fails its step checks since #522), or the lasso of the rerun on the unreduced cone (`Cone_P_Full`); if that rerun stops, the property is `not decided` | only on a cone the reduction leaves whole: replayed, re-evaluated and fairness-checked after lifting (`orbit/liveness.rs`, `LassoFault` on failure, `LassoFault::Unclosed` past 10,000 copies) |
+| `eventually`, `leads_to` | replayed, formula re-evaluated, fairness re-checked (N11; `LassoFault` on failure) | the reduced lasso is never printed; what prints is either the `WfNext` lasso lifted to the unreduced cone and replayed, re-evaluated and fairness-checked there (`decide_liveness_reduced`; `Spurious` otherwise, `Spurious::Fails` for a lift that fails its step checks since #522), or the lasso of the rerun on the unreduced cone (`Cone_P_Full`); if that rerun stops, the property is `not decided` | run up to symmetry on any cone, but on a reduced cone a counterexample of that run is decided again by the plain runs and never printed (`cli/verify/native.rs::liveness_up_to_symmetry`); on a cone the reduction leaves whole, replayed, re-evaluated and fairness-checked after lifting (`orbit/liveness.rs`, `LassoFault` on failure, `LassoFault::Unclosed` past 10,000 copies) |
 | `can_reach` | replayed (`targets.rs::TransitionSystem::verdict`, `trace_to`; `TraceFault` on failure, since #522); the finding is not decided again on the trace | never reduced (`explore_cone` keeps a `can_reach` cone whole) | not run up to symmetry |
 | Deadlock | replayed (`targets.rs::read_entity`, `trace_to`; `TraceFault` in the deadlock's place on failure, since #522); not decided again on the trace | `verify` reduces entity cones (`explore_targets_reduced_in`), `check` does not: replayed on the reduced system and lifted step by step (`TraceFault`); the finding is decided on the reduced graph (cones.md, Theorem A8, consequence 3) | lifted (`lift_path`), replayed, and lifted through the reduction when the cone is reduced (`orbit/findings.rs::trace_to_slot`, `TraceFault` on failure) |
 
@@ -920,9 +923,9 @@ each of its variants a fair action whose enabledness reads its mark (event-order
 - **Not re-read here (unread@pin):** `cli/src/verify/end.rs` (N15); `reduce/lift.rs::lift_stop`
   beyond `MAX_WALK`, `Spurious::NoLoop` and its error path; the `Twin::EachEnabled` path;
   `fasthash.rs` beyond the rule quoted in N2; `cli/src/verify/native.rs::native_property_after`
-  beyond the order of its runs and what it records for the comparison; and the condition
-  under which `verify` runs a property up to symmetry (`Shared::up_to_symmetry`), taken from
-  `native_property`'s doc comment.
+  beyond the order of its runs and what it records for the comparison; and
+  `cli/src/verify/shared.rs::Shared::up_to_symmetry` beyond its use of
+  `PropertyJob::symmetric`, which the N16 table cites.
 - **P10, prose.** `cli/src/verify/bfs.rs::BfsCone::verdict` returns `counterexample`
   whenever the run found a violation of the whole system, stopped or not, and `None`
   (`not decided`) for a stopped run with none; formal-verification.md said a stopped cone

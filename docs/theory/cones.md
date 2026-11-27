@@ -17,7 +17,9 @@ fixes of P1, P7, P10, P11, P20, P30, P31, P32 and P33 changed (#477, #480, #488,
 #516, #518, #521, #522) was re-read at `c97c88ef`, and for every other function, type and
 constant this document names, its definition at `fb6928c7` was compared with the one at
 `c97c88ef`. A definition that did not change, or changed only by a checked narrowing cast
-(`id8`, `id32`, #513), reads as it did; one that changed otherwise was re-read. `#525`, the
+(`id8`, `id32`, #513), reads as it did; one that changed otherwise was re-read, or the
+statement that cites it carries `unread@pin`. The comparison matched definitions by name with a
+script and read every difference that was not a narrowing cast. `#525`, the
 last merge before the pin, changes only `cli/src/prove.rs`, `cli/src/cli.rs` and prose, none
 of which this document cites. How the document changed after it was first written is in
 [Errata](#errata). `unread@pin` marks a statement whose cited code was not read at the
@@ -313,8 +315,11 @@ step for step, as in Proposition A28, whether or not `W` has a left-out mark els
 
 *Proof sketch.* The proofs of Lemma 3 and Proposition A28 use exactness one step at a time:
 case (i) needs that the step's own action has no dropped `Triggered` parameter, and case (ii)
-that its own mark guards read marks in `W`. Both hold for an action that reads no mark outside
-`W`, and no step of `ρ` runs any other action. ∎ That `free_triggers` lists every step whose
+that its own mark guards read marks in `W` together with what they read. Let the step's action
+`a ∈ A_W` read a mark `μ ∈ W`. Every writer `b` of `μ` has `Wr(b) ∩ W ≠ ∅`, so `b ∈ A_W`, so
+`exact_W(a, μ)` holds by its third disjunct, and (C2) gives `R_μ ⊆ W`. So `restrict_to` keeps
+the `Triggered` parameter and the mark guards of `a`, and Lemma 3's cases (i) and (ii) go
+through for that step. No step of `ρ` runs an action that reads a mark outside `W`. ∎ That `free_triggers` lists every step whose
 action reads a mark outside the cone (`trace.rs`, read at the pin) is the one fact the corollary
 takes from the code.
 
@@ -921,10 +926,15 @@ binding `p` to `g(p)`.
   export, so `apply` relabels them with the parent's rows.
 - (G6) No predicate reads the owner of an absent row. Rule `AbsentOwner` (P30, fixed in #488):
   the scan leaves the parent's class out when a guard reads, in the state before the step, an
-  owner on a `New` parameter, the row the step creates (`breaks.rs`, `absent_owners`). By reading,
-  that is the one way a predicate reaches an absent row: `Forall`, `Exists` and `Count` range over
-  present slots, `Existing`, `Parent` and `Triggered` bind present slots, and `Earlier` binds a
-  slot by its run mark, which only a created row holds. Until #488 the scan did not check (G6).
+  owner on a `New` parameter, the row the step creates (`breaks.rs`, `absent_owners`). The scan
+  applies that rule to action guards only. Within a guard it is the one way to reach an absent
+  row: `Forall`, `Exists` and `Count` range over present slots, `Existing`, `Parent` and
+  `Triggered` bind present slots, and `Earlier` binds a slot by its run mark, which only a
+  created row holds. The predicates the scan reads with other rules (invariants, `after`
+  assertions, properties, `can_reach` goals) bind their binders to slots by their own rules,
+  and a property's goal is evaluated on a slot whatever its existence (native.md, "The goal on
+  absent rows"); that none of them reads an absent row's owner is not shown here (unread@pin).
+  Until #488 the scan did not check (G6) at all.
 
 **Theorem A18.** Under (G1)–(G6), for every reachable `s`, every `g ∈ G_s`, and every step `s →_{a,p} t`:
 `g(s) →_{a,g(p)} g(t)` is a step and `g ∈ G_t`. Hence `≈ = {(s, g(s)) : g ∈ G_s}` is an equivalence and a
@@ -1257,9 +1267,10 @@ the row; a fixed or closed one carries its pull request.
   counterexample is vouched for is a `debug_assert!` only. A finding a cone fails to report has no trace, so
   a per-trace check never sees it; since #477 entity cones are exact for marks per cone instead (P32).
 - **Symmetry hypothesis (G6).** Enforced since #488 by `Rule::AbsentOwner` for a guard's pre-state read
-  through a `New` parameter (P30); that this is the only way a predicate reaches an absent row's owner is a
-  reading of the binding rules (Hypotheses, (G6)). Before #488 a model that reached it could have printed a
-  wrong verdict up to symmetry, `ok` included; none was known, and no sample or corpus cone fires the rule.
+  through a `New` parameter (P30), the one way a guard reaches an absent row. For invariants, `after`
+  assertions, properties and `can_reach` goals, whose binders and goals the rule does not scan, (G6) is not
+  shown (Hypotheses, (G6)). A model that broke it could print a wrong verdict up to symmetry, `ok`
+  included; none is known, and no sample or corpus cone fires the rule.
 - **Panics left in the lifts.** Every printed trace replays before it prints (P20, fixed in #518 and #522),
   but `reduce/lift.rs::lift`, `explore/orbit.rs::lift_path` and the lasso lift of
   `explore/orbit/liveness.rs` still hold some invariants of the reduction's and the group's own tables by
