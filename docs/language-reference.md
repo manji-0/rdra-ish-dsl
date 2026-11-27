@@ -1843,7 +1843,7 @@ property; a rule `check` must enforce is a `forbidden`, `invariant`, or `after` 
 
 | Form | TLA+ |
 |---|---|
-| `always(expr)` | `[]expr` |
+| `always(expr)` | `[](present => expr)` |
 | `eventually(expr)` | `[](present => <>expr)` |
 | `leads_to(p, q)` | `(present /\ p) ~> q` |
 | `can_reach(expr)` | none: CTL `AG (present => E[present U (present /\ expr)])`, a comment |

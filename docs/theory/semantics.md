@@ -265,10 +265,10 @@ binder ranging over present slots (`language-reference.md`, "Entity state constr
 speaks only of linked rows; a `.when(Cond)` adds the comparisons of `Cond`'s `holds` body.
 
 **D17 (After assertion).** `after(UC).assert(ψ)` (`AfterAssert`) holds iff for every
-`s ∈ Reach(T)` and every step `s →_a s'` of the *last* step `a` of `UC` (of every variant
-`UC_by_Ev`), `ψ` holds in `s'` with the action's parameters bound to their slots and the
-scope entities the action does not bind universally quantified over present slots of
-`s'` (`AfterStep::post`), and `s' ≠ s`. States between two steps of a run are not checked,
+`s ∈ Reach(T)` and every step `s →_a s'` with `s' ≠ s` of the *last* step `a` of `UC` (of
+every variant `UC_by_Ev`), `ψ` holds in `s'` with the action's parameters bound to their
+slots and the scope entities the action does not bind universally quantified over present
+slots of `s'` (`AfterStep::post`). States between two steps of a run are not checked,
 and neither is a last step that changes nothing: the native run skips the check on a
 self-loop (`explore/bfs.rs`, `Probe::Loop`, in every build), and TLC checks the `PROPERTY`
 `[][(\A p : UC(p) => post')]_vars`, which every stuttering step satisfies. The language
