@@ -172,7 +172,9 @@ state changes. Both reproductions give the verdicts of 8 instances at 255
 `packing.rs::tests::a_state_past_bit_65535_packs_patches_and_reads_back` checks the patch,
 the unpack and `Packing::cell` on either side of the first cell past bit 65,535. The same PR
 stops a run, as at the state cap, before it numbers a state `u32::MAX`, the marker of an
-unresolved move and of an unnumbered component.
+unresolved move and of an unnumbered component. Past `u32::MAX` bits the build stops first:
+`StateTooWide`, an error of the same family as `DomainTooLarge`, so the checked add is never
+reached from a model (`build/mod.rs::width_tests`).
 
 **Finding P54 (guarantee, reproduced by the review; fixed in #470, where the build rejects a
 column domain past 256 values as `DomainTooLarge`).** A value outside a byte is

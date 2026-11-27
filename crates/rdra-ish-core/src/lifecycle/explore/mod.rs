@@ -11,6 +11,7 @@ mod liveness;
 mod moves;
 mod orbit;
 mod packing;
+pub(crate) use packing::{packed_bits, MOST_PACKED_BITS};
 #[cfg(feature = "perf")]
 mod perf;
 #[cfg(feature = "perf")]

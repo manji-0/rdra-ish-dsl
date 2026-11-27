@@ -208,6 +208,7 @@ violation_message(text, pattern_desc)
         | StateDiag::PreExistingChildOfCreatedParent { .. }
         | StateDiag::IdentityStartSlots { .. }
         | StateDiag::DomainTooLarge { .. }
+        | StateDiag::StateTooWide { .. }
         | StateDiag::CountAboveBound { .. }
         | StateDiag::MinCardOfPreExistingParent { .. }
         | StateDiag::MinCardNeedsCreate { .. }
