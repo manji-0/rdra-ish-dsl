@@ -3,7 +3,6 @@
 //! edges as they are found. The run keeps every edge and, per state, the edge that first
 //! reached it.
 
-use crate::lifecycle::narrow::id32;
 mod arena;
 mod bfs;
 mod edges;
@@ -398,7 +397,9 @@ impl ComponentRun {
     #[cfg(any(test, feature = "shadow"))]
     pub(crate) fn same_graph(&self, other: &ComponentRun) -> bool {
         let parents = |run: &ComponentRun| -> Vec<Option<Edge>> {
-            (0..id32(run.states.len())).map(|k| run.parent(k)).collect()
+            (0..crate::lifecycle::narrow::id32(run.states.len()))
+                .map(|k| run.parent(k))
+                .collect()
         };
         self.states == other.states
             && parents(self) == parents(other)
