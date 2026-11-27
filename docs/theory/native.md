@@ -17,12 +17,15 @@ relative to `crates/rdra-ish-core/src/lifecycle/` unless they start with `cli/`
 (`crates/rdra-ish-cli/`) or name the crate root (`core-root/`, for
 `crates/rdra-ish-core/src/`).
 
-Two reproductions in this document ran a release build of the CLI from a sibling worktree
+The reproductions of P50 and P51 ran a release build of the CLI from a sibling worktree
 on `64232981`, the parent of `fb6928c7` with the same `crates/`. That worktree's
 `crates/rdra-ish-core/src` and `crates/rdra-ish-cli/src` are byte-identical to the pinned
 commit's (`diff -rq`), its `crates/rdra-ish-emit/src` differs only under `codegen/`, and no
-core or CLI source file there is newer than the binary. The models and commands are in
-[Reproductions](#reproductions); each run takes under a second.
+core or CLI source file there is newer than the binary. The reproductions of P54 were run
+by the independent review of this document, on a release binary of another sibling worktree
+whose core and CLI `src` it checked against the same sources with `diff -rq`; they were not
+re-run for this revision. The models and commands are in [Reproductions](#reproductions);
+each run takes under a second.
 
 ---
 
@@ -81,7 +84,10 @@ step this sketch does not derive is that `moves_into` enumerates exactly the suc
 D13 (every admissible binding of D7, every fork of D8); that is evidenced differentially
 (TLC on the same cone, `cli/tests/engine_equivalence.rs::a_bfs_and_tlc_reach_the_same_states_and_verdicts`)
 and by the twin `Twin::EachEnabled` (`explore/moves/reference.rs`), which compares the
-planned enumeration with a filter over all bindings.
+planned enumeration with a filter over all bindings. Two further premises are not part of
+this sketch: that `T` itself is `T_β(M)` (open problem P54 is a case where the build
+encodes a literal as another value), and that the edge list reads back the edges it
+recorded (open problem P55 is a case where it does not).
 
 ## The state store and its encoding
 
@@ -93,27 +99,49 @@ the total rounded up to bytes (`explore/packing.rs::Packing::of`). States are fo
 their packed bytes in a hash table (`explore/arena.rs::Seen`) under the FxHash-style
 multiply-rotate hash of `core-root/fasthash.rs` with a fixed seed (`arena.rs::hash`).
 
-**N2 (Store).** On states whose cells hold values inside their domains, packing is
-injective and unpacking inverts it; the patch path (`Packing::patch`, which writes only the
-cells a move changed into the source's packed row) equals packing the successor; the
-arena, segment and table read back what they stored.
+**N2 (Store).** Suppose (i) every domain has at most 256 values, so that each value of
+`T_β(M)` is a distinct byte and fits its cell (`packing.rs::bits_for` caps a cell at 8
+bits), and (ii) every cell of non-zero width starts at a bit offset of at most 65,535. Then
+on states whose cells hold values inside their domains, packing is injective and unpacking
+inverts it; the patch path (`Packing::patch`, which writes only the cells a move changed
+into the source's packed row) equals packing the successor, and `Packing::cell` reads the
+cell back; the arena, segment and table read back what they stored.
+
+Neither precondition is enforced today. (i) fails for a nullable Int column at `m = 255`
+and for an Enum column with 256 values and `@null` or with 257 or more values (open problem
+P54); (ii) fails for some cone states wider than 65,536 bits (open problem P50). Every claim
+below that reads a stored state ("by N1", "by N2") holds only under both.
 
 *Evidence.* Kani proves the round trip, the patch path, and the arena and table operations
 on small widths (4 or 11 cells, widths up to 8 bits; the harnesses are listed in row N2).
 The table lookup compares whole packed rows (`Seen::find_hashed`), so a hash collision costs
 time and never merges two states; the hash's quality does not bear on correctness. The
-seed is fixed and no table is iterated into the output (`fasthash.rs` states the rule), so
-the hash does not bear on determinism either. `Packing::pack` panics when a value does not
-fit its bits, in release builds too.
+seed is fixed and no table is iterated into the output (`fasthash.rs` states the rule for
+`FastMap`), so the hash does not bear on determinism either. `Packing::pack` panics when a
+value does not fit its bits, in release builds too; that check cannot catch P54, whose
+values are already wrapped to a byte before they reach the store.
 
-**Finding P50 (guarantee, reproduced).** N2 holds only while a packed state has at most
-65,535 bits. `packing.rs::offsets` stores each cell's bit offset as a `u16` and saturates at
-`u16::MAX`; `pack_into` and `unpack_into` count offsets as they go and are unaffected, but
-`Packing::patch` (the path every plain run's successor takes, `Probes::read`) and
-`Packing::cell` (read by deadlocks, `findings.rs::can_leave`) use the saturated offsets, so
-every cell past bit 65,535 is written to and read from the same place. Distinct successors
-then pack alike and are merged, and stored rows unpack to states `T` does not have. No
-check guards the width. The Kani harnesses stop at 11 cells, far below the bound.
+**Finding P50 (guarantee, reproduced).** `packing.rs::offsets` stores each cell's bit
+offset as a `u16` and saturates at `u16::MAX`. `pack_into` and `unpack_into` count offsets
+as they go and are unaffected, but `Packing::patch` and `Packing::cell` use the saturated
+offsets, so every cell of non-zero width whose true offset exceeds 65,535 is written to and
+read from the bits at 65,535. That is the exact failure condition: a total width above
+65,536 bits is necessary but not sufficient (cells of zero width past the bound do no harm).
+On a plain run every successor takes the patch path (`probe.rs::Probes::read`), so distinct
+successors pack alike and are merged, and stored rows unpack to states `T` does not have.
+On a run up to symmetry the successor is the canonical form packed whole
+(`States::pack_into`), so only `Packing::cell` is affected there: the deadlock readers
+(`findings.rs::can_leave`, `orbit/findings.rs`). No check guards the width in a release
+build. The Kani harnesses stop at 11 cells, far below the bound. The shadow twins would see
+it: `Twin::Packed` compares `States::patch` with a whole pack and `States::cell` with the
+unpacked row (`explore/arena.rs`), and `Twin::Seen` keys its reference table on unpacked
+states; but no `shadow` run reaches that width (and the twins skip runs past their caps,
+P17).
+
+The merged states also reach the warnings. When the review re-ran the second reproduction below, the run
+also printed `warning[Vacuous_Forbidden_Row_0] … holds vacuously`: no stored state meets the
+premise because the state that would has been merged away. That is a false claim about
+`Reach(T)`, and N18's "by N1" fails with N2's precondition (ii).
 
 Reproduction (a model in which every row is created with `c0 … c33 = 1`, 34 Int columns,
 at `--instance-count 255 --int-range-max 255`, a cone state of 255 × (34 × 8 + 2) = 69,870
@@ -128,9 +156,51 @@ bits):
   `ok (256 states)` and `result: ok`, in either declaration order of the two use cases.
   This is a wrong `ok`.
 
-The bound is reachable only at large bounds: a cone state of more than 8,191 packed bytes,
-about 8,192 cells of 8 bits (for example 255 slots of an entity with 32 or more Int
-columns at `m = 255`). No sample comes near it, but D1 admits it and nothing rejects it.
+P50 needs large bounds: a cell of non-zero width past bit 65,535, about 8,192 cells of 8
+bits (for example 255 slots of an entity with 32 or more Int columns at `m = 255`). No
+sample comes near it, but D1 admits it and nothing rejects it. P54 below needs far less.
+
+**Finding P54 (guarantee, reproduced by the review).** A value outside a byte is
+truncated when the build encodes it, so `T` is not `T_β(M)`. `types.rs::Domain::of_number`
+returns `Value(n as u8 + 1)` for a `NullableInt` column; `Domain::size` gives that domain
+`m + 2` values, 257 at `m = 255`, and for `n = 255` the sum wraps to 0, which is
+`Value::NULL`. The workspace `Cargo.toml` sets no `overflow-checks` for the release
+profile (it has only `[profile.mutants]`), so a release build wraps silently; a debug build
+panics. The callers are the literals of `sets` (`build/sets.rs`), of predicates
+(`build/preds/atoms.rs`) and of defaults (`build/vars.rs`). `Domain::of_variant` returns
+`Value((i + shift) as u8)`, an `as` cast that truncates in every build: in an Enum with
+`@null` and 256 values, value `v255` becomes `Value(0)`, the null; in an Enum without
+`@null` and 257 or more values, `v256` becomes `v0`. No check limits the number of values
+of an Enum (none was found in the model, the resolver, the lint or the build), and the CLI
+accepts `--int-range-max 255` (`cli/src/export.rs::checked_bounds`), as D1 does. Because
+the fault is in `T`, every engine reading `T` inherits it, a replay of the trace against `T`
+passes, and the store's checks (N2) do not see it.
+
+Reproduced by the review at one instance (two states):
+
+- `n: Int @null`, `sets(Create, Row.n == 255)`, `forbidden(Row, Row.n >= 200)`,
+  `--instance-count 1 --int-range-max 255`: `ok (2 states)`, `result: ok`. A wrong `ok`.
+  Controls: setting 254 gives `counterexample`; a non-null `n: Int @default(0)` gives
+  `counterexample`. `forbidden(Row, Row.n == null)` gives a spurious `counterexample`
+  whose trace shows `n=null`.
+- `s: Enum(v0, …, v255) @null`, `sets(Create, Row.s == v255)`,
+  `forbidden(Row, Row.s != null)` at the default bounds: `ok`. A wrong `ok`. Control: `v254`
+  gives `counterexample`. `forbidden(Row, Row.s == v255)` gives `counterexample` with a
+  trace that shows `s=null`.
+
+The non-null Enum with 257 values was read, not run. The TLA+ printer writes null as −1,
+so TLC may answer these models correctly; that was not run either.
+
+**Finding P55 (guarantee, read).** `explore/edges.rs::Steps::read` records the first edge
+of each state read as `edges.first.push(self.moves as u32)`, a bare cast, while
+`Steps::admit` and the orbit self-edge in `Bfs::take` use `u32::try_from(…).expect`. Once a
+run has recorded more than 2^32 edges, a state read after that point with no admission
+following it (late layers whose moves reach only known states) gets a wrapped index in
+`EdgeList::first`. `EdgeList::source_of` and the per-state ranges then attribute edges to
+the wrong sources, and liveness, `can_reach` and deadlocks read a graph that is not `G`.
+Each edge takes at least 4 bytes for its target and more for its binding, so the edges alone
+exceed `verify`'s default memory limit of 16 GiB, which stops the run first; a larger
+`--memory` reaches it. Not reproduced.
 
 ## Memory accounting and the stop rule
 
@@ -181,13 +251,21 @@ bindings, diagnostics and stop point.
 within the state). Let `Σ_j` be the reader's state after `m_j`. Claim: `Σ_j` is the same in
 `R_k` and `R_0` for every `j`.
 
-1. *The moves of a state, and their order, are a function of the state.* On an unreduced
-   system `moves_into` goes through `each_raw_move`, which iterates the actions in index
-   order and, per action, the bindings `each_enabled` yields and the successors
-   `each_successor` yields; it reads the state, the system and its own scratch only. On a
-   reduced system the moves come from `moves_of_into` in `reduce/`, which was not read for
-   this step: that it too reads nothing but the state and the system is the missing part.
-   Canonicalization (`Canon`) and packing carry no state between calls. A worker and the reader call the same functions,
+1. *The moves of a state, and their order, are a function of the state.*
+   `explore/moves.rs::TransitionSystem::moves_into` always calls
+   `reduce/mod.rs::TransitionSystem::moves_of_into`. That function goes through
+   `each_raw_move`, which iterates the actions in index order and, per action, the bindings
+   `each_enabled` yields and the successors `each_successor` yields; without a reduction
+   that is all it does. With one, it skips the actions the reduction folds
+   (`Reduction::skips`), rewrites the S part of a T step's successor through
+   `Reduction::recanon` and `Reduction::write`, and appends the class moves
+   `r.moves[class]`, where the class comes from `Reduction::class_into`. These read the
+   state `s`, the system's immutable fields (the `class_of`, `rises`, `reps` and `moves`
+   tables) and buffers they clear or overwrite first (`out.reduced`, `scratch`); `reduce/`
+   has no interior mutability outside the quotient cache (`reduce/cache.rs`), which this path
+   does not touch. The one lazily filled field on the path, `explore/plan.rs::plans`, is a
+   `OnceLock` of a function of the actions alone. Canonicalization (`Canon`) and packing
+   carry no state between calls. A worker and the reader call the same functions,
    so the move list read at `m_j` is the same, and so is each move's `Probe::Loop` or
    `Probe::OrbitSelf` flag, packed successor, hash and binding number. Chunk boundaries
    differ between `R_k` and `R_0` (the reader expands what no worker holds), and nothing
@@ -219,16 +297,20 @@ Hence `Σ_j` agrees for all `j`, and with it everything the readers below comput
 
 - *The pool.* "Alone" matters: `Charge::cover` succeeds or fails against what the other
   runs of the command hold (`MemoryPool::charge`), and with `RDRA_JOBS` cones run side by
-  side. Two mechanisms restore the one-job result. In the entity pass,
+  side. Two mechanisms restore the one-job result, and they use two different tests, here
+  called *crowded in the pool* and *met the limit*. In the entity pass,
   `targets.rs::TransitionSystem::run_cones` defines the result as that of the cones run one
   at a time in cone order, each with the room the earlier results leave: a run that was
-  crowded (`memory::Watched::crowded`, a refusal within the pool's room) or whose peak
-  exceeds that room runs again under `pool.with_room(room)`, an explicit room computed from
-  the results before it. The quotients are reduced one at a time in target order
-  (`cli/src/verify/jobs.rs`), so what the quotient cache holds is the same on any job count.
-  native-bfs-parallel.md, "The memory pool", argues the same for #260's rerun. The CLI's
-  safety and property passes (`cli/src/verify/bfs.rs::bfs_cones`, `Native::crowded` in
-  `cli/src/verify/native.rs`) rerun a crowded run against the command's pool itself, not an
+  crowded in the pool (`core-root/memory.rs::Watched::crowded`, set when a charge is refused
+  although it fits the pool's room alone) or whose peak exceeds that room runs again under
+  `pool.with_room(room)`, an explicit room computed from the results before it. The quotients
+  are reduced one at a time in target order (`cli/src/verify/jobs.rs`), so what the quotient
+  cache holds is the same on any job count. native-bfs-parallel.md, "The memory pool",
+  argues the same for #260's rerun. The CLI's safety and property passes
+  (`cli/src/verify/bfs.rs::bfs_cones`, the `crowded` flag of `Native` in
+  `cli/src/verify/native.rs`) use the other test: `cli/src/verify/bfs.rs::crowded` is
+  `met_memory_limit`, true for any `MemoryCapReached` diagnostic, crowded or not. Such a run
+  is rerun, one at a time in `open` order, against the command's pool itself, not an
   explicit room. That the pool holds the same bytes at that rerun whatever the job count is
   the one step not shown (open problem P53). Evidence:
   `cli/tests/memory_cli.rs::cones_side_by_side_stop_where_they_stop_one_at_a_time` and
@@ -287,7 +369,7 @@ the successor is resolved. The trace is the parent path to the move's source and
 itself (`Reach::Step`); the first violating move in reading order has a source of least
 depth, so the trace is shortest.
 
-**Finding P51 (prose, reproduced).** `Bfs::take` skips `check_after` on a move whose
+**Finding P51 (guarantee, reproduced).** `Bfs::take` skips `check_after` on a move whose
 successor equals its source (`Probe::Loop`), so an `after` assertion is never evaluated on a
 step with `s' = s`. D17 quantifies over every step of the last step of `UC`, and D13 says a
 step with `s' = s` is possible. TLC agrees with the code, not with D17: the TLA+ printer
@@ -373,11 +455,15 @@ TLC's deadlock check is one-sided (row T6); this check has no external oracle (P
 assertion as vacuous only on a complete run of its cone, only when the run reports no
 violation of it, and only when no stored state meets one of its premises
 (`unmet_of_rule`, `unmet_of_assert`). It is a warning and changes no verdict (D18). On a
-complete plain run "no stored state" is "no reachable state" by N1. On a reduced run or a
+complete plain run "no stored state" is "no reachable state" by N1 and N2, so only under
+N2's preconditions: P50 printed a false vacuity warning, and P54 can too, since the state
+that meets the premise is merged away or never built. On a reduced run or a
 run up to symmetry the stored states are representatives; that a premise met by some
 member of a class is met by its representative is theme (a). The `after` premise is read
-from the step's ends (`ComponentRun::step_ends`), which count self-loop moves as runs of the use
-case, consistent with P51.
+from the step's ends (`ComponentRun::step_ends`), filled by `Bfs::push` on every move,
+self-loops (`Probe::Loop`) included. So the vacuity check counts a self-loop as a run of the
+use case while the assertion is never evaluated on it (P51): the two readers treat the step
+in opposite ways.
 
 Properties have a check of the same kind, `targets.rs::TransitionSystem::property_vacuity`,
 on a complete run of the property's cone: it warns when no stored state, under some binding
@@ -408,7 +494,16 @@ printer, or the checker. On `G` define, for a state `s`:
 By N1 and the definition of enabledness in D20 (some binding extending `κ` has a successor
 `≠ s`), `En(s)` on a complete `G` is the set of fair instances enabled at `s` in `T`, and a
 step `s → s'` with `s ≠ s'` takes every fair instance that labels an edge from `s` to `s'`.
-A step that changes nothing neither enables nor takes, as in TLA+'s `⟨A⟩_vars`.
+
+**Assumption τ (a step that changes nothing takes nothing).** D20 requires `s' ≠ s` for
+enabledness but not for *taken*: it says a fair instance is taken "by a step whose action is
+`a` and whose binding extends `κ`", and D13 allows such a step with `s' = s`. The code and the
+TLA+ output read *taken* as requiring a change of state: `fair_steps` keeps only edges with
+`from ≠ to`, and the printer's `WF_vars` takes `⟨A⟩_vars` steps only. This document adopts
+that reading as assumption τ; D20 does not state it (open problem P56). Under D20 read
+literally, a behavior that stutters forever at a state where an instance `(a, κ)` has both a
+self-loop and a move to another state takes `(a, κ)` infinitely often on the self-loop and
+satisfies `Fair_P`, and the code does not count that state as a stop.
 
 ### The check
 
@@ -419,11 +514,13 @@ ends in `N_b` and different ends. A **stop** is `s ∈ N_b` with `En(s) = ∅` (
 `|C| ≥ 2` and every fair instance enabled at every state of `C` is in `Tk(C)`. The **ends**
 are the stops and the states of fair components.
 
-**N9 (Liveness by fair components).** On a complete `G`, the property fails for `b` under
-`F` iff some `s ∈ S_G` with `trig_b(s) ∧ cause_b(s) ∧ ¬goal_b(s)` reaches an end by a path
-of `E_N` (of length zero included).
+**N9 (Liveness by fair components).** On a complete `G`, if some `s ∈ S_G` with
+`trig_b(s) ∧ cause_b(s) ∧ ¬goal_b(s)` reaches an end by a path of `E_N` (of length zero
+included), the property fails for `b` under `F` (⇐). Under assumption τ the converse holds
+too (⇒), so the property fails iff such an `s` exists.
 
-*Proof.* (⇐) Let `s` reach an end `e` inside `N_b`. Take the parent path to `s` (N1), then
+*Proof.* (⇐) This direction does not use τ: it needs only that a step to another state
+takes the instances that label it, which D20 states. Let `s` reach an end `e` inside `N_b`. Take the parent path to `s` (N1), then
 the path to `e`. If `e` is a stop, stutter at `e` forever: under `Plain` no fair instance is
 enabled at `e`, so `Fair_P` holds; under `WfNext` no step to another state exists either,
 so `WF_vars(Next)` holds. If `e` is in a fair component `C`, follow a closed walk of `E_N`
@@ -435,19 +532,26 @@ walk changes state infinitely often (`|C| ≥ 2`), so `WF_vars(Next)` holds. The
 reaches `s`, where the trigger and cause hold, and from there stays in `N_b`, so the goal
 never holds at or after `s`; it violates D21.
 
-(⇒) Let `σ` be a behavior satisfying `F` and `i` a position with `trig_b ∧ cause_b` at
+(⇒) This direction uses τ twice, marked below. Let `σ` be a behavior satisfying `F` and
+`i` a position with `trig_b ∧ cause_b` at
 `σ_i` and no goal at any `j ≥ i`. Then `σ_i ∈ S_G` (it is reachable) and every `σ_j`,
 `j ≥ i`, is in `N_b`. Two cases, since `S_G` is finite. (a) From some point `σ` stutters at
 a state `e` forever. Under `Plain`, a fair instance enabled at `e` would be enabled forever
-and never taken (stuttering takes nothing), against `Fair_P`, so `En(e) = ∅`; under
+and never taken (stuttering takes nothing: τ), against `Fair_P`, so `En(e) = ∅`; under
 `WfNext`, a step from `e` to another state would violate `WF_vars(Next)`, so `¬Moves(e)`.
 So `e` is a stop. (b) `σ` changes state infinitely often. Let `I` be the states visited
 infinitely often and the non-stuttering steps taken infinitely often; `I` is strongly
 connected within `(N_b, E_N)`, has at least two states, and lies in one component `C`. A
 fair instance enabled at every state of `C` is enabled at every state of `σ` from some
-point on, so `Fair_P` makes `σ` take it infinitely often, on a step inside `I ⊆ C`; so it is
-in `Tk(C)`, and `C` is fair. In both cases `σ_i` reaches the end by the non-stuttering steps
-of `σ`, which are edges of `E_N`. ∎
+point on, so `Fair_P` makes `σ` take it infinitely often, on a step inside `I ⊆ C`, and by
+τ on a step that changes the state, an edge of `E_N`; so it is in `Tk(C)`, and `C` is fair.
+(Without τ the instance could be taken only on self-loops, which `Tk` does not count.) In
+both cases `σ_i` reaches the end by the non-stuttering steps of `σ`, which are edges of
+`E_N`. ∎
+
+Without τ, (⇒) fails in exactly the way the note on assumption τ describes, and the
+consequence is an `ok` that D20 and D21 as written do not license; the counterexamples of
+(⇐), and with them N10 and N11, do not depend on τ.
 
 *Code.* `liveness.rs::ComponentRun::liveness_search` runs `ComponentRun::avoid` per binding:
 the components by iterative Tarjan (`graph.rs::Adjacency::components`), the `always` and
@@ -525,7 +629,8 @@ Two consequences.
 - *Unchecked traces are where P50 becomes visible.* A plain safety trace is never replayed,
   so the corrupted states of the P50 reproduction printed as a counterexample with no
   `LassoFault`. A replay of every safety trace would have turned that wrong verdict into a
-  tool error, though not the wrong `ok`.
+  tool error, though not the wrong `ok`. A replay cannot catch P54 at all: it replays
+  against `T`, which already holds the wrapped value.
 - *P20, restated.* Liveness lassos that print are replayed on the system the verdict is
   about in every case; the gaps are on the safety side: plain traces are not replayed at
   all, reduced traces are lifted with `debug_assert!` checks and can keep a reduced message
@@ -588,8 +693,8 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   Lamport, "Model checking TLA+ specifications", CHARME 1999). Like TLC and unlike SPIN's
   default, exploration is breadth-first, which gives shortest safety traces; unlike TLC, which stores 64-bit fingerprints and accepts a small probability of merging
   two states, and unlike SPIN's bitstate mode, rdra-ish stores each state exactly and
-  compares full packed rows, so a hash collision costs time, not soundness (P50 is a fault
-  of the encoding, not of hashing).
+  compares full packed rows, so a hash collision costs time, not soundness (P50 and P54
+  are faults of the encoding, not of hashing).
 - **Fair cycle detection.** Deciding a liveness property under weak fairness by strongly
   connected components of the graph restricted to the goal's complement goes back to
   Lichtenstein and Pnueli ("Checking that finite state concurrent programs satisfy their
@@ -602,36 +707,77 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   verification of linear temporal logic", FM 1999). rdra-ish is not on-the-fly: it decides
   liveness after the graph is built, which needs the whole graph in memory but lets the
   same graph answer every property of the cone and gives deterministic lassos.
-- **Parallel BFS model checking.** Barnat, Brim and Chaloupka ("Parallel breadth-first
-  search LTL model-checking", ASE 2003) parallelize level-synchronized BFS across machines,
-  partitioning states by owner. rdra-ish parallelizes only expansion: one reader commits
-  every state in sequential order, which gives up scaling of the commit step in exchange
-  for the exact one-thread run (N4).
+- **Parallel and distributed state-space search.** Stern and Dill ("Parallelizing the Murφ
+  verifier", CAV 1997, LNCS 1254) distribute Murφ's breadth-first reachability over
+  workstations by message passing, each node owning the states a hash assigns to it.
+  Barnat, Brim and Chaloupka ("Parallel breadth-first search LTL model-checking", ASE 2003)
+  detect accepting cycles of an LTL product with a distributed, level-synchronized BFS over
+  an MPI cluster, through back-level edges; their subject is the cycle check, not only the
+  parallel BFS. Holzmann and Bošnački ("The design of a multicore extension of the SPIN
+  model checker", IEEE TSE 33(10), 2007) extend SPIN to shared-memory multicores. Laarman,
+  van de Pol and Weber ("Boosting multi-core reachability performance with shared hash
+  tables", FMCAD 2010) replace static partitioning with one lockless shared hash table that
+  all workers probe; rdra-ish's shared table and `Probing` are of that kind, but release
+  builds turn probing off (N4, step 3). rdra-ish parallelizes only expansion: one reader
+  commits every state in sequential order, which gives up scaling of the commit step in
+  exchange for the exact one-thread run (N4), shortest traces included. TLC's workers take
+  states from a shared queue without such a reader; the tlaplus project notes that with
+  several workers even the diameter TLC reports can differ between runs
+  ([tlaplus/tlaplus#883](https://github.com/tlaplus/tlaplus/issues/883)), so with more than
+  one worker its traces need not be the same from run to run, nor shortest. That last step
+  is our reading of the design, not a statement from TLC's documentation.
+- **Symmetric counterexamples.** Ip and Dill ("Better verification through symmetry",
+  FMSD 9(1/2), 1996) and Emerson and Sistla ("Symmetry and model checking", FMSD 9(1/2),
+  1996) explore the quotient by a symmetry group and relate paths of the quotient to paths
+  of the original system, which is what `orbit.rs::lift_path` does when it carries the
+  accumulated permutation along a stored path (N12, N13). rdra-ish then replays the lifted
+  trace on `T` rather than relying on that correspondence alone.
 - **TLA+ fairness.** `WF_vars(A)` and stuttering steps are Lamport's ("The temporal logic of
   actions", ACM TOPLAS 16(3), 1994; *Specifying Systems*, 2002). D20's per-instance weak
   fairness is the conjunction of `WF_vars` over instances that the TLA+ printer emits; the
   exemption of stuttering steps from action properties (`[][A]_vars`) is the source of
-  P51.
+  P51, and the same exemption in `WF_vars(A)`, which only `⟨A⟩_vars` steps satisfy, is the
+  reading assumption τ adopts (P56).
 
 ## Threats to validity
 
 - **The step relation is trusted.** Every proof above assumes `moves_into` enumerates the
-  steps of D13 (N1). The evidence is differential (TLC, which reads the same
-  `TransitionSystem`, so a fault in the build of `T` would pass both) and one twin.
+  steps of D13 (N1) and that `T` is `T_β(M)`. The evidence is differential (TLC, which reads
+  the same `TransitionSystem`, so a fault in the build of `T` would pass both) and one twin.
+  P54 is such a fault in the build: a literal wraps to another value of its domain.
 - **Bounded mechanical evidence.** The Kani harnesses cover widths far below where P50
-  begins; the shadow twins skip runs above 200,000 or 2,500,000 states (P17) and the probe
-  twins run in one CI job (P18).
+  begins and no domain of more than 256 values (P54); the shadow twins, which would detect
+  P50, skip runs above 200,000 or 2,500,000 states (P17) and the probe twins run in one CI
+  job (P18).
 - **Readers share code with the checks they certify.** `unfair_loop` and `avoid` both use
   `moves` and `Property::fair_instance`; `explain_property` and `liveness_search` both use
   `holds_bound` and `triggers`. Self-certification catches a fault in the search, not in
   these.
-- **Wide states.** P50 is a wrong `ok` reachable within the documented bounds.
+- **Fixed-width integers.** Three places truncate or saturate silently in a release build,
+  and each gives a wrong verdict within the documented bounds: the value encoding (P54, a
+  wrong `ok` at one instance with a nullable Int at `m = 255` or a nullable Enum of 256
+  values), the bit offsets of the packing (P50, a wrong `ok` past 65,535 bits), and the
+  edge index (P55, read only, past 2^32 edges). P50 and P54 are not the only conceivable
+  ones: this document did not audit every `as` cast in `explore/` and `build/`.
+- **Fairness wording.** N9's (⇒) direction, hence every liveness `ok`, rests on assumption
+  τ, which D20 does not state (P56).
 - **Determinism of memory stops beside other runs** rests on the reruns of N4; one step is
   not shown for the CLI's passes (P53).
-- **Reproductions** used a binary built in another worktree (see the first paragraph); the
-  issues that take P50 and P51 up should reproduce them on a clean build.
-- **Not re-read here:** `cli/src/verify/end.rs` (N15), `reduce/`'s `moves_of_into` (N4,
-  step 1), and the orbit readers' internals beyond their certification steps.
+- **Reproductions** used binaries built in other worktrees, and those of P54 were run by
+  the review rather than for this document (see the first paragraph); the issues that take
+  P50, P51 and P54 up should reproduce them on a clean build.
+- **Read for the N16 table and the lift's mechanics:** `reduce/lift.rs::lift` (the
+  `debug_assert!` on a T step, the `expect` on a folded S step, the unchecked
+  `in_cone_params` branch), `::lift_cycle` (the doubling to `MAX_COPIES` and the closing
+  test), and `explore/orbit.rs::replays` (panics on a failed replay). `targets.rs::vacuity`
+  and `unmet_of_rule` were read for N18 as far as the conditions it states.
+- **Not re-read here:** `cli/src/verify/end.rs` (N15); `reduce/lift.rs::lift_stop` beyond
+  `MAX_WALK` and `Spurious::NoLoop`; `explore/orbit.rs::lift_path` and
+  `orbit/liveness.rs` beyond their certification steps (the "Symmetric" bullet of the lift's
+  mechanics was not re-checked against their bodies for this revision); `unmet_of_assert` and `step_ends`' use in vacuity;
+  `findings.rs::can_leave`'s choice of the least `(idx, k)` (N14's "reported state"); the
+  `Twin::EachEnabled` path; `fasthash.rs` beyond the rule quoted in N2; and
+  `cli/src/verify/native.rs::native_property_after` beyond the order of its runs.
 - **P10 confirmed.** `cli/src/verify/bfs.rs::BfsCone::verdict` returns `counterexample`
   whenever the run found a violation, stopped or not, and `None` (`not decided`) only for a
   stopped run with none; formal-verification.md's "leaves its invariants `not decided`"
@@ -647,14 +793,17 @@ each of its variants a fair action whose enabledness reads its mark (event-order
 New: P50 (packing past 65,535 bits; wrong `ok`, reproduced), P51 (`after` skips steps with
 `s' = s`; reproduced; the engines agree), P52 (a reduced safety trace whose lifted last
 state no longer violates keeps the reduced message silently), P53 (one step of memory-stop
-determinism for the CLI's reruns is not shown). Confirmed on the code: P6, P10, P17 (orbit
+determinism for the CLI's reruns is not shown), P54 (a value past a byte wraps when the
+build encodes it; wrong `ok` at one instance, reproduced by the review), P55 (the edge
+index wraps past 2^32 edges; read), P56 (D20 does not say that a step with `s' = s` takes
+nothing, which N9's (⇒) direction needs; the engines agree). All are open. Confirmed on the code: P6, P10, P17 (orbit
 twins), P19, P20 (restated as the table above). Corrected: P18 (`SameAs` and `DenseBinding` are release
 paths whose twins run in every `shadow` run). The [index](./README.md#open-problems) holds
 the entries.
 
 ## Reproductions
 
-The two runs behind P50 and P51, with the binary described in the first paragraph.
+The runs behind P50, P51 and P54, with the binaries described in the first paragraph.
 
 **P51.** The model:
 
@@ -690,3 +839,12 @@ With `sets(Touch, Order.status == closed)` it prints `counterexample (7 states)`
    `forbidden(Row, Row.c32 == 2, Row.c0 != 3, …)` over every other column. At
    `--instance-count 8`: `counterexample (511 states)`. At `--instance-count 255`:
    `ok (256 states)`, `result: ok`, with the two `usecase` declarations in either order.
+
+**P54** (run by the review; models kept outside the repository). An entity
+`Row { id: Int @pk; n: Int @null }`, a use case `Create` that creates a `Row` with
+`sets(Create, Row.n == 255)`, and `forbidden(Row, Row.n >= 200)`, under
+`--instance-count 1 --int-range-max 255`: `ok (2 states)`, `result: ok`. With 254 in place
+of 255, or with `n: Int @default(0)`, the same command prints `counterexample`. The Enum
+case replaces `n` with `s: Enum(v0, v1, …, v255) @null` (256 declared values), sets
+`Row.s == v255`, and forbids `Row.s != null`, at the default bounds: `ok`; with `v254`,
+`counterexample`.
