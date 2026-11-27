@@ -331,8 +331,8 @@ Hence `Σ_j` agrees for all `j`, and with it everything the readers below comput
 | `Twin::DenseBinding` | `Bindings::id_numbered` | yes | every `shadow` run |
 | `Twin::Seen` | `Seen` lookups | yes | every `shadow` run |
 | `Twin::Hit` | `Probe::Hit` | no (`Probing::Off`) | `shadow` runs under `RDRA_ISH_FORCE_PROBES` (one CI run, clinic-ops) |
-| `Twin::Recent` | the reader's `Recent` lookup | no | same |
-| `Twin::SeenGrowth` | the shared table's growth (`table::Writer`) | no | same |
+| `Twin::Recent` | the reader's `Recent` lookup | no | `shadow` runs under `RDRA_ISH_FORCE_PROBES` |
+| `Twin::SeenGrowth` | the growth of `Seen`'s index, after every insert: the shared table's (`table::Writer`) under probing, the plain one's otherwise | yes | every `shadow` run (P18, fixed in #473) |
 
 The unit test `explore/tests.rs::a_run_is_the_same_on_any_number_of_threads` compares 1, 2,
 3, 4, 7 and 17 workers with `R_0`, on a complete and a capped run, with probing on at 4
@@ -761,7 +761,8 @@ each of its variants a fair action whose enabledness reads its mark (event-order
 - **Bounded mechanical evidence.** The Kani harnesses cover widths far below where P50
   begins and no domain of more than 256 values (P54); `Twin::Packed` and `Twin::Seen` would
   detect P50 but no `shadow` input is that wide; other shadow twins skip runs above 200,000
-  or 2,500,000 states (P17) and the probe twins run in one CI job (P18).
+  or 2,500,000 states, and since #473 say so (P17), and the probe twins run in one CI job,
+  on code release builds do not run (P18).
 - **Readers share code with the checks they certify.** `unfair_loop` and `avoid` both use
   `moves` and `Property::fair_instance`; `explain_property` and `liveness_search` both use
   `holds_bound` and `triggers`. Self-certification catches a fault in the search, not in
