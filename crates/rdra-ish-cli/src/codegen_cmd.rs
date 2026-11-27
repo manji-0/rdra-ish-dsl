@@ -23,7 +23,7 @@ use rdra_ish_emit::codegen::ir::DomainModel;
 use rdra_ish_emit::codegen::{generate_all, generate_json, CheckStatus, Lang, Options};
 
 use crate::cli::CodegenLang;
-use crate::generated_file::{check_code, check_traces, stamp, stamp_traces};
+use crate::generated_file::{check_code, check_traces, stamp, stamp_traces, COMMAND_LINE};
 use crate::load::load_clean;
 use crate::memory::generator_caps;
 use crate::paths::{label, shown};
@@ -40,6 +40,8 @@ pub(crate) struct Request {
     pub conformance: Option<usize>,
     /// TypeScript: seal the state types (`--seal`, `[code.ts] seal`).
     pub seal: bool,
+    /// Rust: derive serde on the data types (`[code.rust] serde`).
+    pub serde: bool,
     /// The code is the model adapter (`--adapter`, `[code.<lang>] adapter`), not the domain.
     pub adapter: bool,
     /// The inputs as the header names them.
@@ -135,6 +137,7 @@ pub fn run_codegen(args: CodegenArgs<'_>) -> Result<()> {
         allow_failing: args.allow_failing,
         conformance: args.conformance.map(|(_, states)| states),
         seal: args.seal,
+        serde: false,
         adapter: args.adapter,
         model_path: args
             .inputs
@@ -146,9 +149,9 @@ pub fn run_codegen(args: CodegenArgs<'_>) -> Result<()> {
     };
     let generated = generate(&loaded, &request)?;
     if let Some(path) = args.check_file {
-        let mut same = check_code(path, &generated.code, &generated.model_hash)?;
+        let mut same = check_code(path, &generated.code, &generated.model_hash, COMMAND_LINE)?;
         if let (Some((traces, _)), Some((tpath, _))) = (&generated.traces, args.conformance) {
-            same &= check_traces(tpath, traces, &generated.model_hash)?;
+            same &= check_traces(tpath, traces, &generated.model_hash, COMMAND_LINE)?;
         }
         if !same {
             std::process::exit(1);
@@ -249,6 +252,7 @@ pub(crate) fn generate(loaded: &Loaded, request: &Request) -> Result<Generated> 
         check,
         conformance: request.conformance,
         seal: request.seal,
+        serde: request.serde,
     };
     let bases = bases(request.base.as_deref());
     let site = |loc: &_| Some(without_base(format_location(program, loc)?, &bases));
@@ -334,6 +338,7 @@ pub(crate) fn configured_request(
             .as_ref()
             .map(|_| target.conformance_states.unwrap_or(DEFAULT_STATES)),
         seal: lang == Lang::TypeScript && target.seal.unwrap_or(false),
+        serde: lang == Lang::Rust && target.serde.unwrap_or(false),
         adapter: target.adapter.is_some(),
         model_path: inputs
             .iter()
@@ -379,6 +384,18 @@ pub(crate) fn code_manifest(manifest: Option<&Manifest>) -> Result<&Manifest> {
                 if name != "ts" && (target.seal.is_some() || target.tsconfig.is_some()) {
                     bail!(
                         "[code.{name}] in {}: `seal` and `tsconfig` are for [code.ts] only",
+                        shown(&manifest.path)
+                    );
+                }
+                if name != "rust" && target.serde.is_some() {
+                    bail!(
+                        "[code.{name}] in {}: `serde` is for [code.rust] only",
+                        shown(&manifest.path)
+                    );
+                }
+                if target.serde == Some(true) && target.adapter.is_some() {
+                    bail!(
+                        "[code.{name}] in {}: `serde` derives on the domain code, and this table names `adapter`",
                         shown(&manifest.path)
                     );
                 }

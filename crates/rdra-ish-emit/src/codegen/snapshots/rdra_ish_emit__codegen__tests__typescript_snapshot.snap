@@ -669,6 +669,119 @@ export function runCancelOrder(order: Order): Result<CancelOrderOutcome, CancelO
   return { ok: false, error: { kind: "NotEnabled", usecase: "CancelOrder" } };
 }
 
+// ── Commit: what a result writes ──
+
+/** One row a commit writes, only where the row is still what `expected` names: when it is not, the commit writes nothing and the call is NotEnabled. A put stores the row (inserts it when `expected` is absent, else updates it); a delete removes it. `id` is null for an entity with no one-column key. */
+export type RowWrite =
+  | Readonly<{ kind: "put"; entity: "Customer"; id: CustomerId; row: Customer; expected: ExpectedSource }>
+  | Readonly<{ kind: "delete"; entity: "Customer"; id: CustomerId; expected: ExpectedSource }>
+  | Readonly<{ kind: "put"; entity: "OrderLine"; id: OrderLineId; row: OrderLine; expected: ExpectedSource }>
+  | Readonly<{ kind: "delete"; entity: "OrderLine"; id: OrderLineId; expected: ExpectedSource }>
+  | Readonly<{ kind: "put"; entity: "Order"; id: OrderId; row: OrderRow; expected: ExpectedSource }>
+  | Readonly<{ kind: "delete"; entity: "Order"; id: OrderId; expected: ExpectedSource }>;
+
+/** A run mark of a use case split into transactions, on one row: `step` is the step of the run that last wrote the row. */
+export type RunMark = never;
+
+/** One run mark a commit writes. A put at step 1 inserts the mark, where the row holds no mark of the use case; a put at a later step advances the row's mark from the step before; a delete removes the mark at its step, and the run ends on the row. */
+export type MarkWrite = Readonly<{ kind: "put" | "delete"; mark: RunMark }>;
+
+/** An event of any type a use case raises. */
+export type RaisedEvent = never;
+
+/** What one commit stores, in order: the rows, then the run marks, then the events. */
+export type Writes = Readonly<{
+  usecase: string;
+  rows: readonly RowWrite[];
+  marks: readonly MarkWrite[];
+  events: readonly RaisedEvent[];
+}>;
+
+/** The companion of PayResult. */
+export const PayResult = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: PayResult): Writes => {
+    const row0 = Order.toRow(r.order);
+    return { usecase: "Pay", rows: [{ kind: "put", entity: "Order", id: row0.id, row: row0, expected: r.order_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of CancelOrderResult. */
+export const CancelOrderResult = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: CancelOrderResult): Writes => {
+    const row0 = Order.toRow(r.order);
+    return { usecase: "CancelOrder", rows: [{ kind: "put", entity: "Order", id: row0.id, row: row0, expected: r.order_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of PlaceResult. */
+export const PlaceResult = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: PlaceResult): Writes => {
+    const row0 = Order.toRow(r.order);
+    return { usecase: "Place", rows: [{ kind: "put", entity: "Order", id: row0.id, row: row0, expected: r.order_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of PayOutcome. */
+export const PayOutcome = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: PayOutcome): Writes => {
+    const row0 = Order.toRow(r.order);
+    return { usecase: "Pay", rows: [{ kind: "put", entity: "Order", id: row0.id, row: row0, expected: r.order_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of CancelOrderOutcome. */
+export const CancelOrderOutcome = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: CancelOrderOutcome): Writes => {
+    const row0 = Order.toRow(r.order);
+    return { usecase: "CancelOrder", rows: [{ kind: "put", entity: "Order", id: row0.id, row: row0, expected: r.order_expected }], marks: [], events: [] };
+  },
+};
+
+/** A store that commits a result inside the transaction of the call: `commitWrites` calls it once per write, in order. Each method writes one item only where it is still what it names; `E` is the store's own error. */
+export type CommitStore<E> = Readonly<{
+  /** Writes the row where it is still what `expected` names: false, and nothing written, when it is not. */
+  writeRow: (write: RowWrite) => Promise<Result<boolean, E>>;
+  /** Writes the run mark where the row's mark is still what the step needs: none of the use case for a put at step 1, the step before for a later put, the mark's own step for a delete. False, and nothing written, when it is not. */
+  writeMark: (write: MarkWrite) => Promise<Result<boolean, E>>;
+  /** Records a raised event. */
+  recordEvent: (event: RaisedEvent) => Promise<Result<void, E>>;
+}>;
+
+/** Commits `writes` through `store`: every row, then every run mark, then every event, and stops at the first row or mark that is no longer what it names. It begins and ends no transaction: call it inside the transaction of the call, and roll back on an error. NotEnabled when a row or a run mark is no longer what the result expects; the store's error when the store fails. */
+export async function commitWrites<E>(store: CommitStore<E>, writes: Writes): Promise<Result<void, NotEnabled | E>> {
+  const notEnabled: NotEnabled = { kind: "NotEnabled", usecase: writes.usecase };
+  for (const write of writes.rows) {
+    const written = await store.writeRow(write);
+    if (!written.ok) {
+      return written;
+    }
+    if (!written.value) {
+      return { ok: false, error: notEnabled };
+    }
+  }
+  for (const write of writes.marks) {
+    const written = await store.writeMark(write);
+    if (!written.ok) {
+      return written;
+    }
+    if (!written.value) {
+      return { ok: false, error: notEnabled };
+    }
+  }
+  for (const event of writes.events) {
+    const recorded = await store.recordEvent(event);
+    if (!recorded.ok) {
+      return recorded;
+    }
+  }
+  return { ok: true, value: undefined };
+}
+
 // ── Contracts: one per use case, which the service implements ──
 
 /**

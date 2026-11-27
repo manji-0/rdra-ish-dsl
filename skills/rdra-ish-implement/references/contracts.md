@@ -14,6 +14,7 @@ domain = "../web/src/domain.ts"
 traces = "../web/src/traces.txt"
 probe = "../web/src/rdra_contract.ts"
 service = "../web/src/order_service.ts#OrderService"
+seal = true
 
 [code.go]
 domain = "../shop/domain/domain.go"
@@ -32,13 +33,18 @@ new = "svc.New()"
 | `module` | Rust: the generated module's path (`svc::domain`). Go: `domain`'s import path. |
 | `new` | An expression making a fresh service, for the conformance test. Required in Rust. |
 | `package` | Go: the package name of `domain`. Default `domain`. |
-| `seal`, `tsconfig` | TypeScript: write `domain` as `codegen --seal` does; the tsconfig the probe's `tsconfig.rdra.json` extends. |
+| `seal` | TypeScript: write `domain` as `codegen --seal` does. Set it with `domain`: a state built as an object literal, skipping the transition function, then fails `build` (TS2741) instead of passing `run`. |
+| `tsconfig` | TypeScript: the tsconfig the probe's `tsconfig.rdra.json` extends. |
+| `serde` | Rust: `true` derives `::serde::Serialize` and `::serde::Deserialize` on ids, scalars, value sets, rows, records, events and run marks, in the model's spelling; an entity with states goes over the wire as its row and comes back through `from_row`. The crate needs `serde` with `derive`. Default `false`. |
 | `root` | Where the build runs. Default: the nearest directory above `domain` with `Cargo.toml`, `go.mod`, `package.json`, or `tsconfig.json`. |
 | `build`, `run` | A command list replacing the language's default. |
 | `conformance_states` | The states the BFS behind the traces explores at most. Default `65536`. |
 
-An unknown key fails every loading command with the line. TypeScript `run` needs Node
-22.18 or later, and the service's imports name the `.ts` files.
+`[code.typescript]` is another spelling of `[code.ts]`. An unknown key fails every loading
+command with the line. TypeScript `run` needs Node 22.18 or later, the service's imports
+name the `.ts` files, and the `package.json` sets `"type": "module"` (npm 11's `npm init -y`
+writes `"commonjs"`: `build` then fails with `CodeCommonJs`, or `run` with a
+`CodeConformance` that says so).
 
 ## What `codegen` prints
 
@@ -78,16 +84,24 @@ An unknown key fails every loading command with the line. TypeScript `run` needs
 1. `prepare`: load the rows by id, convert each with `fromRow`, call the dispatcher, and
    return its result. Write nothing. An absent row is `NotEnabled`.
 2. `commit`: in one transaction, write each row only where it still is what the result's
-   `<row>_expected` names (`Absent` for a created row, `In { column, value }` for a state,
-   `Present` for a record): `UPDATE .. WHERE id = ? AND status = ?`. A write that matches no
+   `<row>_expected` names: `UPDATE .. WHERE id = ? AND status = ?`. A write that matches no
    row rolls back and is `NotEnabled`. Hold what `prepare` read until then (the
-   `OneTransaction` obligation).
+   `OneTransaction` obligation). The expected source per language:
+
+   | | Created row | Row in a state | Record |
+   |---|---|---|---|
+   | Rust `ExpectedSource` | `Absent` | `In { column, value }` | `Present` |
+   | TypeScript `ExpectedSource` | `{ kind: "absent" }` | `{ kind: "in", column, value }` | `{ kind: "present" }` |
+   | Go `ExpectedSource` | `{Absent: true}` | `{Column: "status", Value: "paid"}` | `{}` |
+
 3. `ConformancePort`: `seed` empties the store and stores a snapshot's rows; `snapshot`
    returns every row (state types as `<Entity>Row`), every pending run mark, and every
-   unconsumed event. In Go both return an `error` for a store that fails; return it rather
+   raised event a triggered use case reads. Nothing consumes a raised event: it stays on its
+   row. In Go both return an `error` for a store that fails; return it rather
    than panic. A seeded state can hold a child whose parent row is absent (`check` warns
    `PreExistingChildOfCreatedParent_*`), so a store that enforces `Ref_*` as a foreign key
-   turns that check off while `seed` runs.
+   turns that check off while `seed` runs. The harness makes a port with `new` once per
+   trace, so keep `new` cheap (one shared database that `seed` clears).
 
 The harness runs each trace on a fresh service, compares the store with the model's state
 after every call, and expects each call the model refuses to fail and change nothing. It
@@ -120,3 +134,59 @@ impl PayUseCase for Service {
 
 `self.order` loads a row and converts it with `Order::from_row`; `self.check` is the
 conditional write of step 2.
+
+The output also lists what each result commits, so `commit` need not name a result's fields.
+Implement `CommitStore` once, over every entity, run mark, and event: `write_row` writes a
+`RowWrite` (a put or a delete, with its `expected`), `write_mark` stores, advances, or deletes a
+run mark, and `record_event` keeps a raised event. Then each `commit_*` is one call, made
+inside the call's transaction, which rolls back on an error:
+
+| Rust | TypeScript | Go |
+|---|---|---|
+| `commit_writes(&mut store, write)` | `commitWrites(store, PayOutcome.writes(write))` | `CommitWrites(store, write)` |
+
+The helper stops with `NotEnabled` at the first row or mark that is no longer what the result
+names. The last step of a split use case returns the marks it ends (`ended_<row>_mark`), and
+the helper deletes them.
+
+In TypeScript:
+
+- A result holds states (`kind: "Paid"`), the store rows (`status: "paid"`). Answer an
+  API's writes and reads in one shape: pass the result's states through `Order.toRow`.
+- The scalar `Date` hides the global `Date` where it is imported by name. Import it
+  renamed (`import { Date as IsoDate }`) or import the module as a namespace.
+- Inputs are positional. Two of one type (`title: string, technicalField: string`) can be
+  swapped without a compile error, and the conformance run does not see the values of
+  columns the model does not track. Check such a call against the contract's parameter
+  names, and test it with distinct values.
+
+## An async Rust service
+<!-- derived-from ../../../docs/cli-reference.md#an-async-rust-service -->
+
+The Rust contracts are synchronous `&mut self`. On an async database crate (sqlx), keep the
+domain calls pure and do the I/O around them: write prepare and commit once as async methods,
+and let the HTTP handlers call those. For the conformance test, implement the contracts on an
+adapter that `block_on`s the same methods, with the runtime and pool shared across the
+per-trace `new`:
+
+```rust
+static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
+
+pub struct Conform(Service); // Service: the async service over a shared sqlx pool
+
+fn rt() -> &'static tokio::runtime::Runtime {
+    RT.get_or_init(|| tokio::runtime::Runtime::new().expect("a runtime"))
+}
+
+impl PayUseCase for Conform {
+    fn prepare_pay(&mut self, order: OrderId, paid_at: DateTime) -> Result<PayOutcome, PayError> {
+        rt().block_on(self.0.prepare_pay(order, paid_at))
+    }
+    fn commit_pay(&mut self, write: PayOutcome) -> Result<(), PayError> {
+        rt().block_on(self.0.commit_pay(write))
+    }
+}
+```
+
+Do not wrap the async service in a mutex behind the synchronous contracts for production:
+that serialises every request.

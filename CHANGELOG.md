@@ -27,6 +27,23 @@
   of a domain table shows the test's output (Go `-v`, Rust `--nocapture`), as an adapter
   table's did.
 
+- A Claude Code plugin. The repository is a plugin marketplace
+  (`.claude-plugin/marketplace.json`), and its `rdra-ish` plugin brings the agent skills and
+  the language server for `.rdra` files: `/plugin marketplace add manji-0/rdra-ish-dsl`, then
+  `/plugin install rdra-ish@rdra-ish`. The server runs `rdra-ish lsp` from `PATH`, which the
+  plugin does not install. `.claude-plugin/plugin.json` carries the workspace version, and
+  `scripts/check-release-version.sh` checks it with the others.
+- `rdra-ish lsp` runs the language server over stdin and stdout, the same server as
+  `rdra-ish-lsp`, so the PyPI install has it. The release binary grows by about a fifth.
+- `serde = true` in `[code.rust]` derives `::serde::Serialize` and `::serde::Deserialize` on
+  the data types of the generated Rust code: ids as their value, scalars and value sets in the
+  model's spelling and back through their parsers, rows, records, DTOs, events and run marks
+  as plain structs, and each entity with states as its row, back through `from_row`. The
+  state structs, errors, results and conformance types get no derive. Off by default, and the
+  output without it does not change; `serde` under `[code.go]` or `[code.ts]`, or `serde = true`
+  with `adapter`, makes `--code` exit 1. docs/cli-reference.md, "The code tables", also says how a
+  service on an async database crate keeps the synchronous contracts: the I/O goes around
+  the pure domain functions, and the conformance test `block_on`s the same async methods.
 - The conformance traces try every refusal of the model and check its kind (#439, PR 4). The
   format line is now `# rdra-ish conformance traces 4`, so traces and harnesses of an earlier
   version must be generated again (`check --code=fresh` says they are stale).
@@ -55,6 +72,25 @@
   - **Size.** On insurance-claim-ops the traces take 16 s and 109 MB, against 4 s and 15 MB
     before this change and the fix of the second-column choices. The traces of every model
     that has them change.
+- The codegen output (experimental) lists what each result commits, as data, in Rust, Go and
+  TypeScript (docs/design/algebraic-codegen.md, "Committing a result"). Three services built on
+  the output each wrote this glue by hand (about 160 lines in Rust, 550 in TypeScript, and a
+  script that generated 2,326 lines in Go).
+  - **Types.** `RowWrite` (a put or a delete of any entity's row, with its id and `expected`),
+    `RunMark` and `MarkWrite` (a run mark stored, advanced, or deleted), `RaisedEvent`, and
+    `Writes`. Rust and Go also have `StoredRow` and `StoredId`.
+  - **Accessor.** Every result and outcome type lists its rows, marks, and events: the trait
+    `IntoWrites` in Rust, the method `Writes()` and the interface `Committable` in Go, and a
+    companion `<Type>.writes(r)` in TypeScript.
+  - **Helper.** `commit_writes` / `CommitWrites` / `commitWrites` writes a `Writes` through a
+    `CommitStore` the service implements once (write a row, write a mark, record an event). It
+    stops with `NotEnabled` at the first row or mark that is no longer what it names.
+  - **Marks to end.** The result of a step of a split use case now carries each run mark it
+    takes and ends (`ended_<row>_mark`), so the commit can delete the mark.
+
+  The change adds items only. It adds about 15% to the output (clinic-ops in Rust: 3,898 of
+  25,212 lines). A model type named like one of the new types keeps its name, and the new
+  type takes a trailing `_`.
 - `codegen --adapter` (experimental, with `--conformance`) prints a black-box model adapter in
   place of the domain code, for Rust, Go and TypeScript (#439): plain data of the model's
   state (`ModelState`: rows by id with their tracked columns, run marks, raises) and calls
@@ -128,9 +164,38 @@
   spends more than a tenth of its limit, or any check nine tenths of it. On every sample on 2
   solvers, and on the costliest samples on 1 and 3, the most is 161,000 units for a rule (1/124
   of 20,000,000) and 114,000 for a lemma (1/17 of 2,000,000).
+- `codegen --format json` (experimental) holds what a database mapper needs, as keys added
+  under format 1 (every key it had keeps its value): `events` (each event type a use case
+  raises, with the ids of the rows it marks), `actors` per use case (who performs it, as its
+  `Caller` takes them), `primary_key` and `unique` (`@unique`) on each field of an entity, and
+  each obligation's `kind`, `entity`, `columns` and `parent`. `domain_name` is documented.
+  The generated code does not change.
+- `rdra.toml` accepts `[code.typescript]` as another spelling of `[code.ts]`, as `--lang
+  typescript` spells `--lang ts`. Naming both is an error (one table named twice).
 
 ### Changed
 
+- `check --code` (experimental) says more of what failed, from three services built on the
+  generated code: the compiler's whole output prints before the findings (rustc's errors
+  were never shown); `CodeUnmapped` lists each unmapped error, and a `code:` line keeps the
+  message's further lines (which member a TS2322 says differs) and shows its path relative
+  to the working directory, as the other paths are; a call of a dispatcher or transition
+  function (Go `RunPay`, `PayFromOpen`) maps to its use case, and so does an argument-count
+  error (TS2554, E0061) by the call on its line; a probe that cannot resolve the service is
+  one `CodeServiceNotFound` pointing at `service` in rdra.toml and `codegen --probe`, not
+  one `CodeError` per use case; a failed run keeps the harness's `model only:` and
+  `store only:` rows, and says where the service panicked or threw when the harness
+  reported nothing, and a file the TypeScript probe cannot open (the traces at a wrong
+  path) as such rather than `the service threw: ENOENT`; a `generator changed` names the
+  table's settings in rdra.toml first.
+  The CLI reference and the implement skill say what a pass does not show: the rest of the
+  application, migrations, held locks, and that a raised event is never consumed.
+- The self-check of `check --code=run` picks its mutants in linear time (#439): it built
+  the text of every candidate row and listed the states that differ for every call. On the
+  traces of clinic-ops and patent-ops at the default cap (4.3 and 3.7 million lines),
+  picking them took 299 s and 487 s and now takes 0.36 s and 0.33 s, in a release build.
+  The same seed picks the same mutants: the function it replaces is kept as its twin, which
+  a `shadow` build runs on every call and the tests compare on random traces.
 - `verify --prove` (experimental) finds lemmas from a rule's counterexample to induction
   (#428), in the manner of IC3: the CTI's state over its rows becomes a set of facts, and
   the clause that forbids them is weakened, one fact at a time, while it holds initially and
@@ -277,6 +342,23 @@
   the CLI reference. Verdicts and stdout do not change; in a release build the
   `RDRA_ISH_WF_REDUCED_STATS` line no longer fills its divergence columns. The test-only
   `RDRA_ISH_TEST_QUOTIENT_HITS` prints the quotient cache's hits for the CLI tests.
+- TypeScript: `check --code` names a package that makes the probe and the domain code
+  CommonJS (`"type": "commonjs"`, which npm 11's `npm init -y` writes); they are ES modules
+  and need `"type": "module"`. At `build` under `verbatimModuleSyntax`, the new
+  `CodeCommonJs` stands in for the `CodeError` per use case and `CodeUnmapped` that tsc's
+  TS1286 / TS1287 / TS1295 gave; at `run`, the `CodeConformance` says so in place of Node's
+  last line.
+  The docs and the implement skill say so, recommend `seal = true` in `[code.ts]` (a state
+  built as an object literal, skipping the transition function, fails `build` instead of
+  passing `run`), and show how to answer an API's writes and reads in one shape
+  (`<Entity>.toRow` over a result's states) and how to import the scalar `Date` without
+  hiding the global.
+- TypeScript: the conformance probe reads the traces line by line (`readline` over
+  `createReadStream`) instead of `readFileSync` into one string, which Node refuses past
+  about 512 MB (`ERR_STRING_TOO_LONG`). `conform`, of the domain code and of the model
+  adapter, takes the text as before or a function returning the lines as an
+  `AsyncIterable<string>` (the adapter's `conform` calls it once per run). Generated output changes:
+  the probe's trace reading, and `conform`'s parameter type and loop.
 
 ### Added
 
@@ -313,6 +395,11 @@
 
 ### Fixed
 
+- `check --code=fresh` counts one error per stale file: a domain file and traces both stale
+  printed two error blocks over `FAIL: code: 1 error(s)`.
+- The obligation ledger reads no marker inside a string literal, nor one whose name is not
+  letters, digits and `_`: a script printing `` `-- rdra: obligation ${ob}` `` was a
+  `` CodeObligationUnknown_${ob}`); `` warning.
 - Go: the contract probe and the adapter probe sort their import group by path, so `gofmt -l`
   no longer names a probe whose service package's import path sorts before the domain's
   (`example.com/clinic/clinic` before `example.com/clinic/domain`). The Go domain code passes

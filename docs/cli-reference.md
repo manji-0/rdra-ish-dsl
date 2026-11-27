@@ -24,6 +24,7 @@ rdra-ish <COMMAND> --help # or -h; every command takes it
 | [`list`](#list) | Print model elements as a table, JSON, CSV, or Markdown. |
 | [`states`](#states) | Derive the reachable state patterns of each entity. |
 | [`codegen`](#codegen) | Print the model's domain types and functions as TypeScript, Rust, or Go. |
+| [`lsp`](#lsp) | Run the language server over stdin and stdout. |
 
 [compatibility.md](./compatibility.md) says which commands, flags, exit codes, and output
 formats are stable.
@@ -238,17 +239,27 @@ table. The LSP never does.
 | Language | `build` | `run` |
 |---|---|---|
 | Rust | `cargo check --test <probe> --message-format=json` in `root` | `cargo test --test <probe> -- rdra_conformance --nocapture` |
-| TypeScript | `tsc --noEmit --pretty false -p tsconfig.rdra.json` in `root` | `node <probe>` (Node 22.18 or later, by type stripping; the service imports name the `.ts` files) |
+| TypeScript | `tsc --noEmit --pretty false -p tsconfig.rdra.json` in `root` | `node <probe>` (Node 22.18 or later, by type stripping; the service imports name the `.ts` files; the `package.json` above the probe sets `"type": "module"`) |
 | Go | `go test -count=1 -run ^$ -gcflags=-e ./<probe dir>` in `root` | `go test -count=1 -v -run ^TestRdraConformance$ ./<probe dir>` |
 
 `tsconfig.rdra.json` is a generated file that extends the project's tsconfig and holds only
-the probe. An older Node fails `run` with a `CodeConformance` that says so; a project that
-runs TypeScript another way sets `run` (`["npx", "tsx", "src/rdra_contract.ts"]`). Go names
+the probe. An older Node fails `run` with a `CodeConformance` that says so. The probe and
+the domain code are ES modules, and npm 11's `npm init -y` writes `"type": "commonjs"`: under
+`verbatimModuleSyntax` tsc then fails `build` with one `CodeCommonJs` in place of an error
+per use case, and without it Node fails `run` with a `CodeConformance` that names the
+setting. A project that runs TypeScript another way sets `run` (`["npx", "tsx", "src/rdra_contract.ts"]`). Go names
 one missing method per error, so the Go probe names each method of a contract on a line of
 its own.
 
-A compiler error maps to a use case by the probe line it is on (one line per use case), or by
-the generated method or contract it names. One block per use case and kind:
+The compiler's whole output comes first on stderr (for Rust, the text rustc prints for each
+error of cargo's JSON). A compiler error then maps to a use case by the probe line it is on
+(one line per use case), by the generated method, contract, dispatcher, or transition
+function it names (Go `RunPay`, `PayFromOpen`), or, for an error about a call's number of
+arguments that names no function (tsc TS2554, rustc E0061), by the generated function the
+call on its line names. The `code:` line quotes the whole message, its further lines
+indented under it (which member a TS2322 says differs, Go's `have` and `want`), with the
+path relative to the working directory, as the other paths of the check are. One block per
+use case and kind:
 
 ```
 error[CodeMissingUseCase_Ship]: use case Ship has no implementation in svc::service::Service
@@ -257,7 +268,11 @@ error[CodeMissingUseCase_Ship]: use case Ship has no implementation in svc::serv
   fix:   impl ShipUseCase for svc::service::Service (prepare_ship, commit_ship)
 ```
 
-A stale file prints under the cause lines of `codegen --check`:
+A stale file prints under the cause lines of `codegen --check`, and each stale file counts
+as one error in the summary line. A `generator changed` names the settings of the table in
+`rdra.toml` first (`the settings of [code.rust] in rdra.toml (paths, service, ...) changed`):
+the fingerprint records the model and the file, not the settings, so a changed `service` or
+path looks the same as another rdra-ish version.
 
 ```
 error: ../svc/src/domain.rs is not what `codegen` generates from the model
@@ -270,7 +285,10 @@ error: ../svc/src/domain.rs is not what `codegen` generates from the model
 **The obligation ledger.** At every level, each obligation the generated code lists
 (`Unique_Payment_Order`, `Ref_Order_customer_id`, ...) needs an owner: a marker line
 `rdra: obligation <name> [file]` after any comment token (`//`, `#`, `--`) in the service
-code, or `<name> = "<file>"` under `[code.obligations]`. A marker's file is relative to the
+code, or `<name> = "<file>"` under `[code.obligations]`. A name is letters, digits, and `_`,
+as the generator builds them, and a marker after an odd number of `"` or `` ` `` on its line
+is inside a string literal: neither owns anything, so code that prints markers
+(`` `-- rdra: obligation ${name}` ``) is not read as one. A marker's file is relative to the
 root it was found under; without one, the owner is the marker's own file. The check says an
 obligation **has an owner**, never that it holds, and confirms the owning file exists.
 Markers are searched under each table's `root`, skipping hidden directories, `target`,
@@ -290,15 +308,42 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
 | `CodeIncomplete_<UseCase>` | error | It implements the contract without some methods (E0046; TS2739 / TS2740 / TS2741; Go `missing method`, `has no field or method`). |
 | `CodeSignature_<UseCase>` | error | A method takes or returns other types than the contract's (E0053, E0050; TS2322; Go `wrong type for method`). |
 | `CodeError_<UseCase>` | error | Another error on the use case's probe line or naming its methods. |
-| `CodeUnmapped` | error | The count of errors that belong to no use case, the first one quoted. |
+| `CodeServiceNotFound` | error | Errors on the probe that cannot resolve the service `service` names (Go `undefined:`, rustc E0433, tsc TS2305 / TS2307): one finding for them all, whose `fix:` points at `service` in the table and `codegen --probe`. A renamed service type or path gives this, not one `CodeError` per use case. |
+| `CodeUnmapped` | error | The errors that belong to no use case: the count, and the first line of each (at most 20; the rest are in the compiler's output above). |
 | `CodeBuildFailed` | error | The build failed with no error rdra-ish reads. |
-| `CodeConformance` | error | `run`: the conformance test failed; the message is the harness's first difference. |
+| `CodeCommonJs` | error | TypeScript: tsc compiles the probe and the domain code as CommonJS under `verbatimModuleSyntax` (TS1286, TS1287, TS1295); the one finding of that build. Fix: `"type": "module"` in `package.json`. |
+| `CodeConformance` | error | `run`: the conformance test failed. The `code:` line is the harness's first difference with its `model only:` and `store only:` rows; when the harness reported nothing, where the service panicked (Rust, Go) or what it threw (Node); else the output's last line. |
 | `CodeMutantSurvived` | error | `run`: a mutant trace of the self-check passed. The `code:` line says whether the run passed or failed at another row. |
 | `CodeUnimplemented` | warning; error with `--deny-incomplete` | `run`: the run passed, but calls reached the [unimplemented port](#the-unimplemented-port) (the message names their use cases and calls), or the run printed no line saying whether any did. |
 | `CodeCoverageIncomplete` | warning; error with `--deny-incomplete` | `run`: the BFS behind the traces stopped at `conformance_states`, so the moves past it are not run and no call is tried as refused; or the traces leave refusals of the model untried, or never run a use case of the port. |
 | `CodeObligationUnowned_<name>` | error | The obligation has no owner. |
 | `CodeObligationOwnerMissing_<name>` | error | Its owner names a file that does not exist. |
 | `CodeObligationUnknown_<name>` | warning | An owner names an obligation the model does not have. |
+
+#### What a pass does not show
+
+- `build` compiles the probe and what it imports: Rust `cargo check --test <probe>` (the
+  library and that test), TypeScript the files `tsconfig.rdra.json` reaches from the probe,
+  Go the probe's package. An `OK` at `build` says nothing of a binary, a handler, or a file
+  the probe does not reach.
+- Each trace runs on a fresh store: the harness calls `new` once per trace (181,095
+  times on the clinic-ops sample at the default `conformance_states`) and `seed` empties the store before it stores the
+  trace's rows. Make `new` cheap: share one database and let `seed` clear it, rather than
+  open or migrate one per call. Migrations, and data an earlier version of the service
+  stored, are outside what the check runs.
+- The `OneTransaction` obligation's owner is a declaration, as every owner is. What the run
+  shows of it is the interleaved commits: a commit prepared before another call changed its
+  row must be refused. That is the optimistic write (`UPDATE .. WHERE id = ? AND <tag> = ?`,
+  a write that matches no row rolls back as `NotEnabled`). The harness is one thread, so
+  held reads (`SELECT .. FOR UPDATE`, serializable isolation) and races between real
+  connections are not shown.
+- A raised event is never consumed. Once a raiser ran on a row, the raise stays recorded on
+  it (rule 3 of the [event order](./design/event-order.md#the-rules)): a delete does not
+  clear it, and the use case it triggers may run on that row as often as its states and
+  guards allow. `snapshot` lists each raise a triggered use case reads, and the harness
+  compares them, so the store keeps them as long as the row's history matters, with no
+  queue to drain. A `.counted(k)` trigger is the exception, and `codegen` prints no
+  function for its use cases.
 
 #### What a run covers
 
@@ -743,7 +788,8 @@ Error: /work/shop/rdra.toml:3: unknown field `verfiy`, expected one of `model`, 
 
 ### The code tables
 
-`[code.rust]`, `[code.go]`, and `[code.ts]` name the files `codegen --code` writes for a
+`[code.rust]`, `[code.go]`, and `[code.ts]` (also spelled `[code.typescript]`, as
+`--lang typescript` is; one of the two) name the files `codegen --code` writes for a
 service in that language, which [`check --code`](#check---code) holds against the model. Each
 path is relative to the directory of `rdra.toml`. A table names `domain` or `adapter`, not
 both.
@@ -785,12 +831,29 @@ Unique_Payment_Order = "../service/migrations/003_payment.sql"
 | `package` | Go: the package name of `domain` (`--package`), default `domain`. When set, the probe imports the domain package under this name, so an import path whose last element differs builds. |
 | `root` | The directory the build runs in and the ledger scans. Default: the nearest directory above `domain` with `Cargo.toml`, `go.mod`, `package.json`, or `tsconfig.json`. |
 | `build`, `run` | The command `--code=build` / `--code=run` runs in place of the default, as a list of arguments. Runs only when that level is given on the command line. |
-| `seal` | TypeScript: `true` writes `domain` as `codegen --seal` does. Default `false`. |
+| `seal` | TypeScript: `true` writes `domain` as `codegen --seal` does. Default `false`; set it in a table with `domain` (an `adapter` has no state types, and ignores it). Without it, a service can build a state as an object literal and skip the transition function and its rule checks, and `run`, which compares only what is stored, passes it wherever the traces store the same rows. With it, the literal fails `build` (TS2741). A service that makes states only through `fromRow` and the transition functions builds the same either way. |
 | `tsconfig` | TypeScript: the tsconfig `tsconfig.rdra.json` extends. Default: `tsconfig.json` in `root` when it exists; else `tsconfig.rdra.json` sets `strict` itself. |
+| `serde` | Rust: `true` adds `::serde::Serialize` and `::serde::Deserialize` to the derives of the data types in `domain`, so the crate needs `serde` with its `derive` feature. Ids go over the wire as their value, and scalars and value sets in the model's spelling (`"paid"`, `"12.50"`); a scalar or value set comes back through its parser, so text the parser refuses fails to deserialize. Rows, records, DTOs, events and run marks are plain structs with each column under its model name. An entity with states goes over the wire as its `<Entity>Row` and comes back through `from_row`, so a row that fits no state fails; a state struct gets no derive, and stays made only by a transition function and `from_row`. The errors, results and dispatcher outcomes, and the conformance types, get none. Default `false`, which leaves the output as it was before the key. |
 
 An unknown key fails every loading command, as under `[check]`. `seal` or `tsconfig` under
-`[code.rust]` or `[code.go]` makes `--code` exit 1, and so does a table with neither `domain`
-nor `adapter`, with both, or with `adapter` and no `traces`.
+`[code.rust]` or `[code.go]` makes `--code` exit 1, and so does `serde` under `[code.go]` or
+`[code.ts]`, `serde = true` in a table with `adapter`, a table with neither `domain` nor `adapter`, one with
+both, or one with `adapter` and no `traces`.
+
+#### An async Rust service
+
+The Rust contracts and `ConformancePort` are synchronous (`&mut self`). A service on an async
+database crate (sqlx, tokio-postgres) keeps them that way and does its I/O around the domain
+functions, which are pure: an async handler opens a transaction, loads the rows, converts each
+with `from_row`, calls the dispatcher (`run_<use case>`), writes the result's rows where they
+still are what `<row>_expected` names, and commits. Write that prepare and commit once, as
+async methods of the service. For the conformance test, implement the contracts on a small
+adapter that owns a runtime and the async service and calls `block_on` on those same methods,
+so the check runs the code production runs. The test calls `new` once per trace, so share the
+runtime and the connection pool across calls (a `static` `OnceLock`) instead of making them in
+`new`. Do not put the async service behind a mutex to call it through the synchronous
+contracts from a handler: that serialises every request. A service on a synchronous driver
+(rusqlite) can implement the contracts directly and run them on `spawn_blocking`.
 
 #### The model adapter
 <!-- derived-from ./design/code-check.md#the-black-box-model-adapter -->
@@ -1966,6 +2029,10 @@ set, and each entity and DTO as a record. A key column takes its parent's id typ
 column is `T | null`, `Option<T>`, or `*T`. Ids and scalars are opaque and made only by parsing:
 `OrderId.parse(1)` / `OrderId::from(7)` / `ParseOrderId`, `"12.50".parse::<Money>()`,
 `ParseMoney("12.50")`; text of another shape is `InvalidValue`.
+TypeScript exports each scalar as a type and a companion object of the same name, so a
+module that imports `Date` by name hides the global `Date` (as any model name that is also a
+global's would): import it renamed (`import { Date as IsoDate } from "./domain.ts"`) or
+import the module as a namespace (`import * as d`).
 
 **State types.** An entity whose tag column is an inline `Enum` that `transitions` drive is a
 state type: one variant per value of the tag (among the columns `transitions` names: `status`,
@@ -1991,6 +2058,13 @@ column marked `@null` keeps its declared values as states: its row column is nul
 row whose state column is null is an `InvalidRow`. TypeScript's `parseOrderRow(value:
 unknown)` reads a row from outside, each column through its type's parser.
 
+The two serialize differently: a state names its variant in `kind` (`"Paid"`, the state's
+name) and has no tag column, a row holds the tag column with the model's value (`status:
+"paid"`). A result holds states, a store holds rows. An API that answers a write with the
+result and a read with the stored row sends two shapes for one entity unless it converts one:
+pass each state of the result through `Order.toRow` (it takes any state of the entity) to
+answer both with rows, or each row through `Order.fromRow` to answer both with states.
+
 **Transition functions.** Each use case gets one function per combination of its rows'
 source states (`cancelFromPending`, `cancelFromPaid`), so a call from another state does not
 compile. It takes the rows it reads, then an input per value the model leaves open (a column
@@ -2001,7 +2075,11 @@ doc says why. It returns `<Name>Result` with the rows written or created, the id
 deleted row, the raised events, and per written row the source it must still have at commit
 (`order_expected`: `Absent`, `In { column, value }`, or `Present`); the obligations ask for one
 transaction per call and a guarded write (`UPDATE .. WHERE id = ? AND status = ?`), a write that
-matches no row rolling back as `NotEnabled`.
+matches no row rolling back as `NotEnabled`. The last step of a split use case also returns
+the run marks it ends (`ended_<row>_mark`). Every result and outcome lists what its commit
+writes (`into_writes`, `Writes()`, `<Type>.writes`), and `commit_writes` / `CommitWrites` /
+`commitWrites` writes that list through a `CommitStore` the service implements once
+([design](design/algebraic-codegen.md#committing-a-result)).
 
 - **Errors.** A condition applied to the use case is checked first; when it fails the
   function returns `Rejected` (TypeScript `{ kind: "Rejected", condition, label, site }`). A row
@@ -2071,7 +2149,9 @@ stores it in one transaction; either returns the use case's error when it does n
 test calls `conform(|| MyService::new(), &traces)` (Rust), `Conform(func() ConformancePort {
 return newService() }, traces)` (Go), or `await conform(() => newService(), traces)`
 (TypeScript, whose port members return `Promise`s; it returns `Result<ConformanceReport,
-string>`). Per trace, the harness starts a fresh port, seeds it, makes each call, and compares
+string>`, and `traces` is the file's text or a function returning its lines as an
+`AsyncIterable<string>`, which the probe uses so a file past Node's longest string, about
+512 MB, still runs). Per trace, the harness starts a fresh port, seeds it, makes each call, and compares
 the store, cut down to what the model tracks (an enum's value, null or not, an integer, a key's
 parent), with the state BFS reached. A refused call must fail and change nothing, and so must
 a commit after another call changed a row it writes. It returns the first difference, with
@@ -2113,7 +2193,7 @@ and prints the causes, the count of differing lines, and the first difference:
 |---|---|
 | `file edited` | The file no longer matches its own code hash. |
 | `model changed` | The model's source text differs from the text the fingerprint records. |
-| `generator changed` | Neither changed, so `codegen`'s output did: another version, `--lang`, `--package`, `--allow-failing`, or other input paths. |
+| `generator changed` | Neither changed, so `codegen`'s output did: other settings (`--lang`, `--package`, `--allow-failing`, `--conformance-states`, or other input paths; under `check --code`, the table's settings in `rdra.toml`), or another version. |
 | no fingerprint line | The file was not generated by `codegen`, or the line was removed. |
 
 Restore or regenerate the file; code that finishes the output belongs in other files. With
@@ -2130,11 +2210,14 @@ not change it.
 |---|---|
 | `format` | `"rdra-ish codegen json 1"`; a reader refuses another. |
 | `generator`, `model`, `check` | The rdra-ish version, the inputs, and whether `check` passed (`passed`, and `bounds` or `errors`). |
-| `types` | Value sets (`kind: "enum"`, with `variation` and `site` for a variation), id types (`"id"`, with `entity` and `repr`), records (`"entity"` or `"dto"`, with `id`, `site`, `fields`). A field has `name`, `ident` (PascalCase), `type` (`{"kind": "scalar" \| "enum" \| "id" \| "rows", "name"}`), and `nullable`. |
+| `types` | Value sets (`kind: "enum"`, with `variation` and `site` for a variation), id types (`"id"`, with `entity` and `repr`), records (`"entity"` or `"dto"`, with `id`, `site`, `fields`). A field has `name` (the column as the model and the row spell it), `domain_name` (the field's name in the generated state and record types, from which each language derives its own spelling; today the same as `name`), `ident` (PascalCase), `type` (`{"kind": "scalar" \| "enum" \| "id" \| "rows", "name"}`), and `nullable`. A field of an entity record also has `primary_key` and `unique` (`@unique` on the column; a key spanning several columns is a `unique` obligation). |
 | `states` | Each state type: `name`, `entity`, `site`, `row`, `tag`, and `variants` with their `fields` and `always_null` columns. |
-| `usecases` | Every use case in model order: `id`, `label`, `site`, `kind` (`functions`, `unprinted`, or `read-only`), and `actions`, each with its `functions`, `dispatcher`, and why it is `unprinted`. |
+| `events` | Each event type a use case raises: `name`, `doc`, and `fields`, the id of each row the raise marks (`name`, `entity`, `type`). |
+| `usecases` | Every use case in model order: `id`, `label`, `site`, `kind` (`functions`, `unprinted`, or `read-only`), `actors` (the ids of the actors that perform it, whose capabilities its `Caller` takes; empty for one an event or a timer starts), and `actions`, each with its `functions`, `dispatcher`, and why it is `unprinted`. |
 | `functions` | Each function: `name`, `usecase`, `action`, `step`, `rows`, `marks`, `event`, `inputs`, `conditions`, `result`, `writes`, `raises`. |
-| `obligations` | Each obligation: `name`, `checked`, `text`, `site`. |
+| `obligations` | Each obligation: `name`, `checked`, `text`, `site`, and what it is about: `kind` (`reference`, `unique`, `min-children`, `max-children`, `on-delete`, `on-update`, `check`, `derived`, `invariant`, `rule-checks`, `transaction`, `run-marks`, `complete-rows`, or `not-met`), `entity` (or `null`), `columns` (the key, the unique set, or the column a check or a derivation is on; `[]` when none), and `parent` (the entity a key names, or `null`). |
+
+Keys are only added under one `format`: a reader of format 1 ignores a key it does not know.
 
 Sites are `path:line:col` relative to the working directory, or to `rdra.toml`'s directory under
 `--code`.
@@ -2174,6 +2257,23 @@ A `shadow` build also reads `RDRA_ISH_SHADOW_STATS`, `RDRA_ISH_DROP_RULE`, and
 costly columns too), `RDRA_PERF_EVAL_TWICE`, and the measurement switches the `perf` module
 lists (`crates/rdra-ish-core/src/perf.rs`). The test suites read `RDRA_REQUIRE_*` and other
 variables of their own.
+
+---
+
+## `lsp`
+
+Run the language server over stdin and stdout.
+
+```
+rdra-ish lsp
+```
+
+`rdra-ish lsp` is the server the `rdra-ish-lsp` binary runs, built into the CLI, so a PyPI
+install (`uv tool install rdra-ish`) has it too. It takes no arguments and reads no file
+until a client opens a workspace. Stdout carries only protocol messages; nothing else is
+written to it. It exits after the client's `exit` notification. The
+[Claude Code plugin](../README.md#claude-code-plugin) starts it for `.rdra` files.
+[Editor support](#editor-support) says what the server does.
 
 ---
 

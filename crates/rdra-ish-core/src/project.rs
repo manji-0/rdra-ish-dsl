@@ -39,6 +39,8 @@ pub struct Manifest {
 pub struct CodeSection {
     pub rust: Option<CodeTarget>,
     pub go: Option<CodeTarget>,
+    /// `[code.ts]`, or `[code.typescript]` as `--lang typescript` spells it.
+    #[serde(alias = "typescript")]
     pub ts: Option<CodeTarget>,
     /// `[code.obligations]`: obligation name -> the file that owns it.
     #[serde(default)]
@@ -52,6 +54,16 @@ impl CodeSection {
             .into_iter()
             .filter_map(|(name, t)| t.as_ref().map(|t| (name, t)))
             .collect()
+    }
+
+    /// The headers a table of `targets` may be spelled with: `[code.ts]` also as
+    /// `[code.typescript]`.
+    pub fn headers(name: &str) -> Vec<String> {
+        let mut headers = vec![format!("[code.{name}]")];
+        if name == "ts" {
+            headers.push("[code.typescript]".to_string());
+        }
+        headers
     }
 }
 
@@ -93,6 +105,8 @@ pub struct CodeTarget {
     pub run: Option<Vec<String>>,
     /// TypeScript: generate the state types sealed (`codegen --seal`).
     pub seal: Option<bool>,
+    /// Rust: derive serde's `Serialize` and `Deserialize` on the data types of `domain`.
+    pub serde: Option<bool>,
     /// TypeScript: the project's tsconfig that the generated `tsconfig.rdra.json` extends.
     /// Default: `tsconfig.json` in `root`, when it exists.
     pub tsconfig: Option<PathBuf>,
@@ -315,7 +329,11 @@ fn parse_manifest(path: &Path) -> Result<Manifest, ProjectError> {
         for (name, target) in code.targets() {
             if let Some(problem) = target.problem() {
                 let table = format!("[code.{name}]");
-                let line = text.lines().position(|l| l.trim() == table).map(|i| i + 1);
+                let headers = CodeSection::headers(name);
+                let line = text
+                    .lines()
+                    .position(|l| headers.iter().any(|h| l.trim() == h))
+                    .map(|i| i + 1);
                 return Err(fail(line, format!("{table} {problem}")));
             }
         }
@@ -621,6 +639,42 @@ mod tests {
 
         assert!(err.contains("rdra.toml:"), "{err}");
         assert!(err.contains("name"), "{err}");
+    }
+
+    #[test]
+    fn code_typescript_is_the_ts_table() {
+        let dir = repo();
+        write(
+            &dir.path().join("rdra.toml"),
+            "[model]\nname = \"shop\"\n\n[code.typescript]\ndomain = \"web/domain.ts\"\nseal = true\n",
+        );
+        let src = layout(dir.path());
+
+        let manifest = discover(std::slice::from_ref(&src)).unwrap().unwrap();
+        let code = manifest.code.unwrap();
+        assert_eq!(code.targets().len(), 1);
+        assert_eq!(code.ts.unwrap().seal, Some(true));
+
+        // Both spellings at once are one table named twice.
+        write(
+            &dir.path().join("rdra.toml"),
+            "[model]\nname = \"shop\"\n\n[code.ts]\ndomain = \"a.ts\"\n\n[code.typescript]\ndomain = \"b.ts\"\n",
+        );
+        let err = load_project(std::slice::from_ref(&src), None)
+            .unwrap_err()
+            .to_string();
+        assert!(err.contains("duplicate"), "{err}");
+
+        // A problem in the table names the line it is spelled on.
+        write(
+            &dir.path().join("rdra.toml"),
+            "[model]\nname = \"shop\"\n\n[code.typescript]\ntraces = \"t.txt\"\n",
+        );
+        let err = load_project(&[src], None).unwrap_err().to_string();
+        assert!(
+            err.contains("rdra.toml:4: [code.ts] names neither"),
+            "{err}"
+        );
     }
 
     #[test]

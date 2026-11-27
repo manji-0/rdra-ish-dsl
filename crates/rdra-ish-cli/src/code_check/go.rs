@@ -277,11 +277,12 @@ impl Backend for GoBackend {
     }
 
     /// `go test` fails the conformance test with `rdra-ish conformance: <report>`: the
-    /// report's first line (`traces line N: ...`); the rest is in the output printed above.
+    /// report and the rows that differ; else a panic of the service; else the last line.
     fn run_failure(&self, stdout: &str, stderr: &str) -> Option<String> {
         let all = format!("{stdout}\n{stderr}");
-        let (_, rest) = all.split_once("rdra-ish conformance: ")?;
-        rest.lines().next().map(|l| l.trim().to_string())
+        super::harness_report(&all)
+            .or_else(|| super::panic_report(&all))
+            .or_else(|| super::last_line(&all))
     }
 
     fn implement_hint(&self, contract: &ContractDecl, service: &str, methods: &[&str]) -> String {
@@ -358,7 +359,10 @@ mod tests {
             GoBackend::default().run_failure(stdout, "").as_deref(),
             Some("traces line 40: after \"Pay 1\", the store differs from the model:")
         );
-        assert_eq!(GoBackend::default().run_failure("FAIL\n", ""), None);
+        assert_eq!(
+            GoBackend::default().run_failure("FAIL\n", "").as_deref(),
+            Some("FAIL")
+        );
     }
 
     #[test]

@@ -7,7 +7,9 @@ use rdra_ish_core::lifecycle::{At, InvKind, InvText, TransitionSystem};
 use rdra_ish_core::location::LocatedSpan;
 
 use super::actions::expr;
-use super::ir::{DomainModel, Expr, Obligation, RowParam, RuleCheck, ValidatorDecl};
+use super::ir::{
+    DomainModel, Expr, Obligation, ObligationSubject, RowParam, RuleCheck, ValidatorDecl,
+};
 use super::{CodegenError, Names};
 
 pub(super) fn add_validators(
@@ -66,7 +68,8 @@ pub(super) fn add_validators(
         })
         .collect();
 
-    let mut obligations: Vec<(String, String, Option<String>)> = Vec::new();
+    // Each with the entity it is about, where it binds one row.
+    let mut obligations: Vec<(String, String, Option<String>, Option<String>)> = Vec::new();
     for inv in ts.invariants() {
         if matches!(
             inv.text.kind(),
@@ -79,7 +82,7 @@ pub(super) fn add_validators(
         }
         let at = inv.site.span.as_ref().and_then(site);
         let [binder] = inv.binders.as_slice() else {
-            obligations.push((inv.name.clone(), text(&inv.text), at));
+            obligations.push((inv.name.clone(), text(&inv.text), at, None));
             continue;
         };
         let entity_ty = ts.entity(*binder).id.clone();
@@ -102,7 +105,7 @@ pub(super) fn add_validators(
             }
         }
         if failed || per_type.is_empty() {
-            obligations.push((inv.name.clone(), text(&inv.text), at));
+            obligations.push((inv.name.clone(), text(&inv.text), at, Some(entity_ty)));
             continue;
         }
         for (i, e) in per_type {
@@ -139,25 +142,38 @@ pub(super) fn add_validators(
             false,
             "every row the code writes keeps its rules: its RuleViolations is empty.".to_string(),
             None,
+            ObligationSubject::of("rule-checks"),
         );
     }
-    for (name, text, at) in obligations {
+    for (name, text, at, entity) in obligations {
         push(
             domain,
             name,
             true,
             format!("holds in every state ({text}); no one-row check prints it."),
             at,
+            ObligationSubject {
+                entity,
+                ..ObligationSubject::of("invariant")
+            },
         );
     }
     Ok(())
 }
 
-fn push(domain: &mut DomainModel, name: String, checked: bool, text: String, site: Option<String>) {
+fn push(
+    domain: &mut DomainModel,
+    name: String,
+    checked: bool,
+    text: String,
+    site: Option<String>,
+    subject: ObligationSubject,
+) {
     domain.obligations.push(Obligation {
         name,
         checked,
         text,
+        subject,
         site,
     });
 }

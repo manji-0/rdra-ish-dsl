@@ -13,7 +13,7 @@ path = "src/main.rs"
 
 [features]
 # `rdra-ish-core`'s `shadow`: every fast function with a reference twin is checked against it.
-shadow = ["rdra-ish-core/shadow"]
+shadow = ["rdra-ish-core/shadow", "rdra-ish-emit/shadow"]
 # `rdra-ish-core`'s `perf`, and a global allocator that counts what it hands out.
 perf = ["rdra-ish-core/perf"]
 
@@ -21,6 +21,7 @@ perf = ["rdra-ish-core/perf"]
 rdra-ish-syntax = { path = "../rdra-ish-syntax" }
 rdra-ish-core   = { path = "../rdra-ish-core" }
 rdra-ish-emit   = { path = "../rdra-ish-emit" }
+rdra-ish-lsp    = { path = "../rdra-ish-lsp" }
 clap        = { workspace = true }
 anyhow      = { workspace = true }
 miette      = { workspace = true, features = ["fancy"] }

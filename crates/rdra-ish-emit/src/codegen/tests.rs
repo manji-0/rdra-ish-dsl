@@ -69,6 +69,7 @@ fn generated_from(src: &str, path: &str, lang: Lang) -> String {
         },
         conformance: None,
         seal: false,
+        serde: false,
     };
     generate(&model, &options, &|_| None).expect("generates")
 }
@@ -248,6 +249,7 @@ fn json_snapshot() {
         },
         conformance: None,
         seal: false,
+        serde: false,
     };
     insta::assert_snapshot!(generate_json(&model, &options, &|_| None).expect("generates"));
 }

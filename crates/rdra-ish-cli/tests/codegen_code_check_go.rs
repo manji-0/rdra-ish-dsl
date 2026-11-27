@@ -142,8 +142,18 @@ fn each_planted_omission_is_named() {
             "wrong type for method PreparePay",
         ),
         (
-            "unmapped",
+            // A call of a generated function belongs to its use case.
+            "dispatcher-call",
             &[("return domain.RunPay(state, paidAt)", "return domain.RunPay(state, 1)")],
+            "CodeError_Pay",
+            "svc/service.go:",
+        ),
+        (
+            "unmapped",
+            &[(
+                "return domain.RunPay(state, paidAt)",
+                "_ = notDeclared\n\treturn domain.RunPay(state, paidAt)",
+            )],
             "CodeUnmapped",
             "svc/service.go:",
         ),

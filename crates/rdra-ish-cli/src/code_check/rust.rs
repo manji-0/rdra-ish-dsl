@@ -70,12 +70,40 @@ impl Backend for Rust {
         stdout.lines().filter_map(compiler_message).collect()
     }
 
-    /// The probe's test panics with `rdra-ish conformance: <report>`: the report's first
-    /// line (`traces line N: ...`); the rest is in the output printed above.
+    /// The probe's test panics with `rdra-ish conformance: <report>`: the report (`traces
+    /// line N: ...` and the rows that differ); else a panic of the service; else the output's
+    /// last line.
     fn run_failure(&self, stdout: &str, stderr: &str) -> Option<String> {
         let all = format!("{stdout}\n{stderr}");
-        let (_, rest) = all.split_once("rdra-ish conformance: ")?;
-        rest.lines().next().map(str::to_string)
+        super::harness_report(&all)
+            .or_else(|| super::panic_report(&all))
+            .or_else(|| super::last_line(&all))
+    }
+
+    /// The `rendered` text of each error in cargo's JSON, as rustc prints it, then stderr.
+    fn compiler_output(&self, stdout: &str, stderr: &str) -> String {
+        let mut out = String::new();
+        for line in stdout.lines() {
+            let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else {
+                continue;
+            };
+            let message = v.get("message");
+            let level = message
+                .and_then(|m| m.get("level"))
+                .and_then(|l| l.as_str());
+            if v.get("reason").and_then(|r| r.as_str()) == Some("compiler-message")
+                && level == Some("error")
+            {
+                if let Some(text) = message
+                    .and_then(|m| m.get("rendered"))
+                    .and_then(|r| r.as_str())
+                {
+                    out.push_str(text);
+                }
+            }
+        }
+        out.push_str(stderr);
+        out
     }
 
     /// E0046: "not all trait items implemented, missing: `a`, `b`".

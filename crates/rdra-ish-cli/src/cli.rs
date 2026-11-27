@@ -258,6 +258,8 @@ pub(crate) enum Commands {
         #[arg(required = true)]
         inputs: Vec<PathBuf>,
     },
+    /// Run the language server over stdin and stdout (the same server as `rdra-ish-lsp`)
+    Lsp,
     /// Format RDRA DSL source files
     Fmt {
         #[arg(required = true)]

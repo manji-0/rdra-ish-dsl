@@ -886,6 +886,7 @@ dependencies = [
  "miette",
  "rdra-ish-core",
  "rdra-ish-emit",
+ "rdra-ish-lsp",
  "rdra-ish-syntax",
  "serde_json",
 ]

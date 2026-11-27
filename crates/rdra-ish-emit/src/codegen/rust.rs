@@ -38,24 +38,25 @@ pub(super) fn print(
     out.push_str("//! The data layer and the use cases of the model, as `rdra-ish codegen` generates them.\n\n");
 
     print_boundary(&mut out);
+    let serde = options.serde;
 
     out.push_str("// ── Scalars: replace with the project's own types if it has them ──\n\n");
     for scalar in Scalar::PRELUDE {
-        print_scalar(scalar, &mut out);
+        print_scalar(scalar, serde, &mut out);
     }
 
     if !domain.ids.is_empty() {
         out.push_str("// ── Ids ──\n\n");
     }
     for id in &domain.ids {
-        print_id(id, &mut out);
+        print_id(id, serde, &mut out);
     }
 
     if !domain.enums.is_empty() {
         out.push_str("// ── Value sets ──\n\n");
     }
     for decl in &domain.enums {
-        print_enum(decl, &mut out);
+        print_enum(decl, serde, &mut out);
     }
 
     for kind in [RecordKind::Entity, RecordKind::Dto] {
@@ -77,11 +78,12 @@ pub(super) fn print(
                 RecordKind::Dto => format!("The fields of DTO {}.", record.id),
             });
             out.push_str(&doc(&lines, ""));
-            out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+            out.push_str(&derive("Debug, Clone, PartialEq, Eq", serde));
             out.push_str(&allow_names(&record.fields));
             out.push_str(&format!("pub struct {} {{\n", record.name));
             for field in &record.fields {
                 out.push_str(&field_doc(field, "    "));
+                out.push_str(&serde_rename(&field.wire, serde));
                 out.push_str(&format!(
                     "    pub {}: {},\n",
                     ident(&field.wire),
@@ -95,12 +97,13 @@ pub(super) fn print(
         out.push_str("// ── Entities with states ──\n\n");
     }
     for sum in &domain.sums {
-        print_sum(sum, &mut out);
+        print_sum(sum, serde, &mut out);
     }
-    print_functions(domain, &mut out);
+    print_functions(domain, serde, &mut out);
     print_validators(domain, &mut out);
-    print_rows(domain, &mut out);
+    print_rows(domain, serde, &mut out);
     print_dispatchers(domain, &mut out);
+    super::writes::rust::print(domain, &mut out);
     super::rust_port::print_port(domain, &mut out);
     while out.ends_with("\n\n") {
         out.pop();
@@ -183,7 +186,7 @@ fn rdra_is_date_time(text: &str) -> bool {{
     ));
 }
 
-fn print_scalar(scalar: Scalar, out: &mut String) {
+fn print_scalar(scalar: Scalar, serde: bool, out: &mut String) {
     let (check, shape) = match scalar {
         Scalar::Money | Scalar::Decimal => (
             "rdra_is_decimal",
@@ -203,7 +206,14 @@ fn print_scalar(scalar: Scalar, out: &mut String) {
         ],
         "",
     ));
-    out.push_str("#[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]\n");
+    out.push_str(&derive(
+        "Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord",
+        serde,
+    ));
+    if serde {
+        // Deserialized through `TryFrom<String>`, so the wire is parsed as `FromStr` parses it.
+        out.push_str(&format!("#[serde(try_from = \"{STRING}\")]\n"));
+    }
     out.push_str(&format!("pub struct {name}({STRING});\n\n"));
     out.push_str(&format!(
         r#"impl {name} {{
@@ -244,7 +254,7 @@ impl {FMT}::Display for {name} {{
     ));
 }
 
-fn print_id(id: &super::ir::IdDecl, out: &mut String) {
+fn print_id(id: &super::ir::IdDecl, serde: bool, out: &mut String) {
     let name = &id.name;
     let repr = scalar(id.repr);
     let copy = matches!(id.repr, Scalar::Int | Scalar::Bool);
@@ -258,10 +268,15 @@ fn print_id(id: &super::ir::IdDecl, out: &mut String) {
         ],
         "",
     ));
-    let derive = if copy { "Copy, " } else { "" };
-    out.push_str(&format!(
-        "#[derive(Debug, Clone, {derive}PartialEq, Eq, Hash, PartialOrd, Ord)]\npub struct {name}({repr});\n\n"
+    let copy_derive = if copy { "Copy, " } else { "" };
+    out.push_str(&derive(
+        &format!("Debug, Clone, {copy_derive}PartialEq, Eq, Hash, PartialOrd, Ord"),
+        serde,
     ));
+    if serde {
+        out.push_str("#[serde(transparent)]\n");
+    }
+    out.push_str(&format!("pub struct {name}({repr});\n\n"));
     let get = if copy {
         format!("    /// The value it holds.\n    pub fn get(self) -> {repr} {{\n        self.0\n    }}\n")
     } else {
@@ -288,14 +303,17 @@ fn print_id(id: &super::ir::IdDecl, out: &mut String) {
     ));
 }
 
-fn print_enum(decl: &super::ir::EnumDecl, out: &mut String) {
+fn print_enum(decl: &super::ir::EnumDecl, serde: bool, out: &mut String) {
     let mut lines = decl.doc.clone();
     lines.push(
         "Parsed from its wire spelling by `FromStr`, printed by `as_str` and `Display`."
             .to_string(),
     );
     out.push_str(&doc(&lines, ""));
-    out.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]\n");
+    out.push_str(&derive(
+        "Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord",
+        serde,
+    ));
     if decl
         .values
         .iter()
@@ -311,6 +329,12 @@ fn print_enum(decl: &super::ir::EnumDecl, out: &mut String) {
         }
         lines.push(format!("`{}`", value.wire));
         out.push_str(&doc(&lines, "    "));
+        if serde {
+            out.push_str(&format!(
+                "    #[serde(rename = {})]\n",
+                string_literal(&value.wire)
+            ));
+        }
         out.push_str(&format!("    {},\n", variant_ident(&value.ident)));
     }
     out.push_str("}\n\n");
@@ -346,7 +370,7 @@ fn print_enum(decl: &super::ir::EnumDecl, out: &mut String) {
     ));
 }
 
-fn print_sum(sum: &super::ir::SumDecl, out: &mut String) {
+fn print_sum(sum: &super::ir::SumDecl, serde: bool, out: &mut String) {
     for variant in &sum.variants {
         let mut lines = variant.doc.clone();
         for field in &variant.always_null {
@@ -401,7 +425,10 @@ fn print_sum(sum: &super::ir::SumDecl, out: &mut String) {
         ],
         "",
     ));
-    out.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]\n");
+    out.push_str(&derive(
+        "Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord",
+        serde,
+    ));
     if sum
         .variants
         .iter()
@@ -411,11 +438,14 @@ fn print_sum(sum: &super::ir::SumDecl, out: &mut String) {
     }
     out.push_str(&format!("pub enum {} {{\n", sum.kind));
     for variant in &sum.variants {
-        out.push_str(&format!(
-            "    /// The state `{}`.\n    {},\n",
-            variant.value.wire,
-            variant_ident(&variant.value.ident)
-        ));
+        out.push_str(&format!("    /// The state `{}`.\n", variant.value.wire));
+        if serde {
+            out.push_str(&format!(
+                "    #[serde(rename = {})]\n",
+                string_literal(&variant.value.wire)
+            ));
+        }
+        out.push_str(&format!("    {},\n", variant_ident(&variant.value.ident)));
     }
     out.push_str("}\n\n");
 
@@ -425,7 +455,16 @@ fn print_sum(sum: &super::ir::SumDecl, out: &mut String) {
         sum.row
     ));
     out.push_str(&doc(&lines, ""));
-    out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+    // The state types stay sealed: the sum goes over the wire as its row, and comes back only
+    // through `from_row`, which refuses a row that fits no state. Only a sum with a row has it.
+    let row_serde = serde && matches!(sum.tag.ty, FieldType::Enum(_));
+    out.push_str(&derive("Debug, Clone, PartialEq, Eq", row_serde));
+    if row_serde {
+        out.push_str(&format!(
+            "#[serde(try_from = \"{0}\", into = \"{0}\")]\n",
+            sum.row
+        ));
+    }
     if sum
         .variants
         .iter()
@@ -480,6 +519,25 @@ fn field_doc(field: &Field, indent: &str) -> String {
         format!("{indent}/// The column `{}`.\n", field.wire)
     } else {
         doc(&field.doc, indent)
+    }
+}
+
+/// The derive attribute of `traits`, with serde's two derives after them under `[code.rust] serde`.
+fn derive(traits: &str, serde: bool) -> String {
+    if serde {
+        format!("#[derive({traits}, ::serde::Serialize, ::serde::Deserialize)]\n")
+    } else {
+        format!("#[derive({traits})]\n")
+    }
+}
+
+/// `#[serde(rename = ..)]` on a field named `wire` whose Rust name serde would not spell as
+/// `wire` (`self_` for `self`; serde drops the `r#` of a raw name itself); nothing otherwise.
+fn serde_rename(wire: &str, serde: bool) -> String {
+    if serde && ident(wire).trim_start_matches("r#") != wire {
+        format!("    #[serde(rename = {})]\n", string_literal(wire))
+    } else {
+        String::new()
     }
 }
 
@@ -760,7 +818,7 @@ fn invalid_argument(domain: &DomainModel, f: &FnDecl, reason: &str) -> String {
 // ── Use cases ────────────────────────────────────────────────────────────────
 
 /// Whether a value of `ty` is `Copy`: read by value, never cloned.
-fn is_copy(domain: &DomainModel, ty: &FieldType) -> bool {
+pub(super) fn is_copy(domain: &DomainModel, ty: &FieldType) -> bool {
     match ty {
         FieldType::Scalar(s) => matches!(s, Scalar::Int | Scalar::Bool),
         FieldType::Enum(_) => true,
@@ -834,8 +892,8 @@ fn param_name(name: &str, body: &str) -> String {
     }
 }
 
-pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
-    print_events(domain, out);
+pub(super) fn print_functions(domain: &DomainModel, serde: bool, out: &mut String) {
+    print_events(domain, serde, out);
     if domain.fns.is_empty() {
         // The use cases with no printed function still have their errors (#335).
         if !domain.errors.is_empty() {
@@ -844,7 +902,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
         }
         return;
     }
-    print_marks(domain, out);
+    print_marks(domain, serde, out);
     out.push_str("// ── Use cases ──\n\n");
     print_errors(domain, out);
     out.push_str("/// What a row a result writes must still be when the write commits, so the store can write\n/// it conditionally and take a write that matches no row as `NotEnabled` (see the obligations).\n");
@@ -857,7 +915,7 @@ pub(super) fn print_functions(domain: &DomainModel, out: &mut String) {
 }
 
 /// The event types: one per event a use case raises or a triggered use case takes.
-fn print_events(domain: &DomainModel, out: &mut String) {
+fn print_events(domain: &DomainModel, serde: bool, out: &mut String) {
     if !domain.events.is_empty() {
         out.push_str("// ── Events ──\n\n");
     }
@@ -868,10 +926,10 @@ fn print_events(domain: &DomainModel, out: &mut String) {
         }
         out.push_str(&doc(&lines, ""));
         if event.fields.is_empty() {
-            out.push_str("#[derive(Debug, Clone, Copy, PartialEq, Eq)]\n");
+            out.push_str(&derive("Debug, Clone, Copy, PartialEq, Eq", serde));
             out.push_str(&format!("pub struct {};\n\n", event.name));
         } else {
-            out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+            out.push_str(&derive("Debug, Clone, PartialEq, Eq", serde));
             out.push_str(&format!("pub struct {} {{\n", event.name));
             for field in &event.fields {
                 out.push_str(&format!(
@@ -887,7 +945,7 @@ fn print_events(domain: &DomainModel, out: &mut String) {
 }
 
 /// The run marks of the use cases split into transactions.
-fn print_marks(domain: &DomainModel, out: &mut String) {
+fn print_marks(domain: &DomainModel, serde: bool, out: &mut String) {
     if !domain.marks.is_empty() {
         out.push_str("// ── Run marks of use cases split into transactions ──\n\n");
     }
@@ -896,7 +954,7 @@ fn print_marks(domain: &DomainModel, out: &mut String) {
             "/// The mark step {} of {} leaves on a {} row: the next step takes it. Store it with the row.\n",
             m.step, m.usecase, m.entity
         ));
-        out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+        out.push_str(&derive("Debug, Clone, PartialEq, Eq", serde));
         out.push_str(&format!(
             "pub struct {} {{\n    /// The id of the marked row.\n    pub id: {},\n}}\n\n",
             m.name, m.id_ty
@@ -947,6 +1005,13 @@ fn print_result(f: &FnDecl, out: &mut String) {
             "    /// The event raised.\n    pub {}: {},\n",
             ident(&snake(&event.ty)),
             event.ty
+        ));
+    }
+    for (m, field) in f.marks_ended() {
+        out.push_str(&format!(
+            "    /// The run mark the step took and ends: delete it in the same transaction.\n    pub {}: {},\n",
+            ident(&field),
+            m.ty
         ));
     }
     out.push_str("}\n\n");
@@ -1254,6 +1319,12 @@ fn print_function(domain: &DomainModel, f: &FnDecl, out: &mut String) {
             snake(&event.ty)
         ));
     }
+    for (m, field) in f.marks_ended() {
+        result.push_str(&format!(
+            "        {},\n",
+            init(&ident(&field), &ident(&m.name))
+        ));
+    }
     result.push_str("    }");
     body.push_str(&format!("    {RESULT}::Ok({result})\n"));
 
@@ -1543,7 +1614,7 @@ pub(super) fn print_validators(domain: &DomainModel, out: &mut String) {
 
 // ── Rows and dispatch ────────────────────────────────────────────────────────
 
-pub(super) fn print_rows(domain: &DomainModel, out: &mut String) {
+pub(super) fn print_rows(domain: &DomainModel, serde: bool, out: &mut String) {
     if domain.sums.is_empty() {
         return;
     }
@@ -1578,7 +1649,7 @@ impl ::std::error::Error for InvalidRow {{}}
             "/// Every column of {} as the data layer declares it: the shape a store or the wire holds. The\n/// scalars it holds were parsed when it was built.\n",
             sum.entity
         ));
-        out.push_str("#[derive(Debug, Clone, PartialEq, Eq)]\n");
+        out.push_str(&derive("Debug, Clone, PartialEq, Eq", serde));
         let wires: Vec<Field> = sum
             .row_fields
             .iter()
@@ -1590,12 +1661,9 @@ impl ::std::error::Error for InvalidRow {{}}
         out.push_str(&allow_names(&wires));
         out.push_str(&format!("pub struct {} {{\n", sum.row));
         for f in &sum.row_fields {
-            out.push_str(&format!(
-                "    /// The column `{}`.\n    pub {}: {},\n",
-                f.wire,
-                ident(&f.wire),
-                typed(f)
-            ));
+            out.push_str(&format!("    /// The column `{}`.\n", f.wire));
+            out.push_str(&serde_rename(&f.wire, serde));
+            out.push_str(&format!("    pub {}: {},\n", ident(&f.wire), typed(f)));
         }
         out.push_str("}\n\n");
 

@@ -1384,6 +1384,247 @@ export function runNew(parentFunction: Function, parentFunc: Func, parentMod: Mo
   return { ok: false, error: { kind: "NotEnabled", usecase: "New" } };
 }
 
+// ── Commit: what a result writes ──
+
+/** One row a commit writes, only where the row is still what `expected` names: when it is not, the commit writes nothing and the call is NotEnabled. A put stores the row (inserts it when `expected` is absent, else updates it); a delete removes it. `id` is null for an entity with no one-column key. */
+export type RowWrite =
+  | Readonly<{ kind: "put"; entity: "Function"; id: FunctionId; row: Function; expected: ExpectedSource }>
+  | Readonly<{ kind: "delete"; entity: "Function"; id: FunctionId; expected: ExpectedSource }>
+  | Readonly<{ kind: "put"; entity: "Mod"; id: ModId; row: Mod; expected: ExpectedSource }>
+  | Readonly<{ kind: "delete"; entity: "Mod"; id: ModId; expected: ExpectedSource }>
+  | Readonly<{ kind: "put"; entity: "Func"; id: FuncId; row: FuncRow; expected: ExpectedSource }>
+  | Readonly<{ kind: "delete"; entity: "Func"; id: FuncId; expected: ExpectedSource }>
+  | Readonly<{ kind: "put"; entity: "Match"; id: MatchId; row: MatchRow; expected: ExpectedSource }>
+  | Readonly<{ kind: "delete"; entity: "Match"; id: MatchId; expected: ExpectedSource }>;
+
+/** A run mark of a use case split into transactions, on one row: `step` is the step of the run that last wrote the row. */
+export type RunMark = never;
+
+/** One run mark a commit writes. A put at step 1 inserts the mark, where the row holds no mark of the use case; a put at a later step advances the row's mark from the step before; a delete removes the mark at its step, and the run ends on the row. */
+export type MarkWrite = Readonly<{ kind: "put" | "delete"; mark: RunMark }>;
+
+/** An event of any type a use case raises. */
+export type RaisedEvent = Switch;
+
+/** What one commit stores, in order: the rows, then the run marks, then the events. */
+export type Writes = Readonly<{
+  usecase: string;
+  rows: readonly RowWrite[];
+  marks: readonly MarkWrite[];
+  events: readonly RaisedEvent[];
+}>;
+
+/** The companion of ReturnResult. */
+export const ReturnResult = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: ReturnResult): Writes => {
+    const row0 = Match.toRow(r.match);
+    return { usecase: "Return", rows: [{ kind: "put", entity: "Match", id: row0.id, row: row0, expected: r.match_expected }], marks: [], events: [r.switch] };
+  },
+};
+
+/** The companion of DeleteResult. */
+export const DeleteResult = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: DeleteResult): Writes => {
+    const row0 = Match.toRow(r.match);
+    return { usecase: "Delete", rows: [{ kind: "put", entity: "Match", id: row0.id, row: row0, expected: r.match_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of SuperResult. */
+export const SuperResult = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: SuperResult): Writes => {
+    const row0 = Match.toRow(r.match);
+    return { usecase: "Super", rows: [{ kind: "put", entity: "Match", id: row0.id, row: row0, expected: r.match_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of CrateResult. */
+export const CrateResult = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: CrateResult): Writes => {
+    const row0 = Match.toRow(r.match);
+    return { usecase: "Crate", rows: [{ kind: "put", entity: "Match", id: row0.id, row: row0, expected: r.match_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of DefaultResult. */
+export const DefaultResult = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: DefaultResult): Writes => {
+    const row0 = Match.toRow(r.match);
+    return { usecase: "Default", rows: [{ kind: "put", entity: "Match", id: row0.id, row: row0, expected: r.match_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of TypeResult. */
+export const TypeResult = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: TypeResult): Writes => {
+    const row0 = Func.toRow(r.func);
+    return { usecase: "Type", rows: [{ kind: "put", entity: "Func", id: row0.id, row: row0, expected: r.func_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of ClassResult. */
+export const ClassResult = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: ClassResult): Writes => {
+    const row0 = Func.toRow(r.func);
+    return { usecase: "Class", rows: [{ kind: "put", entity: "Func", id: row0.id, row: row0, expected: r.func_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of NewFromNewResult. */
+export const NewFromNewResult = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: NewFromNewResult): Writes => {
+    const row0 = Match.toRow(r.match);
+    return { usecase: "New", rows: [{ kind: "put", entity: "Match", id: row0.id, row: row0, expected: r.match_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of NewFromReturnResult. */
+export const NewFromReturnResult = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: NewFromReturnResult): Writes => {
+    const row0 = Match.toRow(r.match);
+    return { usecase: "New", rows: [{ kind: "put", entity: "Match", id: row0.id, row: row0, expected: r.match_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of NewFromFuncResult. */
+export const NewFromFuncResult = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: NewFromFuncResult): Writes => {
+    const row0 = Match.toRow(r.match);
+    return { usecase: "New", rows: [{ kind: "put", entity: "Match", id: row0.id, row: row0, expected: r.match_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of StaticResult. */
+export const StaticResult = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: StaticResult): Writes => {
+    const row0 = r.function;
+    return { usecase: "Static", rows: [{ kind: "put", entity: "Function", id: row0.id, row: row0, expected: r.function_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of ReturnOutcome. */
+export const ReturnOutcome = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: ReturnOutcome): Writes => {
+    const row0 = Match.toRow(r.match);
+    return { usecase: "Return", rows: [{ kind: "put", entity: "Match", id: row0.id, row: row0, expected: r.match_expected }], marks: [], events: [r.switch] };
+  },
+};
+
+/** The companion of DeleteOutcome. */
+export const DeleteOutcome = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: DeleteOutcome): Writes => {
+    const row0 = Match.toRow(r.match);
+    return { usecase: "Delete", rows: [{ kind: "put", entity: "Match", id: row0.id, row: row0, expected: r.match_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of SuperOutcome. */
+export const SuperOutcome = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: SuperOutcome): Writes => {
+    const row0 = Match.toRow(r.match);
+    return { usecase: "Super", rows: [{ kind: "put", entity: "Match", id: row0.id, row: row0, expected: r.match_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of CrateOutcome. */
+export const CrateOutcome = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: CrateOutcome): Writes => {
+    const row0 = Match.toRow(r.match);
+    return { usecase: "Crate", rows: [{ kind: "put", entity: "Match", id: row0.id, row: row0, expected: r.match_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of DefaultOutcome. */
+export const DefaultOutcome = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: DefaultOutcome): Writes => {
+    const row0 = Match.toRow(r.match);
+    return { usecase: "Default", rows: [{ kind: "put", entity: "Match", id: row0.id, row: row0, expected: r.match_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of TypeOutcome. */
+export const TypeOutcome = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: TypeOutcome): Writes => {
+    const row0 = Func.toRow(r.func);
+    return { usecase: "Type", rows: [{ kind: "put", entity: "Func", id: row0.id, row: row0, expected: r.func_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of ClassOutcome. */
+export const ClassOutcome = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: ClassOutcome): Writes => {
+    const row0 = Func.toRow(r.func);
+    return { usecase: "Class", rows: [{ kind: "put", entity: "Func", id: row0.id, row: row0, expected: r.func_expected }], marks: [], events: [] };
+  },
+};
+
+/** The companion of NewOutcome. */
+export const NewOutcome = {
+  /** What a commit of it stores: every row, run mark, and event it writes, in order. */
+  writes: (r: NewOutcome): Writes => {
+    const row0 = Match.toRow(r.match);
+    return { usecase: "New", rows: [{ kind: "put", entity: "Match", id: row0.id, row: row0, expected: r.match_expected }], marks: [], events: [] };
+  },
+};
+
+/** A store that commits a result inside the transaction of the call: `commitWrites` calls it once per write, in order. Each method writes one item only where it is still what it names; `E` is the store's own error. */
+export type CommitStore<E> = Readonly<{
+  /** Writes the row where it is still what `expected` names: false, and nothing written, when it is not. */
+  writeRow: (write: RowWrite) => Promise<Result<boolean, E>>;
+  /** Writes the run mark where the row's mark is still what the step needs: none of the use case for a put at step 1, the step before for a later put, the mark's own step for a delete. False, and nothing written, when it is not. */
+  writeMark: (write: MarkWrite) => Promise<Result<boolean, E>>;
+  /** Records a raised event. */
+  recordEvent: (event: RaisedEvent) => Promise<Result<void, E>>;
+}>;
+
+/** Commits `writes` through `store`: every row, then every run mark, then every event, and stops at the first row or mark that is no longer what it names. It begins and ends no transaction: call it inside the transaction of the call, and roll back on an error. NotEnabled when a row or a run mark is no longer what the result expects; the store's error when the store fails. */
+export async function commitWrites<E>(store: CommitStore<E>, writes: Writes): Promise<Result<void, NotEnabled | E>> {
+  const notEnabled: NotEnabled = { kind: "NotEnabled", usecase: writes.usecase };
+  for (const write of writes.rows) {
+    const written = await store.writeRow(write);
+    if (!written.ok) {
+      return written;
+    }
+    if (!written.value) {
+      return { ok: false, error: notEnabled };
+    }
+  }
+  for (const write of writes.marks) {
+    const written = await store.writeMark(write);
+    if (!written.ok) {
+      return written;
+    }
+    if (!written.value) {
+      return { ok: false, error: notEnabled };
+    }
+  }
+  for (const event of writes.events) {
+    const recorded = await store.recordEvent(event);
+    if (!recorded.ok) {
+      return recorded;
+    }
+  }
+  return { ok: true, value: undefined };
+}
+
 // ── Contracts: one per use case, which the service implements ──
 
 /**

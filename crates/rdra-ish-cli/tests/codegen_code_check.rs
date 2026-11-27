@@ -143,9 +143,21 @@ fn other_options_in_rdra_toml_fail_as_a_generator_change() {
         MANIFEST.replace("conformance_states = 4096", "conformance_states = 3"),
     )
     .unwrap();
-    let (code, _, stderr) = outcome(&rdra(&dir, &["check", "model", "--code"]));
+    let (code, stdout, stderr) = outcome(&rdra(&dir, &["check", "model", "--code"]));
     assert_eq!(code, Some(1), "{stderr}");
     assert!(stderr.contains("generator changed"), "{stderr}");
+    // The domain code and the traces are both stale: one error each, as the blocks show.
+    let blocks = stderr.lines().filter(|l| l.starts_with("error: ")).count();
+    assert_eq!(blocks, 2, "{stderr}");
+    assert!(
+        stdout.contains("FAIL: code: 2 error(s) at --code=fresh"),
+        "{stdout}"
+    );
+    // rdra.toml is named first, by the table the settings are in.
+    assert!(
+        stderr.contains("the settings of [code.rust] in rdra.toml"),
+        "{stderr}"
+    );
 }
 
 #[test]
@@ -317,6 +329,28 @@ fn seal_is_for_typescript_only() {
         stderr.contains(
             "[code.rust] in model/rdra.toml: `seal` and `tsconfig` are for [code.ts] only"
         ),
+        "{stderr}"
+    );
+}
+
+/// `serde` is a `[code.rust]` key for the domain code: under another language's table, or in a
+/// table that names `adapter`, it is an error naming the table.
+#[test]
+fn serde_is_for_rust_domain_code_only() {
+    let go = MANIFEST.replace("[code.rust]", "[code.go]");
+    let dir = project("serde-go", &format!("{go}serde = true\n"));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"]));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.contains("[code.go] in model/rdra.toml: `serde` is for [code.rust] only"),
+        "{stderr}"
+    );
+    let adapter = MANIFEST.replace("domain = ", "adapter = ");
+    let dir = project("serde-adapter", &format!("{adapter}serde = true\n"));
+    let (code, _, stderr) = outcome(&rdra(&dir, &["codegen", "model", "--code"]));
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(
+        stderr.contains("[code.rust] in model/rdra.toml: `serde` derives on the domain code, and this table names `adapter`"),
         "{stderr}"
     );
 }

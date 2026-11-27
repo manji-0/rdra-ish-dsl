@@ -1,0 +1,39 @@
+// Fixture of tests/codegen_commit.rs: a service whose every commit is one call of the generated
+// commit helper passes the conformance harness in Rust, Go and TypeScript. Ship runs as two
+// transactions linked by a run mark, which its last step ends, and raises an event Send runs
+// on; Cancel has two cases; Purge deletes a row.
+entity Account "A" { id: Int @pk }
+entity Order "O" {
+  id: Int @pk
+  status: Enum(pending, paid, shipped, cancelled) @default(pending)
+}
+entity Shipment "S" {
+  id: Int @pk
+  status: Enum(packed, sent) @default(packed)
+}
+relate(Order, Account, N:1)
+relate(Shipment, Order, 1:1)
+usecase Place "P"
+usecase Pay "Pay"
+usecase Ship "Ship"
+usecase Send "Send"
+usecase Cancel "C"
+usecase Purge "Purge"
+api OrderApi "order API"
+api ShipmentApi "shipment API"
+event EvShipped "shipped"
+creates(Place, Order)
+transitions(Pay, Order.status, pending -> paid)
+invokes(Ship, OrderApi)
+updates(OrderApi, Order)
+transitions(Ship, Order.status, paid -> shipped)
+invokes(Ship, ShipmentApi)
+creates(ShipmentApi, Shipment)
+raises(Ship, EvShipped)
+triggers(EvShipped, Send)
+transitions(Send, Shipment.status, packed -> sent)
+transitions(Cancel, Order.status, (pending, paid) -> cancelled)
+deletes(Purge, Order)
+condition Cancelled "cancelled"
+holds(Cancelled, Order.status == cancelled)
+applies_to(Cancelled, Purge)
