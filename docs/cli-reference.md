@@ -730,7 +730,7 @@ Unique_Payment_Order = "../service/migrations/003_payment.sql"
 
 An unknown key fails every loading command, as under `[check]`. `seal` or `tsconfig` under
 `[code.rust]` or `[code.go]` makes `--code` exit 1, and so does `serde` under `[code.go]` or
-`[code.ts]` or in a table with `adapter`, a table with neither `domain` nor `adapter`, one with
+`[code.ts]`, `serde = true` in a table with `adapter`, a table with neither `domain` nor `adapter`, one with
 both, or one with `adapter` and no `traces`.
 
 #### An async Rust service

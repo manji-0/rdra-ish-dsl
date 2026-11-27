@@ -124,12 +124,16 @@ static RT: OnceLock<tokio::runtime::Runtime> = OnceLock::new();
 
 pub struct Conform(Service); // Service: the async service over a shared sqlx pool
 
+fn rt() -> &'static tokio::runtime::Runtime {
+    RT.get_or_init(|| tokio::runtime::Runtime::new().expect("a runtime"))
+}
+
 impl PayUseCase for Conform {
     fn prepare_pay(&mut self, order: OrderId, paid_at: DateTime) -> Result<PayOutcome, PayError> {
-        RT.get().unwrap().block_on(self.0.prepare_pay(order, paid_at))
+        rt().block_on(self.0.prepare_pay(order, paid_at))
     }
     fn commit_pay(&mut self, write: PayOutcome) -> Result<(), PayError> {
-        RT.get().unwrap().block_on(self.0.commit_pay(write))
+        rt().block_on(self.0.commit_pay(write))
     }
 }
 ```
