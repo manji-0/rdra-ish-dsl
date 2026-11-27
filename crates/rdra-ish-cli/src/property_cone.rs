@@ -16,7 +16,9 @@
 //!   cone; otherwise the property needs the whole model's `WF_vars(Next)`.
 //!
 //! An `always` property needs the `Plain` run only. A cone that frees an entity's slots
-//! (`cone_frees_slots`) reaches a superset, so only its `ok` counts.
+//! (`cone_frees_slots`) or leaves a raised mark out (`cone_leaves_marks`) reaches a superset,
+//! so only its `ok` counts: past the bound, or with a use case run without its event, its
+//! counterexample may be no behavior of the whole model.
 //!
 //! The `Plain` run is on the cone reduced by its independent sub-lifecycle
 //! (`TransitionSystem::reduced`), which is stuttering equivalent to the cone with respect to
@@ -28,7 +30,7 @@
 //! does not decide, it runs on the unreduced cone, where `WF_vars(Next)` keeps its meaning
 //! (docs/formal-verification.md, "WF_vars(Next) on a reduced cone").
 
-use rdra_ish_core::lifecycle::{Caps, LtlKind, QuotientCache, TransitionSystem};
+use rdra_ish_core::lifecycle::{Caps, Cone, LtlKind, QuotientCache, TransitionSystem};
 use rdra_ish_emit::tla::{self, PrintMode, TlaBundle};
 
 use crate::tlc_output::Outcome;
@@ -42,9 +44,10 @@ pub struct PropertyCone {
     pub reduced: TransitionSystem,
     pub reduced_index: usize,
     pub kind: LtlKind,
-    /// An action of the cone creates an entity the cone does not count, so a counterexample
-    /// may create more instances than the bound allows.
-    pub frees_slots: bool,
+    /// Why a counterexample of the cone may be no behavior of the whole model, when it may:
+    /// an action of the cone creates an entity the cone does not count (`Why::FreesSlots`),
+    /// or reads a raised mark the cone leaves out (`Why::LeavesMarks`).
+    pub inexact: Option<Why>,
     /// The cone holds every var an action writes, so every step of the whole model changes
     /// the cone and `WF_vars(Next)` on the cone is the whole model's.
     pub whole: bool,
@@ -85,6 +88,8 @@ pub enum Why {
     WfNext,
     /// The counterexample may create instances past the bound.
     FreesSlots,
+    /// The counterexample may run a use case without its event having been raised.
+    LeavesMarks,
 }
 
 impl Why {
@@ -92,6 +97,9 @@ impl Why {
         match self {
             Why::WfNext => "needs the whole model's WF_vars(Next)",
             Why::FreesSlots => "its counterexample may create instances past the bound",
+            Why::LeavesMarks => {
+                "its counterexample may run a use case without its event having been raised"
+            }
         }
     }
 }
@@ -112,11 +120,12 @@ impl PropertyCone {
             .iter()
             .position(|p| p.name == *name)
             .expect("the cone holds what the property reads");
-        let frees_slots = ts.cone_frees_slots(&cone);
+        let inexact = inexact(ts, &cone);
         let whole = ts.cone_keeps_every_write(&cone.vars);
-        // A create writes the created entity's existence, so a cone that holds every write
-        // counts every slot, and the `WfNext` run's `ok` needs no slot caveat.
-        debug_assert!(!whole || !frees_slots);
+        // A create writes the created entity's existence and a raise its mark, so a cone that
+        // holds every write counts every slot and reads every mark, and the `WfNext` run's
+        // `ok` needs no caveat.
+        debug_assert!(!whole || inexact.is_none());
         let reduced = ts.reduced_cone_in(&cone, [ts.property_seed(i)], caps, quotients);
         let reduced_index = reduced
             .properties()
@@ -124,7 +133,7 @@ impl PropertyCone {
             .position(|p| p.name == *name)
             .expect("the reduced cone keeps the property it is for");
         PropertyCone {
-            frees_slots,
+            inexact,
             whole,
             kind: ts.properties()[i].formula.kind(),
             system,
@@ -153,39 +162,51 @@ impl PropertyCone {
 
     /// The verdict after the `Plain` run alone, or that the `WfNext` run must answer.
     pub fn after_plain(&self, plain: Outcome) -> AfterPlain {
-        after_plain(self.kind, self.frees_slots, plain)
+        after_plain(self.kind, self.inexact, plain)
     }
 
     /// The verdict after the `Plain` run asked for the `WfNext` run and it ran.
     pub fn after_wf(&self, plain: Outcome, wf_next: Outcome) -> Verdict {
-        after_wf(self.frees_slots, self.whole, plain, wf_next)
+        after_wf(self.inexact, self.whole, plain, wf_next)
     }
 }
 
-fn counterexample(frees_slots: bool) -> Verdict {
-    match frees_slots {
-        true => Verdict::Undecided(Why::FreesSlots),
-        false => Verdict::Counterexample,
+/// Why a counterexample of `cone`, a cone of `ts`, may be no behavior of the whole model
+/// (`PropertyCone::inexact`).
+pub fn inexact(ts: &TransitionSystem, cone: &Cone) -> Option<Why> {
+    if ts.cone_frees_slots(cone) {
+        Some(Why::FreesSlots)
+    } else if ts.cone_leaves_marks(cone) {
+        Some(Why::LeavesMarks)
+    } else {
+        None
     }
 }
 
-fn after_plain(kind: LtlKind, frees_slots: bool, plain: Outcome) -> AfterPlain {
+fn counterexample(inexact: Option<Why>) -> Verdict {
+    match inexact {
+        Some(why) => Verdict::Undecided(why),
+        None => Verdict::Counterexample,
+    }
+}
+
+fn after_plain(kind: LtlKind, inexact: Option<Why>, plain: Outcome) -> AfterPlain {
     match plain {
         Outcome::Ok => AfterPlain::Decided(Verdict::Ok),
         Outcome::ToolError => AfterPlain::Decided(Verdict::ToolError),
         Outcome::Counterexample if !kind.is_liveness() => {
-            AfterPlain::Decided(counterexample(frees_slots))
+            AfterPlain::Decided(counterexample(inexact))
         }
         Outcome::Counterexample => AfterPlain::NeedsWfNext,
     }
 }
 
 /// Only reached for a `plain` counterexample on a property that is not `Always`.
-fn after_wf(frees_slots: bool, whole: bool, plain: Outcome, wf_next: Outcome) -> Verdict {
+fn after_wf(inexact: Option<Why>, whole: bool, plain: Outcome, wf_next: Outcome) -> Verdict {
     match (plain, wf_next) {
         (Outcome::Ok, _) => Verdict::Ok,
         (Outcome::ToolError, _) | (_, Outcome::ToolError) => Verdict::ToolError,
-        (Outcome::Counterexample, Outcome::Counterexample) => counterexample(frees_slots),
+        (Outcome::Counterexample, Outcome::Counterexample) => counterexample(inexact),
         (Outcome::Counterexample, Outcome::Ok) if whole => Verdict::Ok,
         (Outcome::Counterexample, Outcome::Ok) => Verdict::Undecided(Why::WfNext),
     }
@@ -199,8 +220,8 @@ mod tests {
 
     #[test]
     fn a_plain_ok_decides_and_a_counterexample_asks_for_the_wf_run() {
-        let plain = |o| after_plain(LtlKind::LeadsTo, false, o);
-        let wf = |o| after_wf(false, false, Outcome::Counterexample, o);
+        let plain = |o| after_plain(LtlKind::LeadsTo, None, o);
+        let wf = |o| after_wf(None, false, Outcome::Counterexample, o);
         assert_eq!(plain(Outcome::Ok), Decided(Verdict::Ok));
         assert_eq!(plain(Outcome::Counterexample), NeedsWfNext);
         assert_eq!(wf(Outcome::Counterexample), Verdict::Counterexample);
@@ -212,7 +233,7 @@ mod tests {
     #[test]
     fn the_wf_run_decides_when_the_cone_is_the_whole_model() {
         assert_eq!(
-            after_wf(false, true, Outcome::Counterexample, Outcome::Ok),
+            after_wf(None, true, Outcome::Counterexample, Outcome::Ok),
             Verdict::Ok
         );
     }
@@ -220,25 +241,27 @@ mod tests {
     #[test]
     fn always_needs_one_run_and_freed_slots_keep_only_an_ok() {
         assert_eq!(
-            after_plain(LtlKind::Always, false, Outcome::Counterexample),
+            after_plain(LtlKind::Always, None, Outcome::Counterexample),
             Decided(Verdict::Counterexample)
         );
-        assert_eq!(
-            after_plain(LtlKind::Always, true, Outcome::Ok),
-            Decided(Verdict::Ok)
-        );
-        assert_eq!(
-            after_plain(LtlKind::Always, true, Outcome::Counterexample),
-            Decided(Verdict::Undecided(Why::FreesSlots))
-        );
-        assert_eq!(
-            after_wf(
-                true,
-                false,
-                Outcome::Counterexample,
-                Outcome::Counterexample
-            ),
-            Verdict::Undecided(Why::FreesSlots)
-        );
+        for why in [Why::FreesSlots, Why::LeavesMarks] {
+            assert_eq!(
+                after_plain(LtlKind::Always, Some(why), Outcome::Ok),
+                Decided(Verdict::Ok)
+            );
+            assert_eq!(
+                after_plain(LtlKind::Always, Some(why), Outcome::Counterexample),
+                Decided(Verdict::Undecided(why))
+            );
+            assert_eq!(
+                after_wf(
+                    Some(why),
+                    false,
+                    Outcome::Counterexample,
+                    Outcome::Counterexample
+                ),
+                Verdict::Undecided(why)
+            );
+        }
     }
 }

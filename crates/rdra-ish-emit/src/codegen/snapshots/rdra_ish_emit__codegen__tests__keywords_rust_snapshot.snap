@@ -2788,6 +2788,18 @@ pub trait ReturnUseCase {
     fn commit_return(&mut self, write: ReturnOutcome) -> ::core::result::Result<(), ReturnError>;
 }
 
+/// Implement it for a service that does not implement `ReturnUseCase` yet: the service then has `ReturnUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `ReturnUseCase`.
+pub trait UnimplementedReturnUseCase {}
+
+impl<T: UnimplementedReturnUseCase> ReturnUseCase for T {
+    fn prepare_return(&mut self, _: MatchId) -> ::core::result::Result<ReturnOutcome, ReturnError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+    fn commit_return(&mut self, _: ReturnOutcome) -> ::core::result::Result<(), ReturnError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+}
+
 /// The use case Delete: Delete.
 /// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait DeleteUseCase {
@@ -2795,6 +2807,18 @@ pub trait DeleteUseCase {
     fn prepare_delete(&mut self, r#match: MatchId, switch: Switch) -> ::core::result::Result<DeleteOutcome, DeleteError>;
     /// Stores what `prepare_delete` returned in one transaction.
     fn commit_delete(&mut self, write: DeleteOutcome) -> ::core::result::Result<(), DeleteError>;
+}
+
+/// Implement it for a service that does not implement `DeleteUseCase` yet: the service then has `DeleteUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `DeleteUseCase`.
+pub trait UnimplementedDeleteUseCase {}
+
+impl<T: UnimplementedDeleteUseCase> DeleteUseCase for T {
+    fn prepare_delete(&mut self, _: MatchId, _: Switch) -> ::core::result::Result<DeleteOutcome, DeleteError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+    fn commit_delete(&mut self, _: DeleteOutcome) -> ::core::result::Result<(), DeleteError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
 }
 
 /// The use case Super: Super.
@@ -2806,6 +2830,18 @@ pub trait SuperUseCase {
     fn commit_super(&mut self, write: SuperOutcome) -> ::core::result::Result<(), SuperError>;
 }
 
+/// Implement it for a service that does not implement `SuperUseCase` yet: the service then has `SuperUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `SuperUseCase`.
+pub trait UnimplementedSuperUseCase {}
+
+impl<T: UnimplementedSuperUseCase> SuperUseCase for T {
+    fn prepare_super(&mut self, _: MatchId) -> ::core::result::Result<SuperOutcome, SuperError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+    fn commit_super(&mut self, _: SuperOutcome) -> ::core::result::Result<(), SuperError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+}
+
 /// The use case Crate: Crate.
 /// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait CrateUseCase {
@@ -2813,6 +2849,18 @@ pub trait CrateUseCase {
     fn prepare_crate(&mut self, r#match: MatchId) -> ::core::result::Result<CrateOutcome, CrateError>;
     /// Stores what `prepare_crate` returned in one transaction.
     fn commit_crate(&mut self, write: CrateOutcome) -> ::core::result::Result<(), CrateError>;
+}
+
+/// Implement it for a service that does not implement `CrateUseCase` yet: the service then has `CrateUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `CrateUseCase`.
+pub trait UnimplementedCrateUseCase {}
+
+impl<T: UnimplementedCrateUseCase> CrateUseCase for T {
+    fn prepare_crate(&mut self, _: MatchId) -> ::core::result::Result<CrateOutcome, CrateError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+    fn commit_crate(&mut self, _: CrateOutcome) -> ::core::result::Result<(), CrateError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
 }
 
 /// The use case Default: Default.
@@ -2824,6 +2872,18 @@ pub trait DefaultUseCase {
     fn commit_default(&mut self, write: DefaultOutcome) -> ::core::result::Result<(), DefaultError>;
 }
 
+/// Implement it for a service that does not implement `DefaultUseCase` yet: the service then has `DefaultUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `DefaultUseCase`.
+pub trait UnimplementedDefaultUseCase {}
+
+impl<T: UnimplementedDefaultUseCase> DefaultUseCase for T {
+    fn prepare_default(&mut self, _: MatchId) -> ::core::result::Result<DefaultOutcome, DefaultError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+    fn commit_default(&mut self, _: DefaultOutcome) -> ::core::result::Result<(), DefaultError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+}
+
 /// The use case Type: Type.
 /// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait TypeUseCase {
@@ -2833,6 +2893,18 @@ pub trait TypeUseCase {
     fn commit_type(&mut self, write: TypeOutcome) -> ::core::result::Result<(), TypeError>;
 }
 
+/// Implement it for a service that does not implement `TypeUseCase` yet: the service then has `TypeUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `TypeUseCase`.
+pub trait UnimplementedTypeUseCase {}
+
+impl<T: UnimplementedTypeUseCase> TypeUseCase for T {
+    fn prepare_type(&mut self, _: FuncId) -> ::core::result::Result<TypeOutcome, TypeError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+    fn commit_type(&mut self, _: TypeOutcome) -> ::core::result::Result<(), TypeError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+}
+
 /// The use case Class: Class.
 /// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait ClassUseCase {
@@ -2840,6 +2912,18 @@ pub trait ClassUseCase {
     fn prepare_class(&mut self, func: FuncId) -> ::core::result::Result<ClassOutcome, ClassError>;
     /// Stores what `prepare_class` returned in one transaction.
     fn commit_class(&mut self, write: ClassOutcome) -> ::core::result::Result<(), ClassError>;
+}
+
+/// Implement it for a service that does not implement `ClassUseCase` yet: the service then has `ClassUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `ClassUseCase`.
+pub trait UnimplementedClassUseCase {}
+
+impl<T: UnimplementedClassUseCase> ClassUseCase for T {
+    fn prepare_class(&mut self, _: FuncId) -> ::core::result::Result<ClassOutcome, ClassError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+    fn commit_class(&mut self, _: ClassOutcome) -> ::core::result::Result<(), ClassError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
 }
 
 /// The use case New: New.
@@ -2852,6 +2936,19 @@ pub trait NewUseCase {
     fn commit_new(&mut self, write: NewOutcome) -> ::core::result::Result<(), NewError>;
 }
 
+/// Implement it for a service that does not implement `NewUseCase` yet: the service then has `NewUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `NewUseCase`.
+pub trait UnimplementedNewUseCase {}
+
+impl<T: UnimplementedNewUseCase> NewUseCase for T {
+    #[allow(clippy::too_many_arguments)] // one argument per row and input of the use case
+    fn prepare_new(&mut self, _: FunctionId, _: FuncId, _: ModId, _: MatchId, _: ::std::string::String, _: ::std::string::String, _: ::std::string::String, _: ::std::string::String, _: ::std::string::String, _: ::std::string::String, _: Kind) -> ::core::result::Result<NewOutcome, NewError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+    fn commit_new(&mut self, _: NewOutcome) -> ::core::result::Result<(), NewError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+}
+
 /// The use case Static: Static.
 /// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait StaticUseCase {
@@ -2859,4 +2956,16 @@ pub trait StaticUseCase {
     fn prepare_static(&mut self, function: FunctionId, function_default: ::std::string::String) -> ::core::result::Result<StaticResult, StaticError>;
     /// Stores what `prepare_static` returned in one transaction.
     fn commit_static(&mut self, write: StaticResult) -> ::core::result::Result<(), StaticError>;
+}
+
+/// Implement it for a service that does not implement `StaticUseCase` yet: the service then has `StaticUseCase`, each method of which panics as `unimplemented!` does. `conform` stops a trace at such a call and reports the calls by use case; `rdra-ish check --code=run` lists them, and `--deny-incomplete` fails on any. Remove the impl when the service implements `StaticUseCase`.
+pub trait UnimplementedStaticUseCase {}
+
+impl<T: UnimplementedStaticUseCase> StaticUseCase for T {
+    fn prepare_static(&mut self, _: FunctionId, _: ::std::string::String) -> ::core::result::Result<StaticResult, StaticError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
+    fn commit_static(&mut self, _: StaticResult) -> ::core::result::Result<(), StaticError> {
+        unimplemented!("rdra-ish unimplemented port")
+    }
 }

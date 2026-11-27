@@ -1,7 +1,7 @@
 //! Counterexample traces: one per violated rule, a shortest one, in model terms.
 
 use super::*;
-use crate::lifecycle::{Change, ReplayError, Target, Trace};
+use crate::lifecycle::{Change, Recheck, ReplayError, Target, Trace};
 
 fn traces(d: &Derived) -> Vec<(&StateDiag, &Trace)> {
     d.diags
@@ -109,6 +109,41 @@ forbidden(Order, status == retried)
     let (_, trace) = found[0];
     assert_eq!(actions(trace), ["Place", "Retry"]);
     assert_eq!(trace.over_bound, ["Payment"]);
+}
+
+/// The rule's exact cone counts every slot, so the counterexample past the bound above is no
+/// counterexample there at one instance, and at two the exact cone's is within the bound
+/// (P11: escalation prints the instances of the system that reaches it).
+#[test]
+fn a_recheck_that_counts_every_slot_finds_only_runs_within_the_bound() {
+    let model = model_from(
+        r#"
+entity Order "注文" { id: Int @pk  status: Enum(pending, retried) @default(pending) }
+entity Payment "決済" { id: Int @pk }
+usecase Place "注文"
+usecase Retry "再試行"
+creates(Place, Order)
+creates(Place, Payment)
+creates(Retry, Payment)
+updates(Retry, Order)
+transitions(Retry, Order.status, pending -> retried)
+relate(Payment, Order, N:1)
+forbidden(Order, status == retried)
+"#,
+    );
+    let caps = Caps::new(usize::MAX, 100_000);
+    let one = TransitionSystem::build(&model, Bounds::STATES, &Scope::ALL).ts;
+    let rule = Target::Invariant(0);
+    assert!(one.cone_frees_slots(&one.target_cone(rule)));
+    assert!(!one.cone_frees_slots(&one.exact_target_cone(rule, true)));
+    assert!(matches!(one.recheck(rule, true, caps), Recheck::Holds));
+    let two = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+    let Recheck::Violated(d) = two.recheck(rule, true, caps) else {
+        panic!("two Payment slots reach the retry");
+    };
+    let trace = d.diag.trace().expect("a trace");
+    assert_eq!(actions(trace), ["Place", "Retry"]);
+    assert!(trace.over_bound.is_empty() && trace.free_triggers.is_empty());
 }
 
 /// Replaying a violation's BFS path gives back the same violation, trace included; a state or

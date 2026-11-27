@@ -38,7 +38,7 @@ pub(super) fn disagreements(
                 let Some(native) = &natives.safety[k] else {
                     continue;
                 };
-                let (a, b) = (native.verdict(), tlc.decision.verdict());
+                let (a, b) = (native.module_verdict(), tlc.decision.verdict());
                 if differ(a, b) {
                     out.push(line(&job.module, &job.checks, as_str(a), as_str(b)));
                     continue;
@@ -100,13 +100,10 @@ pub(super) fn disagreements(
                             .map_or(job.module.clone(), |s| s.module.clone())
                     }
                 };
-                // Runs are matched by `ConeRun`, not by module. The native `WfNext` run on the
-                // reduced graph (`decide_liveness_reduced`) has no TLC module of its own: it
-                // stands for the unreduced cone with `WF_vars(Next)`, whose `ok` it keeps and
-                // whose counterexample it gives only once the lift certifies on that cone. So it
-                // is compared with TLC's `_WF` run, which TLC checks on the unreduced cone: a
-                // check of that claim (the reduction and the reduced WF reading) against TLC,
-                // not of one module run twice.
+                // Runs are matched by `ConeRun`, not by the system each run decides. The native
+                // `WfNext` run on the reduced graph (`decide_liveness_reduced`) is paired with
+                // TLC's `_WF` run on the unreduced cone; their agreement holds only as far as the
+                // reduction (A8) and the reduced WF reading (A15) do (P23, open).
                 for (run, mine) in &native.runs {
                     let theirs = tlc.runs.iter().find(|(r, _)| r == run).map(|(_, o)| *o);
                     if differ(*mine, theirs) {
