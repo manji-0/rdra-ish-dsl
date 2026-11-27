@@ -855,17 +855,18 @@ fn an_escalation_counterexample_alone_fails_the_run() {
 }
 
 /// A run at more instances may hold ten times the store its cone held at the run's bounds:
-/// `safety_count_guard_order` grows its rule's store about tenfold from 2 instances to 4, so
-/// that run stops there and decides nothing, under no state cap and the default memory.
+/// `z3_needs_run_mark` grows its rule's store past that from 2 instances to 4, so that run
+/// stops there and decides nothing, under no state cap and the default memory.
+/// (`safety_count_guard_order` showed this until its count lemmas proved it, #428.)
 #[test]
 fn an_escalation_past_ten_times_the_store_decides_nothing() {
     if !tool("z3", "RDRA_REQUIRE_Z3") {
         return;
     }
-    let out = verify(&["--prove", &corpus("safety_count_guard_order")]);
+    let out = verify(&["--prove", &corpus("z3_needs_run_mark")]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(
-        escalated_line(&stdout, "Forbidden_Shelf_0"),
-        "escalated: Forbidden_Shelf_0: ok at 3 instances, not decided at 4 instances (BFS on its cone; ok at 2)"
+        escalated_line(&stdout, "MultiForbidden_Light_0"),
+        "escalated: MultiForbidden_Light_0: ok at 3 instances, not decided at 4 instances (BFS on its cone; ok at 2)"
     );
 }

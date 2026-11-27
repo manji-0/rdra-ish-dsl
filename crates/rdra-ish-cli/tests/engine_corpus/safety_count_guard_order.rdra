@@ -5,8 +5,10 @@
 // gets no second copy: no shelf is closed and crowded, at any count. An engine that read
 // either count as an existential (`some copy`) would let Crowd run with one copy and Close
 // with the same copy, and report a counterexample; one that counted the slots of other
-// shelves would let a shelf crowd on another's copies.
-// expect Forbidden_Shelf_0: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
+// shelves would let a shelf crowd on another's copies. z3 proves the rule with the count
+// lemmas mined from the guards (#428): a closed shelf has at most one copy, a crowded one at
+// least two.
+// expect Forbidden_Shelf_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Deadlock_Shelf_status_open: native=counterexample tlc=counterexample
 entity Shelf "棚" {
   id: Int @pk

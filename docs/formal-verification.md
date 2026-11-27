@@ -506,8 +506,13 @@ lemmas come from facts about absent and deleted rows and keys, and from what BFS
 cone at the run's bounds and at one instance: the patterns a row takes, the values of each
 column and pair of columns, and the patterns of a child with its parent (whole, per parent
 column, one column of each, and one child column with two parent columns when its pairs do
-not already imply it). The lemmas of one column of each and of one child column with two
-parent columns wait: they join only when a rule stays unproved without them, and until then
+not already imply it). From each count guard (`.at_most`, `.at_least`, `.exactly`, and
+`exists` as at least one) over a key to the row its step moves come count lemmas: a parent
+row with a value that step writes has at most or at least the guard's number of children by
+that key, all of them or those the guard pins, when no reached state shows otherwise. A
+parent value no state reached gets one too, since the count a guard asks for often needs
+more rows than the run's bounds. The lemmas of one column of each, of one child column with
+two parent columns, and of counts wait: they join only when a rule stays unproved without them, and until then
 z3 sees nothing of them, so a proof that needs none of them sends z3 the same checks whatever
 of them a model offers. Each mining run stops at 50,000 states. A lemma is only a guess until it survives the same checks, so a capped
 exploration costs proofs, not soundness. The lemmas a proof kept print as `lemma:` lines, and

@@ -3,16 +3,19 @@
 //! the run's bounds cap often finishes; what every reached state shows becomes a candidate:
 //! the patterns a row takes, the values and value pairs of its columns, the patterns a child
 //! row takes together with its parent (whole, per parent column, one column of each, and one
-//! child column with two parent columns), and the patterns of two children of one parent. A guess is never trusted: the prover keeps it only
-//! when it is inductive with the others, so a capped or over-approximate exploration costs
-//! proofs, not soundness.
+//! child column with two parent columns), the patterns of two children of one parent, and
+//! how many children a parent with a value a count guard's step writes has, at the guard's
+//! count. A guess is never trusted: the prover keeps it only when it is inductive with the
+//! others, so a capped or over-approximate exploration costs proofs, not soundness.
 
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::lifecycle::cone::Target;
 use crate::lifecycle::explore::{Caps, ComponentRun};
 use crate::lifecycle::restrict::Remap;
-use crate::lifecycle::types::{At, CmpOp, Domain, EntId, Pred, Term, Value, VarId, VarKind};
+use crate::lifecycle::types::{
+    At, CmpOp, Domain, Effect, EntId, Pred, Rhs, Term, Value, VarId, VarKind,
+};
 use crate::lifecycle::TransitionSystem;
 use crate::parallel::{in_parallel, jobs};
 
@@ -42,6 +45,9 @@ struct Seen {
     /// Per key and the child's row vars: the patterns of two present children that name one
     /// parent row. An empty set says no two ever do.
     siblings: BTreeMap<(VarId, Vec<VarId>), Pairs>,
+    /// Per key and the row vars of child and parent: each present parent's pattern with the
+    /// sorted patterns of the present children that name it, none included.
+    families: BTreeMap<KeyAxes, BTreeSet<(Pattern, Vec<Pattern>)>>,
 }
 
 /// One mined candidate and the text the report prints when the proof keeps it.
@@ -80,9 +86,10 @@ pub(super) fn mine(
         let (sub, map) = systems[k].restrict_to_mapped(&cone.vars, &cone.keep, true);
         (k, map, sub.run(Caps::new(usize::MAX, STATE_CAP)))
     });
+    let counted: BTreeSet<VarId> = quotas(ts).into_iter().map(|q| q.key).collect();
     let mut seen: Vec<Seen> = systems.iter().map(|_| Seen::default()).collect();
     for (k, map, run) in &runs {
-        record(systems[*k], map, run, &mut seen[*k]);
+        record(systems[*k], map, run, &counted, &mut seen[*k]);
     }
     let mut out = candidates(ts, &seen[0]);
     if let (Some(twin), Some(seen)) = (twin, seen.get(1)) {
@@ -99,8 +106,15 @@ pub(super) fn mine(
     out
 }
 
-/// What one cone's run reached, added to `seen` in `ts`'s ids.
-fn record(ts: &TransitionSystem, map: &Remap, run: &ComponentRun, seen: &mut Seen) {
+/// What one cone's run reached, added to `seen` in `ts`'s ids. Families are kept only for the
+/// keys in `counted`, the ones a guard counts children by.
+fn record(
+    ts: &TransitionSystem,
+    map: &Remap,
+    run: &ComponentRun,
+    counted: &BTreeSet<VarId>,
+    seen: &mut Seen,
+) {
     let back: BTreeMap<VarId, VarId> = ts
         .var_ids()
         .filter_map(|v| map.var_of(v).map(|s| (s, v)))
@@ -153,6 +167,21 @@ fn record(ts: &TransitionSystem, map: &Remap, run: &ComponentRun, seen: &mut See
                         pairs.insert((a.clone(), b.clone()));
                         pairs.insert((b, a));
                     }
+                }
+            }
+            if counted.contains(&back[&o]) {
+                let families = seen
+                    .families
+                    .entry((back[&o], c.3.clone(), p.3.clone()))
+                    .or_default();
+                for ps in (0..sys.slots(parent)).filter(|&k| s.is_present(sys, parent, k)) {
+                    let mut kids: Vec<Pattern> = linked
+                        .iter()
+                        .filter(|(_, p)| usize::from(*p) == ps)
+                        .map(|(k, _)| pattern(&s, &c.2, *k))
+                        .collect();
+                    kids.sort();
+                    families.insert((pattern(&s, &p.2, ps), kids));
                 }
             }
             for slot in (0..sys.slots(child)).filter(|&k| s.is_present(sys, child, k)) {
@@ -398,6 +427,10 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
             false,
         );
     }
+    // Last, so the candidates before them and the checks they start are as without.
+    for m in counts(ts, seen) {
+        push(m.text, m.formula, &mut out, true);
+    }
     out
 }
 
@@ -414,6 +447,256 @@ fn implied_by_pairs(triples: &Pairs) -> bool {
             .filter(|&&(c2, b)| c2 == c && parents.contains(&(a, b)))
             .all(|&(_, b)| triples.contains(&(vec![c], vec![a, b])))
     })
+}
+
+/// The largest `n` a count lemma states; the proof unrolls a count into `n + 1` distinct rows,
+/// exactly up to 8 (`.at_most(7, ..)` is the largest `at_most`).
+const COUNT_MAX: u8 = 7;
+
+/// A count a guard makes of the children of a row its step moves: the key, the child columns
+/// the count pins (`var == value`), the bound the guard asks for, and the values the step
+/// writes to the parent row. `.has` is at least 1.
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+struct Quota {
+    key: VarId,
+    pins: Vec<(VarId, u8)>,
+    /// `true` for at most, `false` for at least.
+    at_most: Vec<bool>,
+    n: u8,
+    after: Vec<(VarId, u8)>,
+}
+
+/// Each count a guard of the model makes of the children of a row its step writes. The fact
+/// a proof needs is that the count still holds once the step has moved the row
+/// (safety_count_guard_order: a shelf closed with at most one copy keeps at most one, since
+/// copies come only to open shelves), so each quota keeps the values the step writes.
+fn quotas(ts: &TransitionSystem) -> BTreeSet<Quota> {
+    let mut out = BTreeSet::new();
+    for action in ts.actions() {
+        for node in action.guards.iter().flat_map(|g| g.pred.nodes()) {
+            let (entity, body, at_most, n) = match node {
+                Pred::Count {
+                    entity,
+                    body,
+                    op,
+                    n,
+                } => {
+                    let at_most = match op {
+                        CmpOp::Le => vec![true],
+                        CmpOp::Ge => vec![false],
+                        _ => vec![true, false],
+                    };
+                    (*entity, body, at_most, *n)
+                }
+                Pred::Exists { entity, body } => (*entity, body, vec![false], 1),
+                _ => continue,
+            };
+            let mut link = None;
+            let mut pins = Vec::new();
+            for atom in body.nodes() {
+                let Pred::Cmp(Term::Slot { var, .. }, CmpOp::Eq, rhs) = atom else {
+                    continue;
+                };
+                match (&ts.var(*var).kind, rhs) {
+                    (VarKind::Owner { child, .. }, Term::Index(At::Param(p)))
+                        if *child == entity =>
+                    {
+                        link = Some((*var, *p));
+                    }
+                    (_, Term::Lit(Value(x)))
+                        if ts.var_entity(*var) == Some(entity) && is_row_value(ts, *var) =>
+                    {
+                        pins.push((*var, *x));
+                    }
+                    _ => {}
+                }
+            }
+            let Some((key, param)) = link else {
+                continue;
+            };
+            let mut after = Vec::new();
+            for effect in &action.effects {
+                match effect {
+                    Effect::Assign {
+                        var,
+                        param: q,
+                        rhs: Rhs::Lit(Value(x)),
+                        ..
+                    } if *q == param => after.push((*var, *x)),
+                    Effect::Transition {
+                        var,
+                        param: q,
+                        arms,
+                    } if *q == param => {
+                        after.extend(arms.iter().map(|arm| (*var, arm.to.0)));
+                    }
+                    _ => {}
+                }
+            }
+            if after.is_empty() {
+                continue;
+            }
+            pins.sort();
+            pins.dedup();
+            after.sort();
+            after.dedup();
+            out.insert(Quota {
+                key,
+                pins,
+                at_most,
+                n,
+                after,
+            });
+        }
+    }
+    out
+}
+
+/// Count lemmas (#428, A1): a present parent row with a value a step guarded by a count of
+/// its children writes has at most or at least the guard's `n` present children by that key,
+/// all of them or those the count pins (`quotas`). Each is offered only when every family of
+/// a parent and its children that BFS reached keeps it, which a parent value no state reached
+/// does: the count a guard asks for often needs more rows than the run's bounds allow.
+fn counts(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
+    let mut out = Vec::new();
+    for quota in quotas(ts) {
+        let VarKind::Owner { child, parent, .. } = ts.var(quota.key).kind else {
+            continue;
+        };
+        for ((o, cvars, pvars), families) in &seen.families {
+            if *o != quota.key {
+                continue;
+            }
+            // The pins as positions in the child's pattern; a pin on a column the cone does
+            // not hold cannot be read from its states.
+            let Some(pins): Option<Vec<(usize, u8)>> = quota
+                .pins
+                .iter()
+                .map(|(v, x)| Some((cvars.iter().position(|c| c == v)?, *x)))
+                .collect()
+            else {
+                continue;
+            };
+            let mut options = vec![Vec::new()];
+            if !pins.is_empty() {
+                options.push(pins);
+            }
+            for kid_pins in options {
+                for &(var, x) in &quota.after {
+                    let Some(j) = pvars.iter().position(|v| *v == var) else {
+                        continue;
+                    };
+                    let held: Vec<usize> = families
+                        .iter()
+                        .filter(|(pp, _)| pp[j] == x)
+                        .map(|(_, kids)| {
+                            kids.iter()
+                                .filter(|k| kid_pins.iter().all(|(i, x)| k[*i] == *x))
+                                .count()
+                        })
+                        .collect();
+                    for &at_most in &quota.at_most {
+                        let n = quota.n;
+                        let (op, fits, keeps) = if at_most {
+                            let keeps = held.iter().all(|&c| c <= usize::from(n));
+                            (CmpOp::Le, n <= COUNT_MAX, keeps)
+                        } else {
+                            let keeps = held.iter().all(|&c| c >= usize::from(n));
+                            (CmpOp::Ge, (1..=COUNT_MAX + 1).contains(&n), keeps)
+                        };
+                        if !fits || !keeps {
+                            continue;
+                        }
+                        let pinned: Vec<(VarId, u8)> =
+                            kid_pins.iter().map(|(i, x)| (cvars[*i], *x)).collect();
+                        let ends = (child, parent);
+                        out.push(count_lemma(
+                            ts,
+                            ends,
+                            quota.key,
+                            Some((var, x)),
+                            &pinned,
+                            op,
+                            n,
+                        ));
+                    }
+                }
+            }
+        }
+    }
+    out
+}
+
+/// `∀ parent [with pvar == value]. count(child by key [with pins]) op n`, with its text.
+fn count_lemma(
+    ts: &TransitionSystem,
+    (child, parent): (EntId, EntId),
+    key: VarId,
+    at: Option<(VarId, u8)>,
+    pins: &[(VarId, u8)],
+    op: CmpOp,
+    n: u8,
+) -> Mined {
+    let slot = |var: VarId, b: u8| Term::Slot {
+        var,
+        at: At::Bound(b),
+    };
+    let eq = |var: VarId, b: u8, x: u8| Pred::Cmp(slot(var, b), CmpOp::Eq, Term::Lit(Value(x)));
+    let mut kid = vec![Pred::Cmp(
+        slot(key, 1),
+        CmpOp::Eq,
+        Term::Index(At::Bound(0)),
+    )];
+    kid.extend(pins.iter().map(|(v, x)| eq(*v, 1, *x)));
+    let count = Pred::Count {
+        entity: child,
+        body: Box::new(Pred::And(kid)),
+        op,
+        n,
+    };
+    let body = match at {
+        Some((v, x)) => Pred::Or(vec![Pred::Not(Box::new(eq(v, 0, x))), count]),
+        None => count,
+    };
+    let one = |v: VarId, x: u8| {
+        format!(
+            "{} == {}",
+            ts.var_name(v),
+            super::value_name(&ts.var(v).domain, i64::from(x))
+        )
+    };
+    let parent_text = match at {
+        Some((v, x)) => format!(" with {}", one(v, x)),
+        None => String::new(),
+    };
+    let pins_text = match pins {
+        [] => String::new(),
+        pins => format!(
+            " with {}",
+            pins.iter()
+                .map(|(v, x)| one(*v, *x))
+                .collect::<Vec<_>>()
+                .join(", ")
+        ),
+    };
+    let bound = match op {
+        CmpOp::Le => "at most",
+        _ => "at least",
+    };
+    Mined {
+        text: format!(
+            "a present {} row{parent_text} has {bound} {n} present {} rows{pins_text} by {}",
+            ts.entity(parent).id,
+            ts.entity(child).id,
+            ts.var_name(key)
+        ),
+        formula: Formula {
+            binders: vec![parent],
+            body,
+            all_rows: false,
+        },
+        fine: true,
+    }
 }
 
 /// The row bound at `at` holds one of `patterns` over `vars`.
@@ -464,6 +747,54 @@ fn show(ts: &TransitionSystem, vars: &[VarId], patterns: &BTreeSet<Pattern>) -> 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lifecycle::tests::system_from;
+    use crate::lifecycle::Bounds;
+
+    /// The count lemmas `mine` offers on `src` at `verify`'s bounds, by text.
+    fn count_lemmas(src: &str) -> Vec<String> {
+        let ts = system_from(src, Bounds::VERIFY);
+        let rules: Vec<usize> = (0..ts.invariants().len()).collect();
+        let mut texts: Vec<String> = mine(&ts, None, &rules)
+            .into_iter()
+            .filter(|m| m.text.contains(" has at most ") || m.text.contains(" has at least "))
+            .map(|m| {
+                assert!(m.fine, "{}", m.text);
+                m.text
+            })
+            .collect();
+        texts.sort();
+        texts
+    }
+
+    /// The guards' bounds give the counts, at the values their steps write, though no state at
+    /// 2 instances has a third copy: Close (at most two) closes the shelf, Crowd (at least
+    /// three) crowds it.
+    #[test]
+    fn a_count_guard_gives_a_count_lemma_past_the_states() {
+        let src = include_str!("../../../../rdra-ish-cli/tests/engine_corpus/z3_needs_count.rdra");
+        assert_eq!(
+            count_lemmas(src),
+            [
+                "a present Shelf row with crowded == true has at least 3 present Copy rows by Copy._owner_Shelf",
+                "a present Shelf row with status == closed has at most 2 present Copy rows by Copy._owner_Shelf",
+            ]
+        );
+    }
+
+    /// An `exists` guard is a count of at least one, of all the children and of those it
+    /// pins, at the value its step writes (ready); the value a later step writes (done) gets
+    /// none.
+    #[test]
+    fn an_exists_guard_gives_an_at_least_one_lemma() {
+        let src = include_str!("../../../../rdra-ish-cli/tests/engine_corpus/z3_needs_exists.rdra");
+        assert_eq!(
+            count_lemmas(src),
+            [
+                "a present Order row with status == ready has at least 1 present Shipment rows by Shipment._owner_Order",
+                "a present Order row with status == ready has at least 1 present Shipment rows with status == sent by Shipment._owner_Order",
+            ]
+        );
+    }
 
     fn triples(xs: &[(u8, u8, u8)]) -> Pairs {
         xs.iter().map(|&(c, a, b)| (vec![c], vec![a, b])).collect()
