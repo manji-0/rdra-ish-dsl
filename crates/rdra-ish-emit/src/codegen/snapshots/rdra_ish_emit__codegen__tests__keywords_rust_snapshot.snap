@@ -1190,6 +1190,70 @@ impl ::core::fmt::Display for NotEnabled {
 
 impl ::std::error::Error for NotEnabled {}
 
+/// A row the call names does not exist: the service's load found no row of that id. The
+/// generated functions take rows already loaded and never return it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotFound {
+    /// The use case.
+    pub usecase: &'static str,
+    /// The entity of the row, as the model names it.
+    pub entity: &'static str,
+    /// The id the call names, as text.
+    pub id: ::std::string::String,
+}
+
+impl ::core::fmt::Display for NotFound {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        write!(f, "{}: no {} row has the id {}", self.usecase, self.entity, self.id)
+    }
+}
+
+impl ::std::error::Error for NotFound {}
+
+/// The store failed: a lost connection, a constraint the model does not know. It is no answer
+/// of the use case, and the generated functions never return it. Two are equal when they
+/// carry the same cause.
+#[derive(Debug, Clone)]
+pub struct StoreFailed {
+    /// The use case.
+    pub usecase: &'static str,
+    /// The store's error, which `source` returns.
+    pub cause: ::std::sync::Arc<dyn ::std::error::Error + ::core::marker::Send + ::core::marker::Sync + 'static>,
+}
+
+impl StoreFailed {
+    /// The failure of `usecase`'s store with `cause`.
+    pub fn new(
+        usecase: &'static str,
+        cause: impl ::core::convert::Into<::std::boxed::Box<dyn ::std::error::Error + ::core::marker::Send + ::core::marker::Sync + 'static>>,
+    ) -> Self {
+        Self {
+            usecase,
+            cause: ::std::sync::Arc::from(cause.into()),
+        }
+    }
+}
+
+impl ::core::cmp::PartialEq for StoreFailed {
+    fn eq(&self, other: &Self) -> bool {
+        self.usecase == other.usecase && ::std::sync::Arc::ptr_eq(&self.cause, &other.cause)
+    }
+}
+
+impl ::core::cmp::Eq for StoreFailed {}
+
+impl ::core::fmt::Display for StoreFailed {
+    fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
+        write!(f, "{}: the store failed: {}", self.usecase, self.cause)
+    }
+}
+
+impl ::std::error::Error for StoreFailed {
+    fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
+        ::core::option::Option::Some(&*self.cause)
+    }
+}
+
 /// A condition applied to the use case does not hold: the use case does not run.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Rejected {
@@ -1233,12 +1297,18 @@ impl ::std::error::Error for InvalidArgument {}
 pub enum ReturnError {
     /// The rows are in states Return does not run from, or a commit found a row it writes changed.
     NotEnabled(NotEnabled),
+    /// A row the call names does not exist: the service's load returns it.
+    NotFound(NotFound),
+    /// The store failed: the service's load or commit returns it.
+    StoreFailed(StoreFailed),
 }
 
 impl ::core::fmt::Display for ReturnError {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         match self {
             Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+            Self::NotFound(e) => ::core::fmt::Display::fmt(e, f),
+            Self::StoreFailed(e) => ::core::fmt::Display::fmt(e, f),
         }
     }
 }
@@ -1247,6 +1317,8 @@ impl ::std::error::Error for ReturnError {
     fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
         match self {
             Self::NotEnabled(e) => ::core::option::Option::Some(e),
+            Self::NotFound(e) => ::core::option::Option::Some(e),
+            Self::StoreFailed(e) => ::core::option::Option::Some(e),
         }
     }
 }
@@ -1257,20 +1329,38 @@ impl ::core::convert::From<NotEnabled> for ReturnError {
     }
 }
 
+impl ::core::convert::From<NotFound> for ReturnError {
+    fn from(e: NotFound) -> Self {
+        Self::NotFound(e)
+    }
+}
+
+impl ::core::convert::From<StoreFailed> for ReturnError {
+    fn from(e: StoreFailed) -> Self {
+        Self::StoreFailed(e)
+    }
+}
+
 /// Why Delete did not run: what its functions, its dispatcher, and the commit of its result return.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DeleteError {
     /// The rows are in states Delete does not run from, or a commit found a row it writes changed.
     NotEnabled(NotEnabled),
+    /// A row the call names does not exist: the service's load returns it.
+    NotFound(NotFound),
     /// The arguments break what the verified model keeps.
     InvalidArgument(InvalidArgument),
+    /// The store failed: the service's load or commit returns it.
+    StoreFailed(StoreFailed),
 }
 
 impl ::core::fmt::Display for DeleteError {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         match self {
             Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+            Self::NotFound(e) => ::core::fmt::Display::fmt(e, f),
             Self::InvalidArgument(e) => ::core::fmt::Display::fmt(e, f),
+            Self::StoreFailed(e) => ::core::fmt::Display::fmt(e, f),
         }
     }
 }
@@ -1279,7 +1369,9 @@ impl ::std::error::Error for DeleteError {
     fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
         match self {
             Self::NotEnabled(e) => ::core::option::Option::Some(e),
+            Self::NotFound(e) => ::core::option::Option::Some(e),
             Self::InvalidArgument(e) => ::core::option::Option::Some(e),
+            Self::StoreFailed(e) => ::core::option::Option::Some(e),
         }
     }
 }
@@ -1290,9 +1382,21 @@ impl ::core::convert::From<NotEnabled> for DeleteError {
     }
 }
 
+impl ::core::convert::From<NotFound> for DeleteError {
+    fn from(e: NotFound) -> Self {
+        Self::NotFound(e)
+    }
+}
+
 impl ::core::convert::From<InvalidArgument> for DeleteError {
     fn from(e: InvalidArgument) -> Self {
         Self::InvalidArgument(e)
+    }
+}
+
+impl ::core::convert::From<StoreFailed> for DeleteError {
+    fn from(e: StoreFailed) -> Self {
+        Self::StoreFailed(e)
     }
 }
 
@@ -1301,15 +1405,21 @@ impl ::core::convert::From<InvalidArgument> for DeleteError {
 pub enum SuperError {
     /// The rows are in states Super does not run from, or a commit found a row it writes changed.
     NotEnabled(NotEnabled),
+    /// A row the call names does not exist: the service's load returns it.
+    NotFound(NotFound),
     /// A condition applied to Super does not hold.
     Rejected(Rejected),
+    /// The store failed: the service's load or commit returns it.
+    StoreFailed(StoreFailed),
 }
 
 impl ::core::fmt::Display for SuperError {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         match self {
             Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+            Self::NotFound(e) => ::core::fmt::Display::fmt(e, f),
             Self::Rejected(e) => ::core::fmt::Display::fmt(e, f),
+            Self::StoreFailed(e) => ::core::fmt::Display::fmt(e, f),
         }
     }
 }
@@ -1318,7 +1428,9 @@ impl ::std::error::Error for SuperError {
     fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
         match self {
             Self::NotEnabled(e) => ::core::option::Option::Some(e),
+            Self::NotFound(e) => ::core::option::Option::Some(e),
             Self::Rejected(e) => ::core::option::Option::Some(e),
+            Self::StoreFailed(e) => ::core::option::Option::Some(e),
         }
     }
 }
@@ -1329,9 +1441,21 @@ impl ::core::convert::From<NotEnabled> for SuperError {
     }
 }
 
+impl ::core::convert::From<NotFound> for SuperError {
+    fn from(e: NotFound) -> Self {
+        Self::NotFound(e)
+    }
+}
+
 impl ::core::convert::From<Rejected> for SuperError {
     fn from(e: Rejected) -> Self {
         Self::Rejected(e)
+    }
+}
+
+impl ::core::convert::From<StoreFailed> for SuperError {
+    fn from(e: StoreFailed) -> Self {
+        Self::StoreFailed(e)
     }
 }
 
@@ -1340,12 +1464,18 @@ impl ::core::convert::From<Rejected> for SuperError {
 pub enum CrateError {
     /// The rows are in states Crate does not run from, or a commit found a row it writes changed.
     NotEnabled(NotEnabled),
+    /// A row the call names does not exist: the service's load returns it.
+    NotFound(NotFound),
+    /// The store failed: the service's load or commit returns it.
+    StoreFailed(StoreFailed),
 }
 
 impl ::core::fmt::Display for CrateError {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         match self {
             Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+            Self::NotFound(e) => ::core::fmt::Display::fmt(e, f),
+            Self::StoreFailed(e) => ::core::fmt::Display::fmt(e, f),
         }
     }
 }
@@ -1354,6 +1484,8 @@ impl ::std::error::Error for CrateError {
     fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
         match self {
             Self::NotEnabled(e) => ::core::option::Option::Some(e),
+            Self::NotFound(e) => ::core::option::Option::Some(e),
+            Self::StoreFailed(e) => ::core::option::Option::Some(e),
         }
     }
 }
@@ -1364,17 +1496,35 @@ impl ::core::convert::From<NotEnabled> for CrateError {
     }
 }
 
+impl ::core::convert::From<NotFound> for CrateError {
+    fn from(e: NotFound) -> Self {
+        Self::NotFound(e)
+    }
+}
+
+impl ::core::convert::From<StoreFailed> for CrateError {
+    fn from(e: StoreFailed) -> Self {
+        Self::StoreFailed(e)
+    }
+}
+
 /// Why Default did not run: what its functions, its dispatcher, and the commit of its result return.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DefaultError {
     /// The rows are in states Default does not run from, or a commit found a row it writes changed.
     NotEnabled(NotEnabled),
+    /// A row the call names does not exist: the service's load returns it.
+    NotFound(NotFound),
+    /// The store failed: the service's load or commit returns it.
+    StoreFailed(StoreFailed),
 }
 
 impl ::core::fmt::Display for DefaultError {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         match self {
             Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+            Self::NotFound(e) => ::core::fmt::Display::fmt(e, f),
+            Self::StoreFailed(e) => ::core::fmt::Display::fmt(e, f),
         }
     }
 }
@@ -1383,6 +1533,8 @@ impl ::std::error::Error for DefaultError {
     fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
         match self {
             Self::NotEnabled(e) => ::core::option::Option::Some(e),
+            Self::NotFound(e) => ::core::option::Option::Some(e),
+            Self::StoreFailed(e) => ::core::option::Option::Some(e),
         }
     }
 }
@@ -1393,17 +1545,35 @@ impl ::core::convert::From<NotEnabled> for DefaultError {
     }
 }
 
+impl ::core::convert::From<NotFound> for DefaultError {
+    fn from(e: NotFound) -> Self {
+        Self::NotFound(e)
+    }
+}
+
+impl ::core::convert::From<StoreFailed> for DefaultError {
+    fn from(e: StoreFailed) -> Self {
+        Self::StoreFailed(e)
+    }
+}
+
 /// Why Type did not run: what its functions, its dispatcher, and the commit of its result return.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TypeError {
     /// The rows are in states Type does not run from, or a commit found a row it writes changed.
     NotEnabled(NotEnabled),
+    /// A row the call names does not exist: the service's load returns it.
+    NotFound(NotFound),
+    /// The store failed: the service's load or commit returns it.
+    StoreFailed(StoreFailed),
 }
 
 impl ::core::fmt::Display for TypeError {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         match self {
             Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+            Self::NotFound(e) => ::core::fmt::Display::fmt(e, f),
+            Self::StoreFailed(e) => ::core::fmt::Display::fmt(e, f),
         }
     }
 }
@@ -1412,6 +1582,8 @@ impl ::std::error::Error for TypeError {
     fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
         match self {
             Self::NotEnabled(e) => ::core::option::Option::Some(e),
+            Self::NotFound(e) => ::core::option::Option::Some(e),
+            Self::StoreFailed(e) => ::core::option::Option::Some(e),
         }
     }
 }
@@ -1422,17 +1594,35 @@ impl ::core::convert::From<NotEnabled> for TypeError {
     }
 }
 
+impl ::core::convert::From<NotFound> for TypeError {
+    fn from(e: NotFound) -> Self {
+        Self::NotFound(e)
+    }
+}
+
+impl ::core::convert::From<StoreFailed> for TypeError {
+    fn from(e: StoreFailed) -> Self {
+        Self::StoreFailed(e)
+    }
+}
+
 /// Why Class did not run: what its functions, its dispatcher, and the commit of its result return.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ClassError {
     /// The rows are in states Class does not run from, or a commit found a row it writes changed.
     NotEnabled(NotEnabled),
+    /// A row the call names does not exist: the service's load returns it.
+    NotFound(NotFound),
+    /// The store failed: the service's load or commit returns it.
+    StoreFailed(StoreFailed),
 }
 
 impl ::core::fmt::Display for ClassError {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         match self {
             Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+            Self::NotFound(e) => ::core::fmt::Display::fmt(e, f),
+            Self::StoreFailed(e) => ::core::fmt::Display::fmt(e, f),
         }
     }
 }
@@ -1441,6 +1631,8 @@ impl ::std::error::Error for ClassError {
     fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
         match self {
             Self::NotEnabled(e) => ::core::option::Option::Some(e),
+            Self::NotFound(e) => ::core::option::Option::Some(e),
+            Self::StoreFailed(e) => ::core::option::Option::Some(e),
         }
     }
 }
@@ -1451,17 +1643,35 @@ impl ::core::convert::From<NotEnabled> for ClassError {
     }
 }
 
+impl ::core::convert::From<NotFound> for ClassError {
+    fn from(e: NotFound) -> Self {
+        Self::NotFound(e)
+    }
+}
+
+impl ::core::convert::From<StoreFailed> for ClassError {
+    fn from(e: StoreFailed) -> Self {
+        Self::StoreFailed(e)
+    }
+}
+
 /// Why New did not run: what its functions, its dispatcher, and the commit of its result return.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum NewError {
     /// The rows are in states New does not run from, or a commit found a row it writes changed.
     NotEnabled(NotEnabled),
+    /// A row the call names does not exist: the service's load returns it.
+    NotFound(NotFound),
+    /// The store failed: the service's load or commit returns it.
+    StoreFailed(StoreFailed),
 }
 
 impl ::core::fmt::Display for NewError {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         match self {
             Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+            Self::NotFound(e) => ::core::fmt::Display::fmt(e, f),
+            Self::StoreFailed(e) => ::core::fmt::Display::fmt(e, f),
         }
     }
 }
@@ -1470,6 +1680,8 @@ impl ::std::error::Error for NewError {
     fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
         match self {
             Self::NotEnabled(e) => ::core::option::Option::Some(e),
+            Self::NotFound(e) => ::core::option::Option::Some(e),
+            Self::StoreFailed(e) => ::core::option::Option::Some(e),
         }
     }
 }
@@ -1480,17 +1692,35 @@ impl ::core::convert::From<NotEnabled> for NewError {
     }
 }
 
+impl ::core::convert::From<NotFound> for NewError {
+    fn from(e: NotFound) -> Self {
+        Self::NotFound(e)
+    }
+}
+
+impl ::core::convert::From<StoreFailed> for NewError {
+    fn from(e: StoreFailed) -> Self {
+        Self::StoreFailed(e)
+    }
+}
+
 /// Why Static did not run: what its functions, its dispatcher, and the commit of its result return.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum StaticError {
     /// The rows are in states Static does not run from, or a commit found a row it writes changed.
     NotEnabled(NotEnabled),
+    /// A row the call names does not exist: the service's load returns it.
+    NotFound(NotFound),
+    /// The store failed: the service's load or commit returns it.
+    StoreFailed(StoreFailed),
 }
 
 impl ::core::fmt::Display for StaticError {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         match self {
             Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
+            Self::NotFound(e) => ::core::fmt::Display::fmt(e, f),
+            Self::StoreFailed(e) => ::core::fmt::Display::fmt(e, f),
         }
     }
 }
@@ -1499,6 +1729,8 @@ impl ::std::error::Error for StaticError {
     fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
         match self {
             Self::NotEnabled(e) => ::core::option::Option::Some(e),
+            Self::NotFound(e) => ::core::option::Option::Some(e),
+            Self::StoreFailed(e) => ::core::option::Option::Some(e),
         }
     }
 }
@@ -1506,6 +1738,18 @@ impl ::std::error::Error for StaticError {
 impl ::core::convert::From<NotEnabled> for StaticError {
     fn from(e: NotEnabled) -> Self {
         Self::NotEnabled(e)
+    }
+}
+
+impl ::core::convert::From<NotFound> for StaticError {
+    fn from(e: NotFound) -> Self {
+        Self::NotFound(e)
+    }
+}
+
+impl ::core::convert::From<StoreFailed> for StaticError {
+    fn from(e: StoreFailed) -> Self {
+        Self::StoreFailed(e)
     }
 }
 
@@ -2722,30 +2966,112 @@ pub trait CommitStore {
     fn record_event(&mut self, event: RaisedEvent) -> ::core::result::Result<(), Self::Error>;
 }
 
-/// Why [`commit_writes`] stopped. Either way the caller rolls the transaction back.
+/// Why [`commit_writes`] stopped: the same cases every `<UseCase>Error` has, which it converts
+/// into. Either way the caller rolls the transaction back.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum CommitFailed<E> {
+pub enum CommitFailed {
     /// A row or a run mark is no longer what the result expects: another call changed it,
     /// and the use case does not run from the state it left.
     NotEnabled(NotEnabled),
     /// The store failed.
-    Store(E),
+    StoreFailed(StoreFailed),
 }
 
-impl<E: ::core::fmt::Display> ::core::fmt::Display for CommitFailed<E> {
+impl ::core::fmt::Display for CommitFailed {
     fn fmt(&self, f: &mut ::core::fmt::Formatter<'_>) -> ::core::fmt::Result {
         match self {
             Self::NotEnabled(e) => ::core::fmt::Display::fmt(e, f),
-            Self::Store(e) => write!(f, "the store failed: {e}"),
+            Self::StoreFailed(e) => ::core::fmt::Display::fmt(e, f),
         }
     }
 }
 
-impl<E: ::std::error::Error + 'static> ::std::error::Error for CommitFailed<E> {
+impl ::std::error::Error for CommitFailed {
     fn source(&self) -> ::core::option::Option<&(dyn ::std::error::Error + 'static)> {
         match self {
             Self::NotEnabled(e) => ::core::option::Option::Some(e),
-            Self::Store(e) => ::core::option::Option::Some(e),
+            Self::StoreFailed(e) => ::core::option::Option::Some(e),
+        }
+    }
+}
+
+impl ::core::convert::From<CommitFailed> for ReturnError {
+    fn from(e: CommitFailed) -> Self {
+        match e {
+            CommitFailed::NotEnabled(e) => Self::NotEnabled(e),
+            CommitFailed::StoreFailed(e) => Self::StoreFailed(e),
+        }
+    }
+}
+
+impl ::core::convert::From<CommitFailed> for DeleteError {
+    fn from(e: CommitFailed) -> Self {
+        match e {
+            CommitFailed::NotEnabled(e) => Self::NotEnabled(e),
+            CommitFailed::StoreFailed(e) => Self::StoreFailed(e),
+        }
+    }
+}
+
+impl ::core::convert::From<CommitFailed> for SuperError {
+    fn from(e: CommitFailed) -> Self {
+        match e {
+            CommitFailed::NotEnabled(e) => Self::NotEnabled(e),
+            CommitFailed::StoreFailed(e) => Self::StoreFailed(e),
+        }
+    }
+}
+
+impl ::core::convert::From<CommitFailed> for CrateError {
+    fn from(e: CommitFailed) -> Self {
+        match e {
+            CommitFailed::NotEnabled(e) => Self::NotEnabled(e),
+            CommitFailed::StoreFailed(e) => Self::StoreFailed(e),
+        }
+    }
+}
+
+impl ::core::convert::From<CommitFailed> for DefaultError {
+    fn from(e: CommitFailed) -> Self {
+        match e {
+            CommitFailed::NotEnabled(e) => Self::NotEnabled(e),
+            CommitFailed::StoreFailed(e) => Self::StoreFailed(e),
+        }
+    }
+}
+
+impl ::core::convert::From<CommitFailed> for TypeError {
+    fn from(e: CommitFailed) -> Self {
+        match e {
+            CommitFailed::NotEnabled(e) => Self::NotEnabled(e),
+            CommitFailed::StoreFailed(e) => Self::StoreFailed(e),
+        }
+    }
+}
+
+impl ::core::convert::From<CommitFailed> for ClassError {
+    fn from(e: CommitFailed) -> Self {
+        match e {
+            CommitFailed::NotEnabled(e) => Self::NotEnabled(e),
+            CommitFailed::StoreFailed(e) => Self::StoreFailed(e),
+        }
+    }
+}
+
+impl ::core::convert::From<CommitFailed> for NewError {
+    fn from(e: CommitFailed) -> Self {
+        match e {
+            CommitFailed::NotEnabled(e) => Self::NotEnabled(e),
+            CommitFailed::StoreFailed(e) => Self::StoreFailed(e),
+        }
+    }
+}
+
+impl ::core::convert::From<CommitFailed> for StaticError {
+    fn from(e: CommitFailed) -> Self {
+        match e {
+            CommitFailed::NotEnabled(e) => Self::NotEnabled(e),
+            CommitFailed::StoreFailed(e) => Self::StoreFailed(e),
         }
     }
 }
@@ -2756,23 +3082,28 @@ impl<E: ::std::error::Error + 'static> ::std::error::Error for CommitFailed<E> {
 ///
 /// # Errors
 ///
-/// `NotEnabled` when a row or a run mark is no longer what the result expects, and the store's
-/// error when the store fails.
-pub fn commit_writes<S: CommitStore + ?Sized>(store: &mut S, writes: impl IntoWrites) -> ::core::result::Result<(), CommitFailed<S::Error>> {
+/// `NotEnabled` when a row or a run mark is no longer what the result expects, and
+/// `StoreFailed`, with the store's error as its cause, when the store fails.
+pub fn commit_writes<S: CommitStore + ?Sized>(store: &mut S, writes: impl IntoWrites) -> ::core::result::Result<(), CommitFailed>
+where
+    S::Error: ::core::convert::Into<::std::boxed::Box<dyn ::std::error::Error + ::core::marker::Send + ::core::marker::Sync + 'static>>,
+{
     let writes = writes.into_writes();
-    let not_enabled = NotEnabled { usecase: writes.usecase };
+    let usecase = writes.usecase;
+    let store_failed = |e: S::Error| CommitFailed::StoreFailed(StoreFailed::new(usecase, e));
+    let not_enabled = NotEnabled { usecase };
     for write in writes.rows {
-        if !store.write_row(write).map_err(CommitFailed::Store)? {
+        if !store.write_row(write).map_err(store_failed)? {
             return ::core::result::Result::Err(CommitFailed::NotEnabled(not_enabled));
         }
     }
     for write in writes.marks {
-        if !store.write_mark(write).map_err(CommitFailed::Store)? {
+        if !store.write_mark(write).map_err(store_failed)? {
             return ::core::result::Result::Err(CommitFailed::NotEnabled(not_enabled));
         }
     }
     for event in writes.events {
-        store.record_event(event).map_err(CommitFailed::Store)?;
+        store.record_event(event).map_err(store_failed)?;
     }
     ::core::result::Result::Ok(())
 }

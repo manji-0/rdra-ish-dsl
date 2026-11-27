@@ -1,0 +1,16 @@
+// trap: the top Int value of a nullable column, one value past a byte (P40).
+// A nullable Int holds null and 0..m: 257 values at `--int-range-max 255`, one more than a
+// state cell holds. Before #470 the write of 255 wrapped to null, in BFS, TLC and z3 alike, so
+// `forbidden(Item, n == 255)` was `ok` and `proved` though `Top` writes 255, while the same
+// model at 254 was a counterexample. The column is now `DomainTooLarge`, an error, and no
+// engine checks the rule.
+// flags: --int-range-max 255 --instance-count 1
+// expect DomainTooLarge_Item_n: native=counterexample tlc=none
+// expect Forbidden_Item_0: native=none tlc=none
+entity Item "商品" { id: Int @pk  n: Int @null }
+usecase Add "追加"
+usecase Top "最大"
+creates(Add, Item)
+updates(Top, Item)
+sets(Top, Item.n == 255)
+forbidden(Item, n == 255)

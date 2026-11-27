@@ -280,6 +280,7 @@ fn names_no_entity(diag: &StateDiag) -> bool {
             diag,
             StateDiag::PreExistingChildOfCreatedParent { .. }
                 | StateDiag::IdentityStartSlots { .. }
+                | StateDiag::DomainTooLarge { .. }
                 | StateDiag::MinCardOfPreExistingParent { .. }
                 | StateDiag::MinCardNeedsCreate { .. }
         )

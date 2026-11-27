@@ -355,15 +355,30 @@ impl ComponentRun {
         path
     }
 
-    /// What the run's moves of `act` reached: whether one was read, and whether the target
-    /// of one has a row of every entity in `binders`, the entities an after-assert step of
-    /// `act` leaves unbound. A run with an edge list scans it; a run without one recorded it
+    /// What the run's moves of `act` reached: whether one was read, whether one changes the
+    /// state, and whether the target of one that does has a row of every entity in
+    /// `binders`, the entities an after-assert step of `act` leaves unbound. A self-loop is a
+    /// stuttering step, which D17 does not check. A run with an edge list scans it; a run without one recorded it
     /// as it went, for every after-assert step of its system.
     pub fn step_ends(&self, act: ActId, binders: &[EntId]) -> Ends {
+        self.step_ends_with(act, binders, &[])
+    }
+
+    /// `step_ends` on a run that stores `orbit_self`, the indices of its orbit self-edges
+    /// (ascending): a loop among them is a real step, any other loop a stuttering one.
+    pub(crate) fn step_ends_with(&self, act: ActId, binders: &[EntId], orbit_self: &[u32]) -> Ends {
         let scan = |edges: &mut dyn Iterator<Item = Edge>| {
             let mut ends = Ends::default();
-            for e in edges.filter(|e| self.step(e).0 == act) {
+            for (k, e) in edges.enumerate() {
+                if self.step(&e).0 != act {
+                    continue;
+                }
                 ends.ran = true;
+                let moved = e.from != e.to || orbit_self.binary_search(&(k as u32)).is_ok();
+                if !moved {
+                    continue;
+                }
+                ends.moved = true;
                 if self
                     .system
                     .meets(binders, &Pred::True, &self.states.at(e.to as usize))

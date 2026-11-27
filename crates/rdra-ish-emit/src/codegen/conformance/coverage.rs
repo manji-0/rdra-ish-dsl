@@ -67,10 +67,16 @@ impl Traces {
                 "  refused calls: {} tried{kinds}; interleaved commits: {}",
                 self.refusals, self.interleavings
             )
-        } else {
+        } else if self.refusals == 0 {
             format!(
                 "  refused calls: none tried (the BFS stopped at its cap); interleaved commits: {}",
                 self.interleavings
+            )
+        } else {
+            // A call on a row that does not exist is tried whatever the BFS reached.
+            format!(
+                "  refused calls: {} tried, each on a row that does not exist (the BFS stopped at its cap); interleaved commits: {}",
+                self.refusals, self.interleavings
             )
         });
         if self.complete && self.untried.total() > 0 {
@@ -122,7 +128,7 @@ impl Traces {
         let mut why = Vec::new();
         if !self.complete {
             why.push(format!(
-                "the conformance BFS stopped at its cap of {} states: the moves past it are not run and no call is tried as refused, so a service that runs a call the model refuses passes",
+                "the conformance BFS stopped at its cap of {} states: the moves past it are not run and no call on an existing row is tried as refused, so a service that runs a call the model refuses passes",
                 self.cap
             ));
         } else if self.untried.total() > 0 {

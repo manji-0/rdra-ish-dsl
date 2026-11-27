@@ -32,7 +32,7 @@ use super::{type_ident, CodegenError, Names};
 use eval::{column_var, enum_name, matching, Rows};
 
 /// The format line every traces file starts with; the harness refuses another.
-pub const TRACES_FORMAT: &str = "# rdra-ish conformance traces 4";
+pub const TRACES_FORMAT: &str = "# rdra-ish conformance traces 5";
 
 /// The environment variable a probe's conformance test reads its traces from when it is set
 /// and not empty, in place of the traces file it names: `check --code=run` points it at the
@@ -701,6 +701,8 @@ pub fn traces(
             untried,
         )
     };
+    // A call on a row that does not exist is refused in any state, complete run or not.
+    let mut absent = cx.absent_refusals(port, &out.one_row, &out.absent_id);
 
     // The walk: take a move not taken yet from where the trace is; when there is none, start
     // a new trace and follow the shortest path to a state that has one.
@@ -767,6 +769,13 @@ pub fn traces(
         }
         body.push_str("G\n");
         arrive(init, &mut body, &mut visited, &mut out, &mut used_states);
+        // The first trace also names, once per action over one existing row, a row that does
+        // not exist: the service's load must answer `NotFound`.
+        for r in absent.drain(..) {
+            out.refusals += 1;
+            *out.kinds.entry(r.kind).or_default() += 1;
+            body.push_str(&format!("X {} {}{}\n", r.kind, r.action, joined(&r.args)));
+        }
         let mut path = Vec::new();
         let mut at = target;
         while let Some(c) = parent[at as usize] {
@@ -940,7 +949,8 @@ pub fn traces(
                     ran.insert(second);
                 }
             }
-            (Some("X"), _, Some(action)) => {
+            // A call on a row that does not exist is no refusal of the model's states.
+            (Some("X"), Some(kind), Some(action)) if kind != "NotFound" => {
                 refused.insert(action);
             }
             _ => {}
@@ -1525,6 +1535,47 @@ impl Cx<'_> {
                     args: self.refused_args(m, first, action, &params),
                 });
             }
+        }
+        out
+    }
+
+    /// The calls that name a row that does not exist: one per action of `one_row` whose call
+    /// names no run mark and no event, with `absent` for the id of its row, refused with
+    /// `NotFound`.
+    fn absent_refusals(&self, port: &PortDecl, one_row: &[String], absent: &str) -> Vec<Refused> {
+        let ts = self.ts;
+        let mut out = Vec::new();
+        for m in port.methods.iter().filter(|m| one_row.contains(&m.action)) {
+            let Some(action) = ts.actions().iter().find(|a| a.name == m.action) else {
+                continue;
+            };
+            // A call that also names a run mark or an event could be refused for those first.
+            let Some(first) =
+                self.domain.fns.iter().find(|f| {
+                    f.action == m.action && f.marks_in.is_empty() && f.event_in.is_none()
+                })
+            else {
+                continue;
+            };
+            let present = self.id(action.params[0].entity, 0);
+            let args = self
+                .refused_args(m, first, action, &[0])
+                .into_iter()
+                .enumerate()
+                .map(|(i, a)| {
+                    if i < first.rows.len() && a == present {
+                        absent.to_string()
+                    } else {
+                        a
+                    }
+                })
+                .collect();
+            out.push(Refused {
+                kind: "NotFound",
+                conditions: Vec::new(),
+                action: m.action.clone(),
+                args,
+            });
         }
         out
     }

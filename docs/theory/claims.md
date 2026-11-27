@@ -5,15 +5,18 @@
 This table lists every guarantee the verification tools make or the notes in `docs/` claim,
 one per row, at commit `b83b9544ccdef3701bf90383cd56d10ea2297787`. It is the skeleton of the
 theme documents: each row names the theme that owns it, and that document states the claim
-as a proposition and gives its proof, or says what stands in for one.
+as a proposition and gives its proof, or says what stands in for one. Row I1 (theme 0) was
+added at `670eec79`, after the owner's review of [semantics.md](./semantics.md) (P60).
 
 ## How to read a row
 
-- **ID** is `A`, `B`, `N`, or `T` and a number, for themes (a) cones, (b) z3, (c) native, and
-  (d) TLC. `D1` to `D23` are not rows: they are the definitions of
+- **ID** is `I`, `A`, `B`, `N`, or `T` and a number, for themes (0) the build, (a) cones,
+  (b) z3, (c) native, and (d) TLC. `D1` to `D24` are not rows: they are the definitions of
   [semantics.md](./semantics.md).
-- **Claim** is stated in the notation of [semantics.md](./semantics.md). `T` is
-  `T_β(M)` (D13). `C` is a cone `T|W` (D15), `R` the cone reduced by its independent
+- **Claim** is stated in the notation of [semantics.md](./semantics.md). In themes (a) to (d),
+  `T` is the system `TransitionSystem::build` returns. It is `T_β(M)` (D13), or `T_β(M, σ)`
+  (D24) under a scope, exactly when claim I1 holds; the rows of (a) to (d) are about the
+  built system and assume I1 only where they say so. `C` is a cone `T|W` (D15), `R` the cone reduced by its independent
   sub-lifecycle, `Q` the quotient of a run by slot permutations. `⊨` is "the verdict is
   `ok`", `⊭` "the verdict is `counterexample`".
 - **Where** is the note and section that states the claim.
@@ -48,6 +51,20 @@ as a proposition and gives its proof, or says what stands in for one.
   `crates/rdra-ish-emit/src`.
 - **Open** names an item of the index's [Open problems](./README.md#open-problems) that
   bears on the row.
+
+## (0) The build
+
+<!-- constrained-by ./semantics.md#the-transition-system -->
+
+[semantics.md](./semantics.md) defines `T_β(M)` from the model's text (D1 to D13, D24). Every
+engine reads the one system the build returns, so a departure of the build from the definition
+moves every verdict at once, and agreement between the engines cannot show it (the
+common-mode faults of the [index's conclusion](./README.md#conclusion)). This theme has one
+row and no theme document yet.
+
+| ID | Claim | Where | Evidence | Code | Tests | Open |
+|---|---|---|---|---|---|---|
+| I1 | The build implements the definition: for every model `M`, bound `β` (D1), and scope `σ` (D24) at which the build reports no error, `TransitionSystem::build(M, β, σ)` returns `T_β(M, σ)`: the same variables and domains (D2), base values (D3), initial states (D4), and steps `s →_{(a,p)} s'` labelled by use case (D6 to D12), and rules with the same truth value in every state (D16). | [semantics.md](./semantics.md#d13), D13 and the **Implemented by** notes of D1 to D24; state-derivation.md, "The transition system" | none written as a whole: per-construct readings only, namely z3.md's Lemma U for every use of the bound in `core/build` (with `scripts/check-int-bound-sites.py` holding its list of sites), tlc-agreement.md's argument per construct (which reads the builder's invariants), and the **Implemented by** notes, which are pointers, not readings; D (the 79 hand-written corpus headers of T7, the only check of model to `T` in CI, on the models they name; `core/tests/oracle.rs` shares the build and does not count); planned D (P26: an independent interpreter of the model's AST, in #492 (branch `fix/p26-reference-interpreter`, lane L6). Its subset is entities with Enum, Bool, Int-like and nullable String columns, `@null`, `@default`, `@check`, pre-existing entities without owners, use cases of one entity and one transaction group, `sets` (literal, `null`, `present`, `.when`), `transitions` with choices and `.when`, `applies_to` on the written entity, and the four single-entity rule forms. It runs at `Scope::ALL` and compares initial states, reachable states, edges labelled by use case, rule names, and the violated set with the native run. It also checks z3's `proved` at `m` against the reference at `m+1` and `m+3`. It shares the parser, `build_model`, rule naming, and D2's reading of which Int columns are numbers. Owners, split use cases, triggers, copies, `chooses`, `drives`, links, `now`, multi-entity rules, `after`, properties, and scopes are outside it) | `core/build/` (`TransitionSystem::build`); `core/explore/moves.rs::initial_states`, `::each_successor` | `cli/tests/engine_corpus.rs::bfs_and_tlc_and_z3_agree_on_the_adversarial_corpus`; `core/tests/reference/` (P26, planned) | P26, P60; counterexamples found so far: P40 and P54 (a value past a byte; fixed in #470 by making such a domain the error `DomainTooLarge`), P24 (an effect order the printer read differently; fixed in #485) |
 
 ## (a) Cones of influence and reductions
 
@@ -98,8 +115,8 @@ entity).
 
 | ID | Claim | Where | Evidence | Code | Tests | Open |
 |---|---|---|---|---|---|---|
-| B1 | Over-approximation: for every `n ≥ 1` and every `m` the model builds at (every literal of a rule ≤ `m`), every state of `Reach(T_{(n,m)})` and every step between two of them is a model of `Enc`. The encoding widens in three ways only: a `New` parameter takes any absent row, Int columns and `now` range over all non-negative integers (`Tick` has no guard), and a choice of every Int value from `k` becomes `c ≥ k`. | formal-verification.md, "Proofs for any number of rows"; `core/prove/encode.rs` (module doc) | P-sketch on `Sc(M, β)` only ([z3.md](./z3.md#faithfulness-of-the-encoding), Proposition 2 and Lemma U); false as stated at the pinned commit for `m` above the run's top with a `.when`-guarded `present` write to a nullable Int (P43) and at `m = 255` with a nullable Int (P40); holds for every `n` at the run's `m`; D, limited (P44); A (z3) | `core/prove/encode.rs::Enc::initial`, `::step`, `::declarations`, `::in_domain`, `::one_of` | `cli/tests/proof_equivalence.rs::no_proved_rule_has_a_bounded_counterexample`, `::no_proved_rule_has_a_bounded_counterexample_in_the_corpus` (1 to 3 instances and `int_max + 2`); corpus `z3_int_and_now_boundary`, `z3_now_past_the_top` | P2, P3, P40, P43, P44 |
-| B2 | `proved: R` ⇒ for every `n ≥ 1` and every such `m`, `T_{(n,m)} ⊨ R` (D16). Follows from B1, B4, B5 and z3's soundness. | formal-verification.md, "Proofs for any number of rows"; `cli/src/prove.rs::ProofTally::clause` | P-sketch conditional on B1 on `Sc(M, β)` ([z3.md](./z3.md#the-soundness-theorem), Theorem 1); "every such `m`" and the printed "any Int value" are false for a model with the P43 construct; D, limited (P44); A (z3's soundness H1, the printer H2, the answer reader H4) | `core/prove/mod.rs::prove_round`; `cli/src/prove.rs::run_proof` | as B1 | P2, P3, P4, P40, P43, P44 |
+| B1 | Over-approximation: for every `n ≥ 1` and every `m` the model builds at (every literal of a rule ≤ `m`), every state of `Reach(T_{(n,m)})` and every step between two of them is a model of `Enc`. The encoding widens in three ways only: a `New` parameter takes any absent row, Int columns and `now` range over all non-negative integers (`Tick` has no guard), and a choice of every Int value from `k` becomes `c ≥ k`. | formal-verification.md, "Proofs for any number of rows"; `core/prove/encode.rs` (module doc) | P-sketch on `Sc(M, β)` only ([z3.md](./z3.md#faithfulness-of-the-encoding), Proposition 2 and Lemma U); false as stated at the pinned commit for `m` above the run's top with a `.when`-guarded `present` write to a nullable Int (P43) and, before #470, at `m = 255` with a nullable Int, where the build departed from D2 (P40; since #470 that bound is the build error `DomainTooLarge`); holds for every `n` at the run's `m`; the encoding reads the build at `β`, so B1 about `T_{β'}` of D13 also assumes I1 at `β`; D, limited (P44); A (z3) | `core/prove/encode.rs::Enc::initial`, `::step`, `::declarations`, `::in_domain`, `::one_of` | `cli/tests/proof_equivalence.rs::no_proved_rule_has_a_bounded_counterexample`, `::no_proved_rule_has_a_bounded_counterexample_in_the_corpus` (1 to 3 instances and `int_max + 2`); corpus `z3_int_and_now_boundary`, `z3_now_past_the_top` | P2, P3, P40, P43, P44 |
+| B2 | `proved: R` ⇒ for every `n ≥ 1` and every such `m`, `T_{(n,m)} ⊨ R` (D16). Follows from B1, B4, B5 and z3's soundness. | formal-verification.md, "Proofs for any number of rows"; `cli/src/prove.rs::ProofTally::clause` | P-sketch conditional on B1 on `Sc(M, β)` ([z3.md](./z3.md#the-soundness-theorem), Theorem 1) and on I1 at `β`; "every such `m`" and the printed "any Int value" are false for a model with the P43 construct; D, limited (P44); A (z3's soundness H1, the printer H2, the answer reader H4) | `core/prove/mod.rs::prove_round`; `cli/src/prove.rs::run_proof` | as B1 | P2, P3, P4, P40, P43, P44 |
 | B3 | A `in`/`not in` set that lists every value is folded to `true`/`false` only for finite domains (Enum, Bool, null-or-present, existence); Int, nullable Int and owner domains never fold, so no rule's meaning depends on `m` through folding (#425). | state-derivation.md, "Exploration by cone of influence" (Cone) | D | `core/build/preds/atoms.rs::lists_whole_domain` | corpus `z3_int_listing_whole_range`, `z3_int_listing_guard`, `z3_int_listing_past_the_top` under `proof_equivalence`'s wider-Int axis | |
 | B4 | Initiation: every candidate the kept set holds is checked against `Enc::initial`, which encodes every row of every entity (created rows absent at base; pre-existing rows present under `Start::Base`, `Any`, `Identity`). | `core/prove/mod.rs` (module doc) | P-full from the code ([z3.md](./z3.md#the-kept-set-is-inductive), Proposition 4); D | `core/prove/mod.rs::initiation`; `core/prove/encode.rs::Enc::initial` | `cli/tests/proof_equivalence.rs` | P4 |
 | B5 | Consecution: Houdini runs to a fixpoint; the loop exits only after a full pass over every step under the final set with no candidate falling, so the kept set is inductive relative to `Enc`. An `unknown` answer counts as a fall. | formal-verification.md, "Proofs for any number of rows"; `core/prove/mod.rs` | P-full from the code ([z3.md](./z3.md#the-kept-set-is-inductive), Proposition 4); D | `core/prove/mod.rs::prove_round`, `::activate`, `::violated_each` | `cli/tests/proof_equivalence.rs` | P5 |
@@ -126,10 +143,10 @@ otherwise, and `T` is the system `G` explores.
 | ID | Claim | Where | Evidence | Code | Tests | Open |
 |---|---|---|---|---|---|---|
 | N1 | BFS reachability: a complete run stores exactly `Reach(T)`, each state with a parent edge on a shortest path from `I`. | native-temporal-verification.md, "One graph, three kinds of question"; [native.md](./native.md#explicit-state-exploration) | P-sketch (native.md; that `moves_into` enumerates D13's steps rests on D and twin `Twin::EachEnabled`, whose path is unread@pin); D | `core/explore/bfs.rs::Bfs::go`, `::explore`, `::admit_packed`; `core/explore/moves.rs::initial_states` | `cli/tests/engine_equivalence.rs::a_bfs_and_tlc_reach_the_same_states_and_verdicts` | P54, P55 |
-| N2 | Packed store: given that every domain has at most 256 values (P54) and every cell of non-zero width starts at bit offset at most 65,535 (P50), neither of which is enforced, pack then unpack is the identity on states whose values lie in their domains, the word path equals the cell path, and arena, segment, and table operations read back what they stored. | engine-agreement.md, "Kani harnesses" | M (Kani `pack_then_unpack_is_the_state`, `a_patch_is_the_pack`, `a_cell_across_a_word_reads_back` (4 or 11 cells, widths up to 8 bits), `a_push_takes_the_bytes_bytes_with_said_and_reads_back`, `locate_numbers_rows_in_order`, `rows_take_what_bytes_with_said_and_never_move`, `segments_hold_every_row_and_no_more_than_a_doubling_vec`, `lanes_are_exactly_the_equal_bytes`, `growth_keeps_room_for_one_more`; twin `Twin::Packed`) | `core/explore/{packing,arena,segments,table}.rs` | the Kani harnesses | P17, P50, P54 |
+| N2 | Packed store: given that every domain has at most 256 values (P54; enforced since #470: the build rejects a larger column domain as `DomainTooLarge`) and every cell of non-zero width starts at bit offset at most 65,535 (P50, not enforced), pack then unpack is the identity on states whose values lie in their domains, the word path equals the cell path, and arena, segment, and table operations read back what they stored. | engine-agreement.md, "Kani harnesses" | M (Kani `pack_then_unpack_is_the_state`, `a_patch_is_the_pack`, `a_cell_across_a_word_reads_back` (4 or 11 cells, widths up to 8 bits), `a_push_takes_the_bytes_bytes_with_said_and_reads_back`, `locate_numbers_rows_in_order`, `rows_take_what_bytes_with_said_and_never_move`, `segments_hold_every_row_and_no_more_than_a_doubling_vec`, `lanes_are_exactly_the_equal_bytes`, `growth_keeps_room_for_one_more`; twin `Twin::Packed`) | `core/explore/{packing,arena,segments,table}.rs` | the Kani harnesses | P17, P50, P54 |
 | N3 | The memory charge is deterministic, monotone, and never overflows; it counts the stores only. | formal-verification.md, "Memory, state caps, and threads" | M (Kani `store_bytes_never_overflows`, `store_bytes_only_grows`, `store_bytes_is_at_most_the_model_before`, `a_block_rounds_up_to_16`); D | `core/explore/store.rs` | `core/explore/tests.rs::store_bytes_models_the_store_a_run_counts` | |
 | N4 | Parallel exploration computes the one-thread run: the same states, numbering, parents, edges, findings, and stop point for any number of threads. A wall-clock budget stop is the exception. | native-bfs-parallel.md, "Why the run is the one-thread run"; formal-verification.md, "Memory, state caps, and threads" | P-sketch (induction over moves, [native.md](./native.md#parallel-exploration), every step read in the code, `moves_of_into` included; the pool beside other runs is not argued, P53); D; M (twins `Twin::SameAs`, `Twin::DenseBinding`, `Twin::Seen`, `Twin::SeenGrowth` on every `shadow` run, on the path a release build takes; `Twin::Hit`, `Twin::Recent` only under `RDRA_ISH_FORCE_PROBES`, on code release builds do not run; CI's shadow job checks both per run, P18) | `core/explore/bfs.rs::Bfs::take`, `::resolve`, `::admit_packed` | `core/explore/tests.rs::a_run_is_the_same_on_any_number_of_threads` (1, 2, 3, 4, 7, 17 threads), `::a_run_up_to_symmetry_is_the_same_on_any_number_of_threads`, `::a_run_stops_at_the_memory_limit_at_the_same_state_on_any_number_of_threads` | P18, P53 |
-| N5 | Safety: on `G`, a state rule (D16) or `always(x)` (D19) is violated iff some stored state violates it, and an `after` assertion (D17) iff some move of its step from a stored state violates it, except moves with `s' = s`, which are not checked (P51); the reported trace is a shortest path. | native-temporal-verification.md, "One graph, three kinds of question"; [native.md](./native.md#safety) | P-full (given N1); D | `core/explore/properties.rs::ComponentRun::unsafe_state`; `core/expr.rs::TransitionSystem::find_violation` | `core/tests/lasso.rs::always_fails_where_its_condition_is_false`, `::always_reads_an_instance_only_while_it_is_present` | P20, P50, P51, P52, P54 |
+| N5 | Safety: on `G`, a state rule (D16) or `always(x)` (D19) is violated iff some stored state violates it, and an `after` assertion (D17) iff some move of its step from a stored state violates it, except moves with `s' = s`, which are not checked (D17, as in TLA+; P51, fixed in #494); the reported trace is a shortest path. | native-temporal-verification.md, "One graph, three kinds of question"; [native.md](./native.md#safety) | P-full (given N1); D | `core/explore/properties.rs::ComponentRun::unsafe_state`; `core/expr.rs::TransitionSystem::find_violation` | `core/tests/lasso.rs::always_fails_where_its_condition_is_false`, `::always_reads_an_instance_only_while_it_is_present` | P20, P50, P51, P52, P54 |
 | N6 | `stable`, `unchanged`: violated iff some edge of `G` breaks the step condition of D19; the first breaking edge in BFS order ends a shortest trace. | language-reference.md, "Order and stability"; formal-verification.md, "Order and stability properties" | P-full (given N1; [native.md](./native.md#step-forms-and-order-forms)); D (TLC on the same cone) | `core/lasso.rs::TransitionSystem::step_breaks`; `core/explore/properties.rs::ComponentRun::breaking_step` | `core/tests/explored.rs::stable_fails_at_the_first_step_that_leaves_it`, `::unchanged_fails_at_a_step_that_moves_a_column_under_when`, `::a_step_that_deletes_the_row_breaks_nothing` | P55 |
 | N7 | `precedes(p, q)`: violated iff `G` has a path from an initial state through states where `trig ∧ p` never holds to a state where `trig ∧ q` holds (D19). | language-reference.md, "Order and stability" | P-full (given N1; native.md); D (TLC checks the latch) | `core/explore/properties.rs::ComponentRun::unlatched_state` | `core/tests/explored.rs::precedes_reads_the_latch_of_every_earlier_state`, `::precedes_along_reads_only_linked_rows` | |
 | N8 | `can_reach(g)`: decided per binding by a backward pass from `pres ∧ g` through `pres` states (D22); decided only on a complete graph. | formal-verification.md, "Recoverability on a cone" | P-full (given N1; [native.md](./native.md#recoverability)); D (unit tests; a naive oracle with its own exploration and forward search, `core/tests/oracle.rs`, on the corpus and samples, P19) | `core/reach.rs::TransitionSystem::reach_failure`; `core/targets.rs::TransitionSystem::verdict` | `core/tests/reach.rs::a_cycle_with_no_way_out_fails_where_no_deadlock_does`, `::the_cone_decides_what_the_whole_system_decides`, `::a_cone_stopped_at_the_state_cap_leaves_the_property_undecided` | P19, P55 |
@@ -142,7 +159,7 @@ otherwise, and `T` is the system `G` explores.
 | N15 | Caps and the budget give `not decided`, never `ok`; the run prints `result: not decided`, exits 0 with a warning, and exits 1 under `--deny-undecided`. | formal-verification.md, "Temporal properties on a cone", "Memory, state caps, and threads" | D; native.md's argument cites `end.rs`, unread@pin | `cli/src/verify/end.rs::End::result`, `::finish`, `::capped` | `cli/tests/verify_cli.rs::a_property_the_cone_cannot_decide_runs_on_the_whole_model_under_the_budget`; `cli/tests/memory_cli.rs::verify_leaves_a_cone_past_its_bfs_share_undecided` | P21 (fixed in #469) |
 | N16 | Every printed counterexample replays through the step relation (formal-verification.md: "Every native counterexample replays … One that does not is a tool bug"). | formal-verification.md, "What `verify` checks" | R for every printed liveness lasso (replayed on the system the verdict is about); safety traces: plain ones are not checked, reduced ones are lifted with `debug_assert!` checks, symmetric ones are replayed (panic on failure); the table in [native.md](./native.md#counterexamples-what-is-checked-before-printing); the symmetric lift beyond its certification steps unread@pin | `core/trace.rs`; `core/reduce/lift.rs::lift`; `core/explore/mod.rs::ComponentRun::trace_violations` | as N11 | P20, P50, P52 |
 | N17 | The output does not depend on `RDRA_JOBS` (cones at once and threads per cone). | formal-verification.md, "Memory, state caps, and threads" | D (as N4; `cli/tests/memory_cli.rs::cones_side_by_side_stop_where_they_stop_one_at_a_time`) | `cli/src/verify/mod.rs`; `core/explore/bfs.rs` | `cli/tests/memory_cli.rs::a_stopped_entity_cone_leaves_its_room_on_any_number_of_threads` | P18, P53 |
-| N18 | Vacuity is reported only for a rule or `after` assertion its complete cone run does not violate, when no stored state meets a premise; it never changes a verdict (D18). | state-derivation.md, "Rules that hold vacuously"; [native.md](./native.md#vacuity) | none written before native.md (true by construction on a plain run, by N1 and N2, so not under P50 or P54, which give false warnings); the step to representatives on reduced and symmetric runs is theme (a) | `core/targets.rs::TransitionSystem::vacuity`, `::unmet_of_rule`, `::unmet_of_assert` | not enumerated | P50, P51, P54 |
+| N18 | Vacuity is reported only for a rule or `after` assertion its complete cone run does not violate, when no stored state meets a premise; it never changes a verdict (D18). | state-derivation.md, "Rules that hold vacuously"; [native.md](./native.md#vacuity) | none written before native.md (true by construction on a plain run, by N1 and N2, so not under P50 or P54, which give false warnings); the step to representatives on reduced and symmetric runs is theme (a) | `core/targets.rs::TransitionSystem::vacuity`, `::unmet_of_rule`, `::unmet_of_assert` | `core/tests/vacuous.rs::an_assert_after_a_step_that_only_stutters_holds_vacuously` (an `after` premise counts only steps with `s' ≠ s`, P51 fixed in #494) | P50, P54 |
 
 ## (d) Agreement with TLC
 
@@ -150,7 +167,8 @@ Every row in this section rests on an assumption no test can remove: **TLC (1.7.
 correct**. The TLA+ printer (`emit/tla/mod.rs::print`, `emit/tla/module.rs`,
 `emit/tla/pred.rs`) prints from the same `TransitionSystem` value BFS explores, so agreement
 with TLC tests BFS against a second reading of `T`. It cannot test the step from the model
-to `T` (D13), which only the hand-written corpus headers check.
+to `T` (claim I1), which only the hand-written corpus headers check, and the reference
+interpreter of P26 once it lands.
 [tlc-agreement.md](./tlc-agreement.md) states each row as a proposition and tags its evidence;
 its CI evidence is about the devShell's TLC, which `flake.nix` pins to the 1.8.0 pre-release on JDK 25.
 
@@ -175,22 +193,22 @@ its CI evidence is about the devShell's TLC, which `flake.nix` pins to the 1.8.0
 
 ## Summary by evidence class
 
-80 rows: 28 in (a), 18 in (b), 18 in (c), 16 in (d). A row counts once per class it carries,
-so the columns add up to more than 80. Every column is counted from the rows as they stand
+81 rows: 1 in (0), 28 in (a), 18 in (b), 18 in (c), 16 in (d). A row counts once per class it carries,
+so the columns add up to more than 81. Every column is counted from the rows as they stand
 after [cones.md](./cones.md), [z3.md](./z3.md), [native.md](./native.md) and [tlc-agreement.md](./tlc-agreement.md); a row whose parts carry different classes
 (A5, A6, A21) counts in each. Every (b) row also assumes z3 (H1) and the answer reader (H4), and every (d) row
 assumes TLC; the **A** column counts only rows whose own evidence names an assumption.
 
-| Class | (a) | (b) | (c) | (d) | Rows |
-|---|---|---|---|---|---|
-| P-full | 18 | 4 | 7 | 0 | 29 |
-| P-sketch | 8 | 9 | 2 | 3 | 22 |
-| M | 8 | 0 | 4 | 2 | 14 |
-| D | 23 | 16 | 13 | 13 | 65 |
-| R | 4 | 0 | 3 | 3 | 10 |
-| A | 0 | 5 | 0 | 1 | 6 |
-| none written (true by construction, no argument in a note) | 0 | 2 | 1 | 0 | 3 |
-| none | 1 | 0 | 0 | 0 | 1 |
+| Class | (0) | (a) | (b) | (c) | (d) | Rows |
+|---|---|---|---|---|---|---|
+| P-full | 0 | 18 | 4 | 7 | 0 | 29 |
+| P-sketch | 0 | 8 | 9 | 2 | 3 | 22 |
+| M | 0 | 8 | 0 | 4 | 2 | 14 |
+| D | 1 | 23 | 16 | 13 | 13 | 66 |
+| R | 0 | 4 | 0 | 3 | 3 | 10 |
+| A | 0 | 0 | 5 | 0 | 1 | 6 |
+| none written (true by construction, no argument in a note) | 1 | 0 | 2 | 1 | 0 | 4 |
+| none | 0 | 1 | 0 | 0 | 0 | 1 |
 
 The one paper proof in the existing notes that a reader can check step by step is A15 (`_WF`
 on a reduced cone, cone-soundness.md). The four (b) rows marked `P-full` (B4, B5, B6, B15) rest

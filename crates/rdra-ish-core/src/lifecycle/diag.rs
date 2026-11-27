@@ -114,6 +114,10 @@ pub enum UnmetPremise {
     /// An `after(UC).assert`: no run takes the last step of the use case, the one the
     /// assertion follows. A split use case may still run its earlier transactions.
     NeverRuns { usecase: String },
+    /// An `after(UC).assert`: the last step of the use case runs, but only ever as a step
+    /// that changes nothing (`s' = s`). The assertion is checked on a step that changes the
+    /// state (D17, as TLA+'s `[][…]_vars` reads it), so it was never evaluated.
+    OnlyStutters { usecase: String },
     /// An `after(UC).assert` over entities no param of the step binds: the step runs, but
     /// never into a state with rows of them.
     NoRowsAfter { usecase: String, rows: Vec<String> },
@@ -146,6 +150,10 @@ impl fmt::Display for UnmetPremise {
             UnmetPremise::NeverRuns { usecase } => {
                 write!(f, "{usecase} never runs to its last step")
             }
+            UnmetPremise::OnlyStutters { usecase } => write!(
+                f,
+                "{usecase} runs its last step only as a step that changes nothing, which the assertion is not checked on"
+            ),
             UnmetPremise::NoRowsAfter { usecase, rows } => {
                 write!(
                     f,
@@ -375,6 +383,16 @@ pub enum StateDiag {
     /// An Int literal outside the bounded domain `0..=max`: in a rule, or a numeric `@default`
     /// (its site a `ModelRef::Column`).
     IntLiteralOutOfBounds { value: i64, max: u8, site: Site },
+    /// A column with more than the 256 values a state cell holds: a nullable Int at
+    /// `--int-range-max 255` (null and `0..=255`), a nullable Enum of 256 values, or an Enum of
+    /// 257. Its top values would wrap onto its first ones, null for a nullable column. `int`
+    /// says the count comes from the Int range.
+    DomainTooLarge {
+        column: String,
+        values: usize,
+        int: bool,
+        site: Site,
+    },
     /// A cross-entity constraint whose entities no relate path binds.
     UnbindableScope {
         constraint: String,
@@ -651,6 +669,7 @@ impl StateDiag {
             StateDiag::IntLiteralOutOfBounds { value, .. } => {
                 with("IntLiteralOutOfBounds", &[&value.to_string()])
             }
+            StateDiag::DomainTooLarge { column, .. } => with("DomainTooLarge", &[column]),
             StateDiag::UnbindableScope { constraint, .. } => with("UnbindableScope", &[constraint]),
             StateDiag::UnbindableCondition {
                 condition, usecase, ..
@@ -766,6 +785,7 @@ impl StateDiag {
             | StateDiag::AssertOnInertUseCase { site, .. }
             | StateDiag::FairOnInertUseCase { site, .. }
             | StateDiag::IntLiteralOutOfBounds { site, .. }
+            | StateDiag::DomainTooLarge { site, .. }
             | StateDiag::UnbindableScope { site, .. }
             | StateDiag::AmbiguousOwnerLink { site, .. }
             | StateDiag::UnboundCopySource { site, .. }
@@ -870,6 +890,7 @@ impl StateDiag {
             | StateDiag::FairOnInertUseCase { .. }
             | StateDiag::IntLiteralOutOfBounds { .. }
             | StateDiag::IdentityStartSlots { .. }
+            | StateDiag::DomainTooLarge { .. }
             | StateDiag::UnbindableScope { .. }
             | StateDiag::UnbindableCondition { .. }
             | StateDiag::UnboundCopySource { .. }
@@ -1224,6 +1245,19 @@ impl fmt::Display for StateDiag {
             } => write!(
                 f,
                 "property {property}: .fair({usecase}) names a use case with no effect, so its fairness constrains no step"
+            ),
+            StateDiag::DomainTooLarge {
+                column,
+                values,
+                int: true,
+                ..
+            } => write!(
+                f,
+                "{column} takes {values} values, null and the Int range, more than the 256 a state holds; give --int-range-max 254 or less"
+            ),
+            StateDiag::DomainTooLarge { column, values, .. } => write!(
+                f,
+                "{column} takes {values} values, more than the 256 a state holds; declare at most 256 values (255 with @null)"
             ),
             StateDiag::IntLiteralOutOfBounds { value, max, site } => match &site.fact {
                 ModelRef::Column { column, .. } => write!(

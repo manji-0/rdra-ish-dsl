@@ -52,7 +52,10 @@ or a guarantee the code does not give, is listed as an open problem of the
 
 <!-- derived-from ./semantics.md#notation -->
 
-`T = T_β(M) = (S, I, →)` throughout, with variables `V` (D2) and actions `A` (D6). For an
+`T = T_β(M) = (S, I, →)` throughout, with variables `V` (D2) and actions `A` (D6). Read `T`
+as the system the build returns: the theorems here relate a cone to that system, and some
+steps use facts about the builder's output. That it is `T_β(M)` of D13 is claim
+[I1](./claims.md#0-the-build), which no theorem here needs. For an
 action `a`:
 
 - `Rd(a)` is `cone.rs::TransitionSystem::plain_reads`: the existence of each `Existing` and
@@ -1093,9 +1096,12 @@ Evidence: none beyond the reading of `escalate` and the guide.
   read at `fb6928c7`. A function read only through its doc (named in its proof: `Fold::holds` for Lemma 6)
   may differ from it. No statement was checked by running the tools.
 - **Syntactic over-approximations.** `Wr` lists a deleted entity's owners although D8 keeps them. This only
-  adds actions and variables to cones and makes owners non-monotone; every proof above tolerates it, but a
-  later change that made `Wr` an under-approximation would break Lemma 2 silently, since nothing checks `Wr`
-  against the effects' semantics.
+  adds actions and variables to cones and makes owners non-monotone; every proof above tolerates it, and a
+  later change that made `Wr` an under-approximation would break Lemma 2. Since P35 (fixed in #491) a debug
+  or `shadow` build holds every step to it: `TransitionSystem::check_writes` panics when a step changes a
+  byte of a variable `action_writes` leaves out, so every debug test that explores and CI's shadow job (the
+  `writes` twin, on the samples and the corpus) check `Wr` against the steps they take. A release build does
+  not check it, and a step no run takes is not checked.
 - **Assumed partition correctness.** A8, A15, and every reduced cone's verdict rest on (B1)–(B3), which the
   release build does not check (P7), and on Lemma 6, which no note states (P31). Among those verdicts are the
   printed `ok` of a property's `Plain` run (A5.1) and of a property on a cone that frees slots (A6).
@@ -1132,3 +1138,6 @@ Changes to statements of this document after it was first written, newest last.
 - **2026-11-28, after #477 merged.** The P32 model of [Safety cones](#safety-cones) is no
   longer described as only constructed by hand: it cites the test #477 added for the same shape,
   and P32 is recorded as fixed in #477 rather than "being fixed in a separate change".
+- **2026-11-28, after the owner's review of semantics.md (P60).** semantics.md now defines
+  `T_β(M)` from the model's text, and the build implementing it is claim I1. "Notation added
+  here" now says that `T` is the built system and that no theorem here depends on I1.

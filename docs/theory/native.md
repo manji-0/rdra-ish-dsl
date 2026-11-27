@@ -6,7 +6,9 @@
 This document states how rdra-ish's native verifier decides a check on a graph that its
 breadth-first search (BFS) explored, and on what evidence each step rests. It owns rows N1
 to N18 of the [claims inventory](./claims.md#c-the-native-verifier) and uses the notation
-of [semantics.md](./semantics.md) (D1 to D23) without redefining it.
+of [semantics.md](./semantics.md) (D1 to D24) without redefining it. `T` is the system the
+build returns; that it is `T_β(M)` (D13) is claim [I1](./claims.md#0-the-build), not a step
+of any proof here.
 
 It describes the code at commit `fb6928c74ccc5b479dea07d92cc1e39c34ddd218` (origin/main,
 2026-11-28). The other theory documents pin `b83b9544`; `git diff --stat b83b9544 fb6928c7`
@@ -86,8 +88,8 @@ D13 (every admissible binding of D7, every fork of D8); that is evidenced differ
 (TLC on the same cone, `cli/tests/engine_equivalence.rs::a_bfs_and_tlc_reach_the_same_states_and_verdicts`)
 and by the twin `Twin::EachEnabled` (`explore/moves/reference.rs`), which compares the
 planned enumeration with a filter over all bindings. Two further premises are not part of
-this sketch: that `T` itself is `T_β(M)` (open problem P54 is a case where the build
-encodes a literal as another value), and that the edge list reads back the edges it
+this sketch: that the built `T` is `T_β(M)` of D13 (claim I1; open problem P54 was a
+case where the build departed from it by encoding a literal as another value), and that the edge list reads back the edges it
 recorded (open problem P55 is a case where it does not).
 
 ## The state store and its encoding
@@ -161,8 +163,10 @@ P50 needs large bounds: a cell of non-zero width past bit 65,535, about 8,192 ce
 bits (for example 255 slots of an entity with 32 or more Int columns at `m = 255`). No
 sample comes near it, but D1 admits it and nothing rejects it. P54 below needs far less.
 
-**Finding P54 (guarantee, reproduced by the review).** A value outside a byte is
-truncated when the build encodes it, so `T` is not `T_β(M)`. `types.rs::Domain::of_number`
+**Finding P54 (guarantee, reproduced by the review; fixed in #470, where the build rejects a
+column domain past 256 values as `DomainTooLarge`).** A value outside a byte is
+truncated when the build encodes it, so the built `T` departs from `T_β(M)` of D13 (D2,
+D8): claim I1 fails. `types.rs::Domain::of_number`
 returns `Value(n as u8 + 1)` for a `NullableInt` column; `Domain::size` gives that domain
 `m + 2` values, 257 at `m = 255`, and for `n = 255` the sum wraps to 0, which is
 `Value::NULL`. The workspace `Cargo.toml` sets no `overflow-checks` for the release
@@ -384,8 +388,11 @@ Reproduction: `Touch` sets `Order.status := open` on a row created `open`, and
 `after(Touch).assert(Order.flag == true)` with `flag` false and never written. Every `Touch`
 step is a self-loop; `verify` prints `ok (3 states)`. The control, `Touch` setting `closed`,
 prints `counterexample (7 states)`, so the action is in the cone and the self-loop is what
-hides the step. The engines agree; what differs is D17's wording (or the modeler's
-expectation that an assertion after a use case holds whenever the use case can run).
+hides the step. The engines agree; what differed was D17's wording (or the modeler's
+expectation that an assertion after a use case holds whenever the use case can run). Fixed in
+#494 by the owner's call: D17 and the language reference take TLA+'s reading, and the
+vacuity check reports this model (`Vacuous_AfterAssert_Touch_0`, test
+`lifecycle/tests/vacuous.rs::an_assert_after_a_step_that_only_stutters_holds_vacuously`).
 
 ### Step forms and order forms
 
@@ -469,10 +476,12 @@ N2's preconditions: P50 printed a false vacuity warning, and P54 can too, since 
 that meets the premise is merged away or never built. On a reduced run or a
 run up to symmetry the stored states are representatives; that a premise met by some
 member of a class is met by its representative is theme (a). The `after` premise is read
-from the step's ends (`ComponentRun::step_ends`), filled by `Bfs::push` on every move,
-self-loops (`Probe::Loop`) included. So the vacuity check counts a self-loop as a run of the
-use case while the assertion is never evaluated on it (P51): the two readers treat the step
-in opposite ways.
+from the step's ends (`ComponentRun::step_ends`), filled by `Bfs::push` on every move.
+Until #494 a self-loop (`Probe::Loop`) counted as a run of the use case while the
+assertion is never evaluated on it (P51), so the two readers treated the step in opposite
+ways. Now `Ends::moved` records whether a move of the step changes the state (an orbit
+self-edge does), only such moves count, and a step that only stutters is its own vacuity
+reason (`UnmetPremise::OnlyStutters`).
 
 Properties have a check of the same kind, `targets.rs::TransitionSystem::property_vacuity`,
 on a complete run of the property's cone: it warns when no stored state, under some binding
@@ -760,9 +769,11 @@ each of its variants a fair action whose enabledness reads its mark (event-order
 ## Threats to validity
 
 - **The step relation is trusted.** Every proof above assumes `moves_into` enumerates the
-  steps of D13 (N1) and that `T` is `T_β(M)`. The evidence is differential (TLC, which reads
+  steps of the built `T` (N1) and that the built `T` is `T_β(M)` of D13 (claim I1). The evidence is differential (TLC, which reads
   the same `TransitionSystem`, so a fault in the build of `T` would pass both) and one twin.
-  P54 is such a fault in the build: a literal wraps to another value of its domain.
+  P54 was such a fault in the build, fixed in #470: a literal wrapped to another value of its
+  domain. The planned reference interpreter (P26) is the first check of I1 that does not read
+  the build's output.
 - **Bounded mechanical evidence.** The Kani harnesses cover widths far below where P50
   begins and no domain of more than 256 values (P54); `Twin::Packed` and `Twin::Seen` would
   detect P50 but no `shadow` input is that wide; other shadow twins skip runs above 200,000
@@ -829,7 +840,7 @@ The runs behind P50, P51 and P54, with the binaries described in the first parag
 is yet a test or corpus case in the repository: each is marked *repro pending in repo* with the
 fix lane that adds it, and the marker gives way to the test's path when that lands.
 
-**P51** (repro pending in repo; dup of P22, L4). The model:
+**P51** (dup of P22; in the repo as `lifecycle/tests/vacuous.rs::P51`, #494). The model:
 
 ```
 entity Order "注文" {
@@ -864,7 +875,7 @@ With `sets(Touch, Order.status == closed)` it prints `counterexample (7 states)`
    `--instance-count 8`: `counterexample (511 states)`. At `--instance-count 255`:
    `ok (256 states)`, `result: ok`, with the two `usecase` declarations in either order.
 
-**P54** (run by the review; models kept outside the repository; repro pending in repo, L2). An entity
+**P54** (run by the review; in the repository since #470 as the engine-corpus case `width_nullable_enum_256.rdra` and `check_cli::an_enum_column_takes_no_more_values_than_a_state_holds`). An entity
 `Row { id: Int @pk; n: Int @null }`, a use case `Create` that creates a `Row` with
 `sets(Create, Row.n == 255)`, and `forbidden(Row, Row.n >= 200)`, under
 `--instance-count 1 --int-range-max 255`: `ok (2 states)`, `result: ok`. With 254 in place
@@ -884,3 +895,8 @@ Changes to statements of this document after it was first written, newest last.
   (`6e1451a1`) from a reading of `explore/orbit.rs::lift_path` and `orbit/liveness.rs` up to
   their certification steps; the revisions after the review did not re-check it against their
   bodies.
+- **2026-11-28, after the owner's review of semantics.md (P60).** This document said that
+  under P54 "`T` is not `T_β(M)`". semantics.md defined `T_β(M)` as the build's output, so
+  under its own definitions that sentence was false. semantics.md now defines `T_β(M)` from
+  the model's text. P54 and the threats to validity now say that the built `T` departs from
+  D13, a failure of claim I1. No proof here changes: every proof is about the built `T`.

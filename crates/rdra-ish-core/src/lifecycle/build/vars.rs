@@ -191,6 +191,32 @@ impl Builder<'_> {
             }
             _ => return None,
         };
+        // A value is a `u8`: a column with more than 256 values would wrap its top values
+        // onto its first ones (null, for a nullable one) in every literal, default, and choice.
+        let values = match &domain {
+            Domain::Enum(names) => names.len(),
+            Domain::NullableEnum(names) => names.len() + 1,
+            Domain::Int => usize::from(self.bounds.int_max) + 1,
+            Domain::NullableInt => usize::from(self.bounds.int_max) + 2,
+            _ => 0,
+        };
+        if values > usize::from(u8::MAX) + 1 {
+            let site = Site::bare(ModelRef::Column {
+                entity: ek,
+                column: col.name.clone(),
+            });
+            self.diag(
+                vec![ek],
+                StateDiag::DomainTooLarge {
+                    column: col.name.clone(),
+                    values,
+                    int: domain.is_numeric(),
+                    site,
+                },
+            );
+            // No var: nothing then lists its values, and a value past a byte never exists.
+            return None;
+        }
         let var = self.push_var(
             VarKind::Column {
                 entity: e,
