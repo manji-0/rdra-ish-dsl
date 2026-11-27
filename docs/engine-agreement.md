@@ -413,7 +413,9 @@ test thread. `verify --with-tlc` does not use it.
   timings, process ids, temp paths, timer output, and the heap size. `RDRA_TLC_BATCH=twice`
   compares two process runs the same way, and `RDRA_TLC_BATCH=0` runs every job as a process.
 - **In CI.** `RDRA_REQUIRE_TLC_BATCH=1` fails the test when no job ran in a batch JVM or one
-  fell back for any reason but the time limit.
+  fell back for any reason but the time limit. On `main` (scheduled or started by hand), the
+  `tlc-batch-both` job runs `engine_equivalence` once more under `RDRA_TLC_BATCH=both`; a pull
+  request does not run it.
 
 ## Mutation run
 
@@ -441,6 +443,20 @@ or record why it is equivalent. A timeout is a mutant whose corpus ran past 60 s
 which needs no new case. Each test process runs under a 2 GiB address-space cap, so a mutant
 that allocates without end fails at the cap. A shard that uploads no results is named at the top
 of the summary.
+
+**Kill rate.** The kill rate is the caught and timed-out mutants over the viable ones (all
+but `unviable`). Record each full run here, and the run before a release in its changelog
+entry, so that a fall shows:
+
+| Run | Commit | Date | Mutants | Caught | Timeout | Missed | Unviable | Kill rate |
+|---|---|---|---|---|---|---|---|---|
+| [45212589802](https://github.com/manji-0/rdra-ish-dsl/actions/runs/45212589802) | `b0f593ba` | 2026-11-23 | 251 | 137 | 2 | 70 | 42 | 139 of 209, 66.5% |
+
+The missed mutants of that run: 27 in `cone.rs`, 26 in `explore/liveness.rs`, 12 in
+`verify/native.rs`, 5 in `property_cone.rs`. The run mutates only those four files. The TLA+
+printer, `compare.rs`, `tlc_output.rs`, and `tlc_replay.rs` are not on the list: the run keeps
+`tlc` off `PATH`, so the corpus could not catch a mutant there. Mutating them needs a run with
+TLC on `PATH`, at many times the cost.
 
 ## Kani harnesses
 
@@ -490,7 +506,8 @@ under a minute.
 
 ### In CI
 
-The `kani` job runs every harness on each push to `main`. On a pull request it runs when a
+The `kani` job runs every harness on each run on `main` (scheduled every three hours, or
+started by hand). On a pull request it runs when a
 changed file is on the list in `scripts/kani-relevant.sh`: the files that hold a harness, the
 files whose code the harnesses run, the manifests and the lockfile, and the workflow that pins
 Kani. A harness in a new file adds that file to the list.
