@@ -23,8 +23,8 @@ on `64232981`, the parent of `fb6928c7` with the same `crates/`. That worktree's
 commit's (`diff -rq`), its `crates/rdra-ish-emit/src` differs only under `codegen/`, and no
 core or CLI source file there is newer than the binary. The reproductions of P54 were run
 by the independent review of this document, on a release binary of another sibling worktree
-whose core and CLI `src` it checked against the same sources with `diff -rq`; they were not
-re-run for this revision. The models and commands are in [Reproductions](#reproductions);
+(possibly the same one) whose core and CLI `src` it checked against the same sources with
+`diff -rq`; they were not re-run for this revision, because that binary no longer exists. The models and commands are in [Reproductions](#reproductions);
 each run takes under a second.
 
 ---
@@ -134,9 +134,9 @@ On a run up to symmetry the successor is the canonical form packed whole
 (`findings.rs::can_leave`, `orbit/findings.rs`). No check guards the width in a release
 build. The Kani harnesses stop at 11 cells, far below the bound. The shadow twins would see
 it: `Twin::Packed` compares `States::patch` with a whole pack and `States::cell` with the
-unpacked row (`explore/arena.rs`), and `Twin::Seen` keys its reference table on unpacked
-states; but no `shadow` run reaches that width (and the twins skip runs past their caps,
-P17).
+unpacked row (`explore/arena.rs`) on every read, and `Twin::Seen` keys its reference table
+on unpacked states (`core-root/shadow.rs` gives neither a cap); but `shadow` builds run only
+in tests and CI, and none of their inputs reaches that width.
 
 The merged states also reach the warnings. When the review re-ran the second reproduction below, the run
 also printed `warning[Vacuous_Forbidden_Row_0] … holds vacuously`: no stored state meets the
@@ -188,13 +188,15 @@ Reproduced by the review at one instance (two states):
   gives `counterexample`. `forbidden(Row, Row.s == v255)` gives `counterexample` with a
   trace that shows `s=null`.
 
-The non-null Enum with 257 values was read, not run. The TLA+ printer writes null as −1,
-so TLC may answer these models correctly; that was not run either.
+The non-null Enum with 257 values was read, not run. The TLA+ printer renders values from
+`T` (`emit/tla/mod.rs::render_value`; a predicate's literal through `Domain::number` in
+`emit/tla/pred.rs`), so a wrapped literal prints as null (`-1` or `"<null>"`) and TLC
+checks the same wrong system; TLC was not run on these models.
 
 **Finding P55 (guarantee, read).** `explore/edges.rs::Steps::read` records the first edge
 of each state read as `edges.first.push(self.moves as u32)`, a bare cast, while
 `Steps::admit` and the orbit self-edge in `Bfs::take` use `u32::try_from(…).expect`. Once a
-run has recorded more than 2^32 edges, a state read after that point with no admission
+run has recorded 2^32 edges, a state read after that point with no admission
 following it (late layers whose moves reach only known states) gets a wrapped index in
 `EdgeList::first`. `EdgeList::source_of` and the per-state ranges then attribute edges to
 the wrong sources, and liveness, `can_reach` and deadlocks read a graph that is not `G`.
@@ -256,8 +258,8 @@ within the state). Let `Σ_j` be the reader's state after `m_j`. Claim: `Σ_j` i
    `reduce/mod.rs::TransitionSystem::moves_of_into`. That function goes through
    `each_raw_move`, which iterates the actions in index order and, per action, the bindings
    `each_enabled` yields and the successors `each_successor` yields; without a reduction
-   that is all it does. With one, it skips the actions the reduction folds
-   (`Reduction::skips`), rewrites the S part of a T step's successor through
+   that is all it does. With one, it skips the actions `Reduction::skips` names (a lookup in
+   the reduction's `skip` table), rewrites the S part of a T step's successor through
    `Reduction::recanon` and `Reduction::write`, and appends the class moves
    `r.moves[class]`, where the class comes from `Reduction::class_into`. These read the
    state `s`, the system's immutable fields (the `class_of`, `rises`, `reps` and `moves`
@@ -309,9 +311,10 @@ Hence `Σ_j` agrees for all `j`, and with it everything the readers below comput
   argues the same for #260's rerun. The CLI's safety and property passes
   (`cli/src/verify/bfs.rs::bfs_cones`, the `crowded` flag of `Native` in
   `cli/src/verify/native.rs`) use the other test: `cli/src/verify/bfs.rs::crowded` is
-  `met_memory_limit`, true for any `MemoryCapReached` diagnostic, crowded or not. Such a run
-  is rerun, one at a time in `open` order, against the command's pool itself, not an
-  explicit room. That the pool holds the same bytes at that rerun whatever the job count is
+  `met_memory_limit`, true for any `MemoryCapReached` diagnostic, crowded in the pool or
+  not. Such a run is rerun against the command's pool itself, not an explicit room; in
+  `bfs_cones` the reruns go one at a time in `open` order (the property pass's order was not
+  read). That the pool holds the same bytes at that rerun whatever the job count is
   the one step not shown (open problem P53). Evidence:
   `cli/tests/memory_cli.rs::cones_side_by_side_stop_where_they_stop_one_at_a_time` and
   `::a_stopped_entity_cone_leaves_its_room_on_any_number_of_threads`.
@@ -500,7 +503,12 @@ enabledness but not for *taken*: it says a fair instance is taken "by a step who
 `a` and whose binding extends `κ`", and D13 allows such a step with `s' = s`. The code and the
 TLA+ output read *taken* as requiring a change of state: `fair_steps` keeps only edges with
 `from ≠ to`, and the printer's `WF_vars` takes `⟨A⟩_vars` steps only. This document adopts
-that reading as assumption τ; D20 does not state it (open problem P56). Under D20 read
+that reading as assumption τ; D20 does not state it (open problem P56). A second reading
+goes with it: D14's behaviors are sequences of states without action labels, so the code
+counts a step `s → s'` as taking every fair instance that labels some edge from `s` to `s'`
+(`En`, `Tk` above; `lasso.rs::unfair_loop` likewise), not only the instance of the action a
+behavior "used". This is the TLA+ reading (`⟨A⟩_vars` is a predicate on the pair of states)
+and is closer to it than D20's "a step whose action is `a`". Under D20 read
 literally, a behavior that stutters forever at a state where an instance `(a, κ)` has both a
 self-loop and a move to another state takes `(a, κ)` infinitely often on the self-loop and
 satisfies `Fair_P`, and the code does not count that state as a stop.
@@ -708,8 +716,8 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   liveness after the graph is built, which needs the whole graph in memory but lets the
   same graph answer every property of the cone and gives deterministic lassos.
 - **Parallel and distributed state-space search.** Stern and Dill ("Parallelizing the Murφ
-  verifier", CAV 1997, LNCS 1254) distribute Murφ's breadth-first reachability over
-  workstations by message passing, each node owning the states a hash assigns to it.
+  verifier", CAV 1997, LNCS 1254) distribute Murφ's reachability over a distributed-memory
+  machine or a network of workstations by message passing.
   Barnat, Brim and Chaloupka ("Parallel breadth-first search LTL model-checking", ASE 2003)
   detect accepting cycles of an LTL product with a distributed, level-synchronized BFS over
   an MPI cluster, through back-level edges; their subject is the cycle check, not only the
@@ -717,15 +725,18 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   model checker", IEEE TSE 33(10), 2007) extend SPIN to shared-memory multicores. Laarman,
   van de Pol and Weber ("Boosting multi-core reachability performance with shared hash
   tables", FMCAD 2010) replace static partitioning with one lockless shared hash table that
-  all workers probe; rdra-ish's shared table and `Probing` are of that kind, but release
-  builds turn probing off (N4, step 3). rdra-ish parallelizes only expansion: one reader
+  all workers probe; rdra-ish's shared table (`explore/table.rs`: control bytes and indices
+  in `AtomicU64` and `AtomicU32` arrays, written only by the reader) is of that kind, but
+  release builds turn probing off (N4, step 3). rdra-ish parallelizes only expansion: one reader
   commits every state in sequential order, which gives up scaling of the commit step in
   exchange for the exact one-thread run (N4), shortest traces included. TLC's workers take
-  states from a shared queue without such a reader; the tlaplus project notes that with
-  several workers even the diameter TLC reports can differ between runs
-  ([tlaplus/tlaplus#883](https://github.com/tlaplus/tlaplus/issues/883)), so with more than
-  one worker its traces need not be the same from run to run, nor shortest. That last step
-  is our reading of the design, not a statement from TLC's documentation.
+  states from a shared queue without such a reader. An issue reports that with several
+  workers the diameter TLC prints varies between runs, a collaborator explains it by a state
+  being discovered first along a longer path, and a maintainer answers that a deterministic
+  diameter would need synchronization that limits scaling
+  ([tlaplus/tlaplus#883](https://github.com/tlaplus/tlaplus/issues/883)). That TLC's traces
+  with several workers can then also differ between runs and not be shortest is our
+  reading, not a statement from TLC's documentation.
 - **Symmetric counterexamples.** Ip and Dill ("Better verification through symmetry",
   FMSD 9(1/2), 1996) and Emerson and Sistla ("Symmetry and model checking", FMSD 9(1/2),
   1996) explore the quotient by a symmetry group and relate paths of the quotient to paths
@@ -746,9 +757,9 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   the same `TransitionSystem`, so a fault in the build of `T` would pass both) and one twin.
   P54 is such a fault in the build: a literal wraps to another value of its domain.
 - **Bounded mechanical evidence.** The Kani harnesses cover widths far below where P50
-  begins and no domain of more than 256 values (P54); the shadow twins, which would detect
-  P50, skip runs above 200,000 or 2,500,000 states (P17) and the probe twins run in one CI
-  job (P18).
+  begins and no domain of more than 256 values (P54); `Twin::Packed` and `Twin::Seen` would
+  detect P50 but no `shadow` input is that wide; other shadow twins skip runs above 200,000
+  or 2,500,000 states (P17) and the probe twins run in one CI job (P18).
 - **Readers share code with the checks they certify.** `unfair_loop` and `avoid` both use
   `moves` and `Property::fair_instance`; `explain_property` and `liveness_search` both use
   `holds_bound` and `triggers`. Self-certification catches a fault in the search, not in
@@ -769,13 +780,14 @@ each of its variants a fair action whose enabledness reads its mark (event-order
 - **Read for the N16 table and the lift's mechanics:** `reduce/lift.rs::lift` (the
   `debug_assert!` on a T step, the `expect` on a folded S step, the unchecked
   `in_cone_params` branch), `::lift_cycle` (the doubling to `MAX_COPIES` and the closing
-  test), and `explore/orbit.rs::replays` (panics on a failed replay). `targets.rs::vacuity`
-  and `unmet_of_rule` were read for N18 as far as the conditions it states.
+  test), and `explore/orbit.rs::replays` (panics on a failed replay). For N18,
+  `targets.rs::vacuity`, `unmet_of_rule` and `unmet_of_assert` (which reads `step_ends`)
+  and `edges.rs::StepEnds::read` (no filter on self-loops); for N14, the choice of the least
+  `(idx, k)` per column value in `findings.rs`.
 - **Not re-read here:** `cli/src/verify/end.rs` (N15); `reduce/lift.rs::lift_stop` beyond
   `MAX_WALK` and `Spurious::NoLoop`; `explore/orbit.rs::lift_path` and
   `orbit/liveness.rs` beyond their certification steps (the "Symmetric" bullet of the lift's
-  mechanics was not re-checked against their bodies for this revision); `unmet_of_assert` and `step_ends`' use in vacuity;
-  `findings.rs::can_leave`'s choice of the least `(idx, k)` (N14's "reported state"); the
+  mechanics was not re-checked against their bodies for this revision); the
   `Twin::EachEnabled` path; `fasthash.rs` beyond the rule quoted in N2; and
   `cli/src/verify/native.rs::native_property_after` beyond the order of its runs.
 - **P10 confirmed.** `cli/src/verify/bfs.rs::BfsCone::verdict` returns `counterexample`
@@ -789,6 +801,7 @@ each of its variants a fair action whose enabledness reads its mark (event-order
 <!-- derived-from #safety -->
 <!-- derived-from #counterexamples-what-is-checked-before-printing -->
 <!-- derived-from #parallel-exploration -->
+<!-- derived-from #the-fairness-model -->
 
 New: P50 (packing past 65,535 bits; wrong `ok`, reproduced), P51 (`after` skips steps with
 `s' = s`; reproduced; the engines agree), P52 (a reduced safety trace whose lifted last
