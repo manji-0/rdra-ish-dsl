@@ -82,6 +82,46 @@ fn check_cfg_names_each_invariant_and_explore_cfg_checks_nothing() {
     assert_eq!(explore, "SPECIFICATION Spec\nCHECK_DEADLOCK FALSE\n");
 }
 
+/// `print_bound` splits `Next` into one operator per binding, which TLC names each step
+/// by, and `bound_action_index` reads the action and binding back from that name (P25 of
+/// docs/theory/README.md). The cfg is `print`'s.
+#[test]
+fn a_bound_module_names_each_binding_of_an_action() {
+    let ts = system(&sample("order.rdra"));
+    let (plain, bound) = (
+        print(&ts, PrintMode::Safety, "M"),
+        print_bound(&ts, PrintMode::Safety, "M"),
+    );
+    assert_eq!(plain.cfg, bound.cfg);
+    let pay = (ts.action_ids())
+        .find(|&a| ts.actions()[a.index()].name == "CapturePay")
+        .expect("CapturePay");
+    let names = &bound.names;
+    let slots = ts.slots(ts.actions()[pay.index()].params[0].entity);
+    assert_eq!(slots, 2, "VERIFY bounds give two orders");
+    for s in 0..slots as u8 {
+        let name = names.bound_action(pay, &[s]);
+        assert_eq!(name, format!("{}_at_{}", names.action(pay), s + 1));
+        let def = format!("{name} == {}({}) /\\ TRUE\n", names.action(pay), s + 1);
+        assert!(bound.tla.contains(&def), "{}", bound.tla);
+        assert!(
+            bound.tla.contains(&format!("  \\/ {name}\n")),
+            "{}",
+            bound.tla
+        );
+        assert_eq!(
+            names.bound_action_index(&ts, &name),
+            Some((pay, Some(vec![s])))
+        );
+        assert_eq!(names.action_index(&ts, &name), Some(pay));
+    }
+    let plain_name = names.action(pay);
+    assert_eq!(names.bound_action_index(&ts, plain_name), Some((pay, None)));
+    let two = format!("{plain_name}_at_1_1");
+    assert_eq!(names.bound_action_index(&ts, &two), None);
+    assert!(!plain.tla.contains(&format!("{plain_name}_at_1")));
+}
+
 #[test]
 fn a_property_cfg_checks_that_property_alone() {
     let ts = system(&sample("order.rdra"));
