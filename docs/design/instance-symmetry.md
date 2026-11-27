@@ -1035,7 +1035,7 @@ build, and a per-thread hook in unit tests (`dropped`). It names a scan rule by 
 
 | Rule or reason | Witness |
 |---|---|
-| `OrderedId`, `IdAgainstLiteral`, `MixedIds`, `OwnerLiteral`, `OwnerChoice`, `UnlinkedCreate` | (b): `explore/symmetry/witnesses.rs`, one test each |
+| `OrderedId`, `IdAgainstLiteral`, `MixedIds`, `OwnerLiteral`, `OwnerChoice`, `UnlinkedCreate`, `AbsentOwner` | (b): `explore/symmetry/witnesses.rs`, one test each |
 | `PinnedStart` | (e), but it fires in no cone: see below |
 | `JointTooLarge` | (d): `joint_too_large_is_a_cost_cap`, `past_the_branch_cap_the_verdict_stands` |
 | `G_T` "S" | (c): implied by "S var", asserted in `Reduction::fixed_why` |

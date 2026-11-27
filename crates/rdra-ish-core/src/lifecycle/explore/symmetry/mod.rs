@@ -142,6 +142,10 @@ pub enum Rule {
     PinnedStart,
     /// A creation that leaves an owner naming its rows at the base value, which is slot 0.
     UnlinkedCreate,
+    /// A guard reads, before the step, an owner naming its rows on the row the step creates:
+    /// that row is absent, its owner holds the base value, slot 0, and `Group::apply` does
+    /// not relabel an owner on an absent row (P30).
+    AbsentOwner,
     /// A row id of the entity compared with, or written into, something that is not a row
     /// id of the same class.
     MixedIds,
@@ -170,6 +174,7 @@ impl Rule {
             Rule::OwnerChoice => "a key is chosen among some of its rows",
             Rule::PinnedStart => "a start pins one of its rows",
             Rule::UnlinkedCreate => "a creation leaves a key at its first row",
+            Rule::AbsentOwner => "a guard reads the key of a row before it is created",
             Rule::MixedIds => "a row id is compared with or written into another value",
             Rule::JointTooLarge => {
                 "its rows and the rows that name them have too many arrangements"

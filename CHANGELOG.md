@@ -400,6 +400,11 @@
 
 ### Fixed
 
+- Instance symmetry leaves out the class of a parent whose key a guard reads on the row the
+  step creates, before the step (docs/theory P30, rule `AbsentOwner`). That row is absent, its
+  key holds the base value, the parent in slot 0, and the group does not relabel a key on an
+  absent row, so a run up to symmetry could merge states the guard tells apart. No cone of the
+  samples or the engine corpus fires the rule, so no run changes.
 - `check --code=fresh` counts one error per stale file: a domain file and traces both stale
   printed two error blocks over `FAIL: code: 1 error(s)`.
 - The obligation ledger reads no marker inside a string literal, nor one whose name is not
