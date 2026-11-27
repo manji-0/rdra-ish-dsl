@@ -118,8 +118,11 @@ impl TransitionSystem {
             }
             let target = *(r.class(self, post))
                 .and_then(|c| block_of_class.get(&c))
+                .ok_or(fails.clone())?;
+            // A class move with no S path behind it fails like one whose target has no block.
+            let path = succ
+                .shortest_path(s_at, |i| blocks[i as usize] == target)
                 .ok_or(fails)?;
-            let path = succ.shortest_path(s_at, |i| blocks[i as usize] == target);
             let mut count = 0;
             for e in path {
                 let (a, p) = run.step(&e);

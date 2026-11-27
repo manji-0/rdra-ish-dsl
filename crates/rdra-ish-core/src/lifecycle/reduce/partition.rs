@@ -763,14 +763,16 @@ impl<'a> Succ<'a> {
         self.all_from(at).filter(move |e| self.is_rise(e))
     }
 
-    /// The BFS path over silent edges from `from` to the first state `done` accepts.
+    /// The BFS path over silent edges from `from` to the first state `done` accepts, or
+    /// `None` when no such path exists: a class move with no S path behind it, which the
+    /// caller reports as a fault of the reduction, never a panic (P20).
     pub(super) fn shortest_path(
         &self,
         from: u32,
         done: impl Fn(u32) -> bool,
-    ) -> Vec<crate::lifecycle::explore::Edge> {
+    ) -> Option<Vec<crate::lifecycle::explore::Edge>> {
         if done(from) {
-            return Vec::new();
+            return Some(Vec::new());
         }
         let mut parent: HashMap<u32, crate::lifecycle::explore::Edge> = HashMap::new();
         let mut queue = VecDeque::from([from]);
@@ -789,12 +791,12 @@ impl<'a> Succ<'a> {
                         at = p.from;
                     }
                     path.reverse();
-                    return path;
+                    return Some(path);
                 }
                 queue.push_back(e.to);
             }
         }
-        panic!("a class move has a path of S actions behind it");
+        None
     }
 }
 
