@@ -1580,3 +1580,33 @@ fn reduced_domain_cones_hold_each_fold_bit_where_its_action_runs() {
     assert!(folds >= 71, "{folds} folds");
     assert!(checked >= 2_000, "{checked} moves checked");
 }
+
+/// The reduction is a divergence-blind stuttering bisimulation, and `Deadlock` reads "no
+/// path changes the column or deletes the row" (`can_leave`), a reachability the quotient
+/// keeps, not "no step at all", which it does not: a state looping forever in its block's
+/// silent cycle and a state with no step left are both stuck, on the cone and on the reduced
+/// cone alike (P34). The gate's x3/x4 toggle is such a silent cycle; the job seen at x2 is
+/// stuck with no move of the gate left.
+#[test]
+fn a_silent_cycle_and_a_stuck_state_give_the_same_deadlocks_reduced() {
+    let src = include_str!(
+        "../../../../rdra-ish-cli/tests/engine_corpus/cone_reduced_loop_unreached.rdra"
+    );
+    let model = model_from(src);
+    for bounds in [Bounds::STATES, Bounds::VERIFY] {
+        let ts = TransitionSystem::build(&model, bounds.clone(), &Scope::ALL).ts;
+        let targets = ts.targets();
+        let plain = ts.explore_targets(&targets, Caps::VERIFY);
+        let reduced = ts.explore_targets_reduced(&targets, Caps::VERIFY);
+        let job = entity_target(&ts, "Job");
+        assert!(
+            reduced.cone_of(job).run.system.reduction().is_some(),
+            "{bounds:?}: the job's cone reduces the gate"
+        );
+        let (a, b) = (diag_names(&plain), diag_names(&reduced));
+        assert_eq!(a, b, "{bounds:?}: verdicts");
+        for e in ["Deadlock_Gate_phase_pa", "Deadlock_Job_status_waiting"] {
+            assert!(a.contains(e), "{bounds:?}: {e} in {a:?}");
+        }
+    }
+}
