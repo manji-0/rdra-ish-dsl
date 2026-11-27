@@ -14,6 +14,7 @@
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -35,16 +36,31 @@ struct Check {
     ms: u128,
 }
 
+/// A z3 that counts the bytes of SMT-LIB sent to it, its checks included.
+struct Counted {
+    z3: Z3,
+    sent: Arc<AtomicU64>,
+}
+
+impl Solver for Counted {
+    fn exec(&mut self, commands: &str) -> Result<Vec<String>, SolverError> {
+        self.sent
+            .fetch_add(commands.len() as u64, Ordering::Relaxed);
+        self.z3.exec(commands)
+    }
+}
+
 /// A z3 that records each `check-sat`: the units it spent and its time.
 struct Meter {
-    z3: Z3,
+    /// Counts what the proof sends; the meter's own queries go past it.
+    z3: Counted,
     limits: (u32, u32),
     log: Arc<Mutex<Vec<Check>>>,
 }
 
 impl Meter {
     fn units(&mut self) -> Result<u64, SolverError> {
-        let out = self.z3.exec("(get-info :rlimit)")?.join(" ");
+        let out = self.z3.z3.exec("(get-info :rlimit)")?.join(" ");
         out.trim()
             .trim_start_matches("(:rlimit")
             .trim_end_matches(')')
@@ -161,9 +177,13 @@ fn main() {
         let twin = prove::mining_twin(&project.model, &Scope::default(), &ts);
         let rules: Vec<usize> = (0..ts.invariants().len()).collect();
         let log = Arc::new(Mutex::new(Vec::new()));
+        let sent = Arc::new(AtomicU64::new(0));
         let mut meters: Vec<Meter> = (0..solvers)
             .map(|_| Meter {
-                z3: Z3::start(&z3).expect("z3 starts"),
+                z3: Counted {
+                    z3: Z3::start(&z3).expect("z3 starts"),
+                    sent: sent.clone(),
+                },
                 limits: (options.rlimit, options.lemma_rlimit),
                 log: log.clone(),
             })
@@ -183,12 +203,13 @@ fn main() {
         format!("{proof:?}").hash(&mut h);
         let checks = log.lock().unwrap().clone();
         println!(
-            "{root}: digest {:016x}, {} proved, {} unproved, {} out of scope, {} lemmas kept, {secs:.1} s",
+            "{root}: digest {:016x}, {} proved, {} unproved, {} out of scope, {} lemmas kept, {secs:.1} s, {:.1} MB sent",
             h.finish(),
             proof.proved(),
             proof.unproved(),
             proof.out_of_scope(),
-            proof.lemmas.len()
+            proof.lemmas.len(),
+            sent.load(Ordering::Relaxed) as f64 / 1e6
         );
         println!("  rules:  {}", summary(&checks, Kind::Rule));
         println!("  lemmas: {}", summary(&checks, Kind::Lemma));

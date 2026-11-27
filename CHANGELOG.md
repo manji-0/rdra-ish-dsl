@@ -4,6 +4,15 @@
 
 ### Changed
 
+- `verify --prove` (experimental) asserts each rule and lemma once per solver, behind an
+  activation literal, and each step's scope asserts only the literals of the set, instead
+  of every candidate again (#421). The proof is the same on every sample, its rules, CTIs
+  and kept lemmas alike, on 1 and 4 solvers, and the output is byte for byte the same. The
+  SMT-LIB text sent to z3 falls to about an eighth (clinic-ops 113 MB to 14 MB,
+  insurance-claim-ops 108 MB to 12 MB, food-permit-ops 75 MB to 9 MB, patent-ops 18 MB to
+  3 MB), and `verify --prove` takes 27 to 36% less wall time (`RDRA_JOBS=4`, medians of 3:
+  clinic-ops 10.4 s to 6.6 s, food-permit-ops 7.4 s to 4.8 s, insurance-claim-ops 12.1 s to
+  8.8 s, patent-ops 2.0 s to 1.4 s). A certificate an earlier build kept is still reused.
 - `verify --prove` (experimental) checks each rule the proof leaves unproved and BFS passes
   again on its own cone at one and two instances more per entity, after the other BFS runs
   (#421). Each such run may hold ten times the store the cone held at the run's bounds, and

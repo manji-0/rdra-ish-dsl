@@ -22,7 +22,7 @@ use crate::lifecycle::cone::VarSet;
 use crate::lifecycle::types::{ActId, CmpOp, Domain, EntId, Pred, Term, VarId, VarKind};
 use crate::lifecycle::TransitionSystem;
 use encode::{Enc, Formula, Frame, Unsupported};
-use smt::{Command, Opt, Script};
+use smt::{Command, Expr, Opt, Script, Sort};
 use solver::Sexp;
 
 /// What the prover says about each rule it was asked about.
@@ -136,7 +136,9 @@ pub struct ProveOptions {
 /// than 42,000 units for a rule or 102,000 for a lemma, so the limits left about 480 and 20
 /// times that. With the Houdini rounds run without MBQI (#421), on every sample on 1 and 4
 /// solvers, no such check spent more than 169,000 and 146,000 units: about 120 and 14 times
-/// below the limits. Only such a check must fit: a lemma check past its limit drops the
+/// below the limits. With the set asserted through activation literals (#421), on every sample
+/// on 4 solvers, at most 158,000 and 144,000: about 120 and 14 times below. Only such a check
+/// must fit: a lemma check past its limit drops the
 /// lemma, as a step that breaks it does.
 impl Default for ProveOptions {
     fn default() -> Self {
@@ -159,6 +161,10 @@ struct Candidate {
     reads: VarSet,
     /// The formula over the pre-state, asserted.
     pre: Script,
+    /// The candidate's activation literal in the Houdini rounds, and the commands, sent once
+    /// per solver, that declare it and assert it implies the formula over the pre-state.
+    act: Expr,
+    activation: Script,
     /// z3 resource units a check of it may spend.
     rlimit: u32,
 }
@@ -317,6 +323,11 @@ pub fn prove_offered<S: Solver + Send>(
     for (origin, formula, is_fine) in formulas {
         match enc.holds(&formula, Frame::Pre) {
             Ok(holds) => {
+                let act = Expr::sym(format!("act{}", cands.len()), Sort::Bool);
+                let activation = Script::from([
+                    Command::DeclareConst(act.clone()),
+                    Command::Assert(smt::implies(act.clone(), holds.clone())),
+                ]);
                 let pre = Script::from([Command::Assert(holds)]);
                 if is_fine {
                     fine.insert(cands.len());
@@ -333,6 +344,8 @@ pub fn prove_offered<S: Solver + Send>(
                     formula,
                     reads,
                     pre,
+                    act,
+                    activation,
                     rlimit,
                 });
             }
@@ -362,7 +375,10 @@ pub fn prove_offered<S: Solver + Send>(
         s.append(&declarations);
         s
     };
-    let houdini = restart(false);
+    let mut houdini = restart(false);
+    for c in &cands {
+        houdini.append(&c.activation);
+    }
     for solver in solvers.iter_mut() {
         solver.exec(houdini.text())?;
     }
@@ -409,6 +425,10 @@ pub fn prove_offered<S: Solver + Send>(
         // - The set is asserted once per step, and every candidate the step may break is checked
         //   under it; one that falls still stands for that step's other checks, so the answers
         //   do not depend on the order of the checks or on how many solvers share them.
+        // - Each candidate is asserted once per solver behind an activation literal, and a step
+        //   asserts the literals of the set (`activate`): the same `Proof` on every sample as
+        //   asserting the candidates in each step, with about a seventh of the text (#421).
+        //   The CTI stage starts over without the literals, and asserts the set itself.
         // - `unknown` counts as a fall: the kept set stays inductive, and a rule z3 gave up on is
         //   never proved. Without MBQI every `sat` is `unknown` (see above).
         // - The CTIs come from a solver that starts over, with MBQI on: the model z3 gives
@@ -457,7 +477,7 @@ pub fn prove_offered<S: Solver + Send>(
                     // The set is asserted once for the step, so a candidate that falls here
                     // still stands for the step's other checks, on one solver or on several.
                     let mut scope = step.commands.clone();
-                    scope.append(&assume(&cands, &set));
+                    scope.append(&activate(&cands, &set));
                     let answers = violated_each(solvers, &enc, &cands, &hit, &scope, Frame::Post)?;
                     for (k, sat) in hit.into_iter().zip(answers) {
                         let fall = match sat {
@@ -663,13 +683,24 @@ fn reusable<S: Solver + Send>(
             continue;
         }
         let mut scope = step.commands.clone();
-        scope.append(&assume(cands, &set));
+        scope.append(&activate(cands, &set));
         let answers = violated_each(solvers, enc, cands, &hit, &scope, Frame::Post)?;
         if answers.iter().any(|sat| *sat != Sat::Unsat) {
             return Ok(None);
         }
     }
     Ok(Some(set.fell))
+}
+
+/// Asserts the activation literal of every candidate still in the set: in a Houdini round,
+/// where each candidate was asserted once behind its literal, the same as asserting the
+/// candidates themselves, in a fraction of the text.
+fn activate(cands: &[Candidate], set: &Set) -> Script {
+    let mut s = Script::default();
+    for (_, c) in cands.iter().enumerate().filter(|(k, _)| set.contains(*k)) {
+        s.push(Command::Assert(c.act.clone()));
+    }
+    s
 }
 
 /// Asserts every candidate still in the set over the pre-state.
