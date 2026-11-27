@@ -273,7 +273,7 @@ impl TransitionSystem {
             undecided: Vec::new(),
             tally: Tally::default(),
         };
-        let runs = self.answer_targets(&answered, &cones, &reads, &mut out);
+        let runs = self.answer_targets(&answered, &cones, &reads, caps, &mut out);
         out.cones = cones;
         self.judge_actions(runs, &mut out);
         out.targets = answered;
@@ -472,6 +472,7 @@ impl TransitionSystem {
         answered: &[(Target, usize)],
         cones: &[ConeRun],
         reads: &Reads,
+        caps: Caps,
         out: &mut TargetExploration,
     ) -> Vec<RunsSoFar> {
         let mut runs: Vec<RunsSoFar> = self.actions.iter().map(|_| RunsSoFar::default()).collect();
@@ -503,7 +504,7 @@ impl TransitionSystem {
                             .expect("an incomplete run stopped at a cap"),
                     });
                 }
-                _ => out.verdicts.extend(self.verdict(target, &cones[at])),
+                _ => out.verdicts.extend(self.verdict(target, &cones[at], caps)),
             }
         }
         out.tally.entity_cones = entity_cones.len();
@@ -934,7 +935,7 @@ impl TransitionSystem {
     /// violations, each trace marked when it creates more instances than the bound, and any
     /// cap that left the verdict of an invariant or an assert incomplete. A `can_reach` cone
     /// that stopped is undecided instead (`explore_targets_with`).
-    fn verdict(&self, target: Target, cone: &ConeRun) -> Vec<Diag> {
+    fn verdict(&self, target: Target, cone: &ConeRun, caps: Caps) -> Vec<Diag> {
         let run = &cone.run;
         debug_assert!(
             !matches!(target, Target::Entity(_)),
@@ -963,24 +964,37 @@ impl TransitionSystem {
                 .is_some_and(|name| run.checks().reads(name)),
             "the run of a check's cone evaluates the check"
         );
-        let mut out: Vec<Diag> = run
-            .diags
-            .iter()
-            .filter(|d| self.reports(target, &d.diag))
-            .cloned()
-            .map(|mut d| {
-                if let Some(trace) = d.diag.trace_mut() {
-                    self.annotate(&cone.cone, trace);
+        let found = run.diags.iter().find(|d| self.reports(target, &d.diag));
+        let stops = run.diags.iter().filter(|d| d.diag.stopped_why().is_some());
+        let stops = stops.map(|d| Diag {
+            entities: entities.clone(),
+            diag: d.diag.clone(),
+        });
+        let mut out: Vec<Diag> = Vec::new();
+        match found.cloned().map(|mut d| {
+            if let Some(trace) = d.diag.trace_mut() {
+                self.annotate(&cone.cone, trace);
+            }
+            d
+        }) {
+            // A counterexample that runs a use case without its event may be no run of this
+            // system: the check's exact cone decides it.
+            Some(d) if !d.diag.trace().is_none_or(|t| t.vouched(false)) => {
+                match self.recheck(target, false, caps) {
+                    Recheck::Violated(d) => out.push(*d),
+                    Recheck::Holds => {}
+                    Recheck::Undecided(why) => out.extend(why.into_iter().map(|diag| Diag {
+                        entities: entities.clone(),
+                        diag,
+                    })),
                 }
-                d
-            })
-            .collect();
-        for d in run.diags.iter().filter(|d| d.diag.stopped_why().is_some()) {
-            out.push(Diag {
-                entities: entities.clone(),
-                diag: d.diag.clone(),
-            });
+                out.extend(self.vacuity(target, run));
+                return out;
+            }
+            Some(d) => out.push(d),
+            None => {}
         }
+        out.extend(stops);
         out.extend(self.vacuity(target, run));
         out
     }
@@ -1184,6 +1198,76 @@ impl TransitionSystem {
                 site: property.site.clone(),
             },
         })
+    }
+}
+
+/// A check decided again on its exact cone (`TransitionSystem::recheck`).
+#[derive(Clone, Debug)]
+pub enum Recheck {
+    /// The exact cone's shortest counterexample: a run of the whole system.
+    Violated(Box<Diag>),
+    /// The exact cone ran to the end without a violation, so the check holds.
+    Holds,
+    /// The exact cone stopped at a cap or the memory limit before a violation: the
+    /// diagnostics of the stop.
+    Undecided(Vec<StateDiag>),
+}
+
+impl TransitionSystem {
+    /// The invariant or after-assert of this system that `d`, a violation found on a cone of
+    /// it, breaks: the one of the same name and site.
+    pub fn violated_check(&self, d: &StateDiag) -> Option<Target> {
+        let site = match d {
+            StateDiag::ConstraintViolated { site, .. }
+            | StateDiag::AfterAssertViolated { site, .. } => site,
+            _ => return None,
+        };
+        let invariants = (0..self.invariants.len())
+            .filter(|i| self.invariants[*i].site == *site)
+            .map(Target::Invariant);
+        let asserts = (0..self.after.len()).map(Target::AfterAssert);
+        invariants.chain(asserts).find(|t| self.reports(*t, d))
+    }
+
+    /// The invariant or after-assert `target` decided on its exact cone
+    /// (`exact_target_cone`), reduced by its independent sub-lifecycle as `verify` reduces a
+    /// cone, under `caps`. A counterexample there runs no use case without its event and, with
+    /// `slots`, stays within the bound: the whole system reaches it.
+    pub fn recheck(&self, target: Target, slots: bool, caps: Caps) -> Recheck {
+        debug_assert!(
+            self.check_name(target).is_some(),
+            "only an invariant or an after-assert is rechecked"
+        );
+        let cone = self.exact_target_cone(target, slots);
+        // The reduction's run of the sub-lifecycle keeps its whole graph, so its caps stay
+        // plain; the cone's run evaluates every check it holds and stops once each failed.
+        let caps = caps.without_views();
+        let system = self.reduced_cone(&cone, [self.target_seed(target)], caps);
+        let run = system.run(caps.until_all_violated());
+        let found = run
+            .diags
+            .iter()
+            .find(|d| self.reports(target, &d.diag))
+            .cloned();
+        match found {
+            Some(mut d) => {
+                if let Some(trace) = d.diag.trace_mut() {
+                    self.annotate(&cone, trace);
+                }
+                debug_assert!(
+                    d.diag.trace().is_none_or(|t| t.vouched(slots)),
+                    "an exact cone's counterexample is a run of the whole system"
+                );
+                Recheck::Violated(Box::new(d))
+            }
+            None if run.complete => Recheck::Holds,
+            None => Recheck::Undecided(
+                (run.diags.iter())
+                    .filter(|d| d.diag.stopped_why().is_some())
+                    .map(|d| d.diag.clone())
+                    .collect(),
+            ),
+        }
     }
 }
 
