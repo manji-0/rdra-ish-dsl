@@ -4,10 +4,10 @@
 // every done order has a sent shipment, at any count. The rule is not inductive alone: from
 // a ready order with no sent shipment, which no reachable state has, Finish breaks it. The
 // fact that rules that state out, "every ready order has a sent shipment", says a row
-// exists; every mined lemma is universal, so z3 leaves the rule unproved, and BFS finds
-// nothing. The fact is also a count of the order's children (at least one sent shipment);
-// z3_needs_exists_global.rdra needs one over rows no key links.
-// expect Quantifier_Order_0: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
+// exists. It is also a count of the order's children (at least one sent shipment), which
+// Prepare's guard gives, so z3 proves the rule with that count lemma (#428), and BFS finds
+// nothing. z3_needs_exists_global.rdra needs one over rows no key links.
+// expect Quantifier_Order_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 // expect Deadlock_Order_status_open: native=counterexample tlc=counterexample
 entity Order "注文" { id: Int @pk  status: Enum(open, ready, done) @default(open) }
 entity Shipment "出荷" { id: Int @pk  status: Enum(packed, sent) @default(packed) }

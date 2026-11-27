@@ -4,11 +4,12 @@
 // most two copies and a crowded one at least three: no shelf is closed and crowded, at any
 // count. The rule is not inductive alone: from a closed shelf with three copies, which no
 // reachable state has, Crowd breaks it. The facts that rule that state out count a shelf's
-// copies; no mined lemma counts rows, so z3 leaves the rule unproved, and BFS finds
-// nothing. safety_count_guard_order.rdra is the same trap at one and two copies, which BFS
+// copies. safety_count_guard_order.rdra is the same trap at one and two copies, which BFS
 // reaches at the run's 2 instances; here no state at 2 instances has a third copy or a
 // crowded shelf, so a count lemma has to come from the guards' bounds, not from the states.
-// expect Forbidden_Shelf_0: native=ok tlc=ok z3=unproved bfs=ok,ok,ok
+// z3 proves the rule with the two count lemmas the guards give (#428), and BFS finds
+// nothing.
+// expect Forbidden_Shelf_0: native=ok tlc=ok z3=proved bfs=ok,ok,ok
 entity Shelf "棚" {
   id: Int @pk
   status: Enum(open, closed) @default(open)

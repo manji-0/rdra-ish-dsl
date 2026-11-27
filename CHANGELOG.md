@@ -54,6 +54,12 @@
 
 ### Changed
 
+- `verify --prove` (experimental) mines count lemmas from the model's count guards (#428):
+  a parent row with a value the guarded step writes has at most or at least the guard's
+  number of children by that key, all of them or those the guard pins (`exists` counts as at
+  least one), up to 8. They join the proof only when a rule stays unproved without them. The
+  engine corpus cases `safety_count_guard_order`, `z3_needs_count`, and `z3_needs_exists` are
+  now proved; nothing changes on the domain samples.
 - `verify --prove` (experimental) declares the mined lemmas that wait for an unproved rule
   (one child column with one or two parent columns) to z3, and checks them in the initial
   states, only when they join the proof (#428). A proof that needs none of them sends z3 the
