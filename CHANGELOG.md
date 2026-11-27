@@ -65,6 +65,13 @@
 
 ### Changed
 
+- `verify --prove` (experimental) mines ∀∃ lemmas (#428): while a present row of one entity
+  holds a column value, some present row of another entity holds one, for each pair of values
+  that every state BFS reached at the run's bounds and that showed the first keeps. No key need
+  link the rows. They join the proof only when a rule stays unproved with the other mined
+  lemmas in, since they are many and cost z3 a quantifier alternation. The engine corpus case
+  `z3_needs_exists_global` is now proved; nothing changes on the domain samples. A proof
+  certificate an earlier version cached no longer matches, and the proof runs once in full.
 - `verify --prove` (experimental) mines count lemmas from the model's count guards (#428):
   a parent row with a value the guarded step writes has at most or at least the guard's
   number of children by that key, all of them or those the guard pins (`exists` counts as at

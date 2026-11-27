@@ -511,10 +511,13 @@ not already imply it). From each count guard (`.at_most`, `.at_least`, `.exactly
 row with a value that step writes has at most or at least the guard's number of children by
 that key, all of them or those the guard pins, when no reached state shows otherwise. A
 parent value no state reached gets one too, since the count a guard asks for often needs
-more rows than the run's bounds. The lemmas of one column of each, of one child column with
-two parent columns, and of counts wait: they join only when a rule stays unproved without them, and until then
-z3 sees nothing of them, so a proof that needs none of them sends z3 the same checks whatever
-of them a model offers. Each mining run stops at 50,000 states. A lemma is only a guess until it survives the same checks, so a capped
+more rows than the run's bounds. From the run's bounds come ∀∃ lemmas too: while a present
+row of one entity holds a value, some present row of another entity holds one, for each such
+pair of column values that every reached state showing the first keeps; no key need link the
+rows. The lemmas of one column of each, of one child column with two parent columns, of
+counts, and ∀∃ wait: they join only when a rule stays unproved without them, the ∀∃ ones
+only when a rule stays unproved with the others in, and until then z3 sees nothing of them,
+so a proof that needs none of them sends z3 the same checks whatever of them a model offers. Each mining run stops at 50,000 states. A lemma is only a guess until it survives the same checks, so a capped
 exploration costs proofs, not soundness. The lemmas a proof kept print as `lemma:` lines, and
 one that only the one-instance run offered ends in `(mined at 1 instance per entity)`:
 

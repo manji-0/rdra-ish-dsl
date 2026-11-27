@@ -5,8 +5,10 @@
 //! row takes together with its parent (whole, per parent column, one column of each, and one
 //! child column with two parent columns), the patterns of two children of one parent, and
 //! how many children a parent with a value a count guard's step writes has, at the guard's
-//! count. A guess is never trusted: the prover keeps it only when it is inductive with the
-//! others, so a capped or over-approximate exploration costs proofs, not soundness.
+//! count, and (at the run's bounds only) which value of another entity's rows is present
+//! whenever a row holds a value (∀∃). A guess is never trusted: the prover keeps it only when
+//! it is inductive with the others, so a capped or over-approximate exploration costs proofs,
+//! not soundness.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -48,15 +50,24 @@ struct Seen {
     /// Per key and the row vars of child and parent: each present parent's pattern with the
     /// sorted patterns of the present children that name it, none included.
     families: BTreeMap<KeyAxes, BTreeSet<(Pattern, Vec<Pattern>)>>,
+    /// Per row value `a` some present row took: the row vars of the cones that reached it, and
+    /// the values `b` of those vars that some present row took in every state where a row
+    /// held `a`, in each of those cones (`record`).
+    exists: BTreeMap<Atom, (BTreeSet<VarId>, BTreeSet<Atom>)>,
 }
+
+/// One row var at one value.
+type Atom = (VarId, u8);
 
 /// One mined candidate and the text the report prints when the proof keeps it.
 pub(super) struct Mined {
     pub text: String,
     pub formula: Formula,
-    /// A pair of one child column and one parent column. There are many of them on a model
-    /// with many columns, so the prover adds them only when a rule stays unproved without.
-    pub fine: bool,
+    /// How many times the proof must leave a rule unproved before it joins: 0 from the start;
+    /// 1 for the fine lemmas (one child column with one or two parent columns, and counts),
+    /// which are many on a model with many columns; 2 for the ∀∃ lemmas, which are many too
+    /// and cost z3 a quantifier alternation, so they wait for a rule the fine ones leave.
+    pub wait: u8,
 }
 
 /// Mines `ts` and, when given, `twin`: the same model built at one instance per entity, with
@@ -89,7 +100,9 @@ pub(super) fn mine(
     let counted: BTreeSet<VarId> = quotas(ts).into_iter().map(|q| q.key).collect();
     let mut seen: Vec<Seen> = systems.iter().map(|_| Seen::default()).collect();
     for (k, map, run) in &runs {
-        record(systems[*k], map, run, &counted, &mut seen[*k]);
+        // At one row per entity, every row value goes with the one row of each other entity,
+        // so the twin's ∀∃ guesses would be many and mostly false: they come from the run's.
+        record(systems[*k], map, run, &counted, *k == 0, &mut seen[*k]);
     }
     let mut out = candidates(ts, &seen[0]);
     if let (Some(twin), Some(seen)) = (twin, seen.get(1)) {
@@ -107,12 +120,13 @@ pub(super) fn mine(
 }
 
 /// What one cone's run reached, added to `seen` in `ts`'s ids. Families are kept only for the
-/// keys in `counted`, the ones a guard counts children by.
+/// keys in `counted`, the ones a guard counts children by, and ∀∃ facts only `with_exists`.
 fn record(
     ts: &TransitionSystem,
     map: &Remap,
     run: &ComponentRun,
     counted: &BTreeSet<VarId>,
+    with_exists: bool,
     seen: &mut Seen,
 ) {
     let back: BTreeMap<VarId, VarId> = ts
@@ -136,7 +150,56 @@ fn record(
     let pattern = |s: &crate::lifecycle::StateSlice, vars: &[VarId], slot: usize| -> Pattern {
         vars.iter().map(|v| s.get(sys, *v, slot).0).collect()
     };
+    // Per row value some present row took (an atom, by index): the atoms of other entities
+    // present in every state that showed it, in this cone, as bits.
+    let mut universe: Vec<Atom> = Vec::new();
+    let mut owner: Vec<usize> = Vec::new();
+    let mut offsets: Vec<Vec<usize>> = Vec::new();
+    if with_exists {
+        for (i, (_, _, sub_vars, whole_vars)) in entities.iter().enumerate() {
+            let mut of_entity = Vec::new();
+            for (v, w) in sub_vars.iter().zip(whole_vars) {
+                of_entity.push(universe.len());
+                for x in 0..sys.var(*v).domain.size(sys) {
+                    universe.push((*w, x as u8));
+                    owner.push(i);
+                }
+            }
+            offsets.push(of_entity);
+        }
+    }
+    let words = universe.len().div_ceil(64);
+    let mut own = vec![vec![0u64; words]; entities.len()];
+    for (a, i) in owner.iter().enumerate() {
+        own[*i][a / 64] |= 1 << (a % 64);
+    }
+    let mut along: Vec<Option<Vec<u64>>> = vec![None; universe.len()];
     for s in &run.states {
+        if with_exists {
+            let mut bits = vec![0u64; words];
+            for (i, (se, _, sub_vars, _)) in entities.iter().enumerate() {
+                for slot in (0..sys.slots(*se)).filter(|&k| s.is_present(sys, *se, k)) {
+                    for (j, v) in sub_vars.iter().enumerate() {
+                        let a = offsets[i][j] + usize::from(s.get(sys, *v, slot).0);
+                        bits[a / 64] |= 1 << (a % 64);
+                    }
+                }
+            }
+            for (wi, word) in bits.iter().enumerate() {
+                let mut rest = *word;
+                while rest != 0 {
+                    let a = wi * 64 + rest.trailing_zeros() as usize;
+                    rest &= rest - 1;
+                    match &mut along[a] {
+                        Some(w) => w.iter_mut().zip(&bits).for_each(|(x, y)| *x &= y),
+                        none => {
+                            let of_row = &own[owner[a]];
+                            *none = Some(bits.iter().zip(of_row).map(|(x, m)| x & !m).collect());
+                        }
+                    }
+                }
+            }
+        }
         for (se, whole, sub_vars, whole_vars) in &entities {
             for slot in (0..sys.slots(*se)).filter(|&k| s.is_present(sys, *se, k)) {
                 seen.rows
@@ -199,6 +262,23 @@ fn record(
             }
         }
     }
+    if !with_exists {
+        return;
+    }
+    let held: BTreeSet<VarId> = entities.iter().flat_map(|x| x.3.iter().copied()).collect();
+    for (a, w) in along.iter().enumerate() {
+        let Some(w) = w else { continue };
+        let w: BTreeSet<Atom> = (0..universe.len())
+            .filter(|b| w[b / 64] >> (b % 64) & 1 == 1)
+            .map(|b| universe[b])
+            .collect();
+        let (vars, kept) = seen.exists.entry(universe[a]).or_default();
+        // A value another cone kept stays only if this cone, when it holds its var, kept it
+        // too; one this cone keeps joins only if no cone before held its var.
+        kept.retain(|b| !held.contains(&b.0) || w.contains(b));
+        kept.extend(w.into_iter().filter(|b| !vars.contains(&b.0)));
+        vars.extend(held.iter().copied());
+    }
 }
 
 /// A column, proposition, run mark, or raised mark: a row value a lemma can pin.
@@ -212,12 +292,12 @@ fn is_row_value(ts: &TransitionSystem, v: VarId) -> bool {
 fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
     let mut out = Vec::new();
     let mut done: BTreeSet<String> = BTreeSet::new();
-    let mut push = |text: String, formula: Formula, out: &mut Vec<Mined>, fine: bool| {
+    let mut push = |text: String, formula: Formula, out: &mut Vec<Mined>, wait: u8| {
         if done.insert(text.clone()) {
             out.push(Mined {
                 text,
                 formula,
-                fine,
+                wait,
             });
         }
     };
@@ -245,7 +325,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
                     all_rows: false,
                 },
                 &mut out,
-                false,
+                0,
             );
         }
         for (i, a) in vars.iter().enumerate() {
@@ -263,7 +343,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
                         all_rows: false,
                     },
                     &mut out,
-                    false,
+                    0,
                 );
             }
             for (j, b) in vars.iter().enumerate().skip(i + 1) {
@@ -282,7 +362,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
                             all_rows: false,
                         },
                         &mut out,
-                        false,
+                        0,
                     );
                 }
             }
@@ -369,7 +449,7 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
                     all_rows: false,
                 },
                 &mut out,
-                is_fine,
+                u8::from(is_fine),
             );
         }
     }
@@ -424,12 +504,62 @@ fn candidates(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
                 all_rows: false,
             },
             &mut out,
-            false,
+            0,
         );
     }
     // Last, so the candidates before them and the checks they start are as without.
-    for m in counts(ts, seen) {
-        push(m.text, m.formula, &mut out, true);
+    for m in counts(ts, seen).into_iter().chain(exists(ts, seen)) {
+        push(m.text, m.formula, &mut out, m.wait);
+    }
+    out
+}
+
+/// ∀∃ lemmas (#428, A2): while a present row of one entity holds a value, some present row of
+/// another holds one, for each pair of values every reached state that showed the first
+/// keeps (`Seen::exists`). No key need link the rows (z3_needs_exists_global: while a gate is
+/// ajar, some guard is on duty). Only values a state showed are offered, one var each side.
+fn exists(ts: &TransitionSystem, seen: &Seen) -> Vec<Mined> {
+    let slot = |var: VarId, b: u8| Term::Slot {
+        var,
+        at: At::Bound(b),
+    };
+    let eq = |(var, x): Atom, b: u8| Pred::Cmp(slot(var, b), CmpOp::Eq, Term::Lit(Value(x)));
+    let one = |(v, x): Atom| {
+        format!(
+            "{} == {}",
+            ts.var_name(v),
+            super::value_name(&ts.var(v).domain, i64::from(x))
+        )
+    };
+    let mut out = Vec::new();
+    for (a, (_, kept)) in &seen.exists {
+        let Some(e) = ts.var_entity(a.0) else {
+            continue;
+        };
+        for b in kept {
+            let Some(f) = ts.var_entity(b.0).filter(|f| *f != e) else {
+                continue;
+            };
+            let some = Pred::Exists {
+                entity: f,
+                body: Box::new(eq(*b, 1)),
+            };
+            out.push(Mined {
+                text: format!(
+                    "while a present {} row has {}, some present {} row has {}",
+                    ts.entity(e).id,
+                    one(*a),
+                    ts.entity(f).id,
+                    one(*b)
+                ),
+                formula: Formula {
+                    binders: vec![e],
+                    body: Pred::Or(vec![Pred::Not(Box::new(eq(*a, 0))), some]),
+                    all_rows: false,
+                },
+                wait: 2,
+            });
+        }
     }
     out
 }
@@ -695,7 +825,7 @@ fn count_lemma(
             body,
             all_rows: false,
         },
-        fine: true,
+        wait: 1,
     }
 }
 
@@ -758,7 +888,7 @@ mod tests {
             .into_iter()
             .filter(|m| m.text.contains(" has at most ") || m.text.contains(" has at least "))
             .map(|m| {
-                assert!(m.fine, "{}", m.text);
+                assert_eq!(m.wait, 1, "{}", m.text);
                 m.text
             })
             .collect();
@@ -793,6 +923,45 @@ mod tests {
                 "a present Order row with status == ready has at least 1 present Shipment rows by Shipment._owner_Order",
                 "a present Order row with status == ready has at least 1 present Shipment rows with status == sent by Shipment._owner_Order",
             ]
+        );
+    }
+
+    /// The ∀∃ lemmas `mine` offers on `src` at `verify`'s bounds, by text.
+    fn exists_lemmas(src: &str) -> Vec<String> {
+        let ts = system_from(src, Bounds::VERIFY);
+        let rules: Vec<usize> = (0..ts.invariants().len()).collect();
+        let mut texts: Vec<String> = mine(&ts, None, &rules)
+            .into_iter()
+            .filter(|m| m.text.starts_with("while "))
+            .map(|m| {
+                assert_eq!(m.wait, 2, "{}", m.text);
+                m.text
+            })
+            .collect();
+        texts.sort();
+        texts
+    }
+
+    /// Every reached state with an ajar gate has a guard on duty, though no key links a gate
+    /// to a guard; a shut gate has none in the states before the first guard is hired.
+    #[test]
+    fn rows_no_key_links_give_a_forall_exists_lemma() {
+        let src = include_str!(
+            "../../../../rdra-ish-cli/tests/engine_corpus/z3_needs_exists_global.rdra"
+        );
+        let texts = exists_lemmas(src);
+        assert!(
+            texts.contains(
+                &"while a present Gate row has state == ajar, some present Guard row has state == on"
+                    .to_string()
+            ),
+            "{texts:#?}"
+        );
+        assert!(
+            !texts
+                .iter()
+                .any(|t| t.starts_with("while a present Gate row has state == shut")),
+            "{texts:#?}"
         );
     }
 

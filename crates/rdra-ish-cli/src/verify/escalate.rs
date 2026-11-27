@@ -30,7 +30,8 @@ const STEPS: u8 = 2;
 /// may hold. On the engine corpus's escalated cases one instance more multiplied the store by
 /// 1.1 to 6.4 and two more by 1.4 to 10.1, so 10 lets all but one run finish
 /// (`safety_count_guard_order` at 4 instances, 10.1, which z3 now proves, #428; the cases
-/// added since, `z3_needs_run_mark` and `z3_needs_exists_global`, also stop at 4).
+/// added since, `z3_needs_run_mark` and `z3_needs_exists_global` before its ∀∃ lemma, also
+/// stop at 4).
 /// insurance-claim-ops with its lemma dropped holds 34 MB at 2 instances; at 3 its run stops
 /// at 340 MB after about 40 s, where the memory limit alone let it run past 8 GB.
 const GROWTH: u64 = 10;

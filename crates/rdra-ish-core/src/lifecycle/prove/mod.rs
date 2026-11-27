@@ -212,17 +212,18 @@ enum Fall {
     GaveUp(Option<ActId>),
 }
 
-/// The candidate set: what each candidate fell for, and whether the fine mined lemmas are in.
-/// A fine lemma waits outside the set until a rule stays unproved without it.
+/// The candidate set: what each candidate fell for, and which of the mined lemmas that wait
+/// are in. A lemma that waits (`mine::Mined::wait`) stays outside the set until a rule stays
+/// unproved without it: those of wait 1 join first, then those of wait 2.
 struct Set<'a> {
     fell: Vec<Option<Fall>>,
-    fine: &'a BTreeSet<usize>,
-    fine_joined: bool,
+    wait: &'a [u8],
+    joined: u8,
 }
 
 impl Set<'_> {
     fn contains(&self, k: usize) -> bool {
-        self.fell[k].is_none() && (self.fine_joined || !self.fine.contains(&k))
+        self.fell[k].is_none() && self.wait[k] <= self.joined
     }
 
     fn fallen(&self) -> usize {
@@ -342,16 +343,16 @@ pub fn prove_offered<S: Solver + Send>(
                 body: inv.body.clone(),
                 all_rows: false,
             };
-            (Origin::Rule(i), f, false)
+            (Origin::Rule(i), f, 0)
         })
-        .chain(lemmas(ts).into_iter().map(|(o, f)| (o, f, false)))
+        .chain(lemmas(ts).into_iter().map(|(o, f)| (o, f, 0)))
         .chain(
             mine::mine(ts, twin, rules)
                 .into_iter()
-                .map(|m| (Origin::Lemma(m.text), m.formula, m.fine)),
+                .map(|m| (Origin::Lemma(m.text), m.formula, m.wait)),
         );
-    let mut fine = BTreeSet::new();
-    for (origin, formula, is_fine) in formulas {
+    let mut wait: Vec<u8> = Vec::new();
+    for (origin, formula, waits) in formulas {
         match enc.holds(&formula, Frame::Pre) {
             Ok(holds) => {
                 let act = Expr::sym(format!("act{}", cands.len()), Sort::Bool);
@@ -360,9 +361,7 @@ pub fn prove_offered<S: Solver + Send>(
                     Command::Assert(smt::implies(act.clone(), holds.clone())),
                 ]);
                 let pre = Script::from([Command::Assert(holds)]);
-                if is_fine {
-                    fine.insert(cands.len());
-                }
+                wait.push(waits);
                 let mut reads = VarSet::new();
                 ts.pred_reads(&formula.body, &mut reads);
                 reads.extend(formula.binders.iter().map(|e| ts.entity(*e).exists));
@@ -406,21 +405,25 @@ pub fn prove_offered<S: Solver + Send>(
         s.append(&declarations);
         s
     };
-    // The fine lemmas' literals are declared and asserted only when they join: a proof that
-    // never needs them sends z3 the same commands whatever fine lemmas the model offers, so a
-    // new kind of them changes no other proof's checks (#428).
-    let (fine_cands, plain): (Vec<_>, Vec<_>) = cands
-        .iter()
-        .enumerate()
-        .partition(|(k, _)| fine.contains(k));
+    // The literals of the lemmas that wait are declared and asserted only when they join: a
+    // proof that never needs them sends z3 the same commands whatever of them the model
+    // offers, so a new kind of them changes no other proof's checks (#428).
+    let last = wait.iter().copied().max().unwrap_or(0);
+    let members = |t: u8| -> Vec<usize> { (0..cands.len()).filter(|k| wait[*k] == t).collect() };
     let mut houdini = restart(false);
-    for (_, c) in &plain {
-        houdini.append(&c.activation);
+    for k in members(0) {
+        houdini.append(&cands[k].activation);
     }
-    let mut joining = Script::default();
-    for (_, c) in &fine_cands {
-        joining.append(&c.activation);
-    }
+    // Per wait from 1: the commands that declare and assert its lemmas' literals.
+    let joining: Vec<Script> = (1..=last)
+        .map(|t| {
+            let mut s = Script::default();
+            for k in members(t) {
+                s.append(&cands[k].activation);
+            }
+            s
+        })
+        .collect();
     for solver in solvers.iter_mut() {
         solver.exec(houdini.text())?;
     }
@@ -429,7 +432,7 @@ pub fn prove_offered<S: Solver + Send>(
     let digest = digest(
         &enc,
         &cands,
-        &fine,
+        &wait,
         &declarations,
         &initial,
         &steps,
@@ -437,10 +440,12 @@ pub fn prove_offered<S: Solver + Send>(
     );
     let offered = match (offer, &initial) {
         (Some(offer), Ok(init)) if offer.digest == digest => {
-            // A certificate that keeps a fine lemma needs its literal.
-            if offer.kept.iter().any(|k| fine.contains(k)) {
-                for solver in solvers.iter_mut() {
-                    solver.exec(joining.text())?;
+            // A certificate that keeps a lemma that waits needs its literal.
+            for (t, script) in (1..=last).zip(&joining) {
+                if offer.kept.iter().any(|k| wait.get(*k) == Some(&t)) {
+                    for solver in solvers.iter_mut() {
+                        solver.exec(script.text())?;
+                    }
                 }
             }
             reusable(solvers, &enc, &cands, offer, init, &steps, &breaks)?
@@ -456,19 +461,20 @@ pub fn prove_offered<S: Solver + Send>(
     }
     let mut set = Set {
         fell: offered.unwrap_or_else(|| vec![None; cands.len()]),
-        fine: &fine,
-        fine_joined: reused,
+        wait: &wait,
+        joined: if reused { last } else { 0 },
     };
     if !reused {
         // Houdini's special cases, each kept for a reason:
         // - Initiation is checked once per candidate, before the rounds it joins: no round adds
         //   a candidate the initial states have not been checked against.
-        // - The fine mined lemmas wait outside the set, and join (`Set::fine_joined`) only when a
+        // - The mined lemmas that wait stay outside the set, and join (`Set::joined`) only when a
         //   rule fell after initiation: most models prove every rule without them, and they are
         //   many, so most proofs never check them. Until then z3 sees nothing of them, neither
-        //   their literals nor their initiation checks.
-        // - When they join, the rules that fell after initiation come back: the set that broke
-        //   them lacked the fine lemmas, so its counterexamples may no longer stand.
+        //   their literals nor their initiation checks. The fine ones join first; the ∀∃ ones
+        //   only when a rule falls with the fine ones in.
+        // - When some join, the rules that fell after initiation come back: the set that broke
+        //   them lacked those lemmas, so its counterexamples may no longer stand.
         // - A step is checked only against the candidates that read what it writes (`breaks`):
         //   a step that writes none of a candidate's vars cannot break it.
         // - The set is asserted once per step, and every candidate the step may break is checked
@@ -485,17 +491,16 @@ pub fn prove_offered<S: Solver + Send>(
         // - Rules and lemmas have their own rlimits (`ProveOptions`): a lemma that gives up only
         //   costs proofs, so its limit is lower.
         //
-        // Initiation: every candidate but the fine lemmas holds in every initial state.
-        let plain: Vec<usize> = plain.iter().map(|(k, _)| *k).collect();
-        initiation(solvers, &enc, &cands, &plain, &initial, &mut set.fell)?;
+        // Initiation: every candidate but the lemmas that wait holds in every initial state.
+        initiation(solvers, &enc, &cands, &members(0), &initial, &mut set.fell)?;
 
-        // The fine lemmas wait: most models prove every rule without them, and they are many.
+        // The lemmas that wait: most models prove every rule without them, and they are many.
         let at_start: BTreeSet<usize> = (0..cands.len())
             .filter(|k| set.fell[*k].is_some())
             .collect();
         // Consecution, until a round removes nothing: the kept set is then inductive. When a rule
-        // fell after initiation, the fine lemmas join, the rules that fell come back (the set that
-        // broke one lacked them), and it runs once more.
+        // fell after initiation, the next lemmas that wait join, the rules that fell come back
+        // (the set that broke one lacked them), and it runs once more.
         loop {
             loop {
                 let before = set.fallen();
@@ -529,16 +534,21 @@ pub fn prove_offered<S: Solver + Send>(
                     && set.fell[k].is_some()
                     && !at_start.contains(&k)
             });
-            if !open || set.fine_joined || fine.is_empty() {
-                break;
+            // The next wait with a lemma that holds initially joins; none left ends the proof.
+            let mut joins = false;
+            while open && !joins && set.joined < last {
+                set.joined += 1;
+                let these = members(set.joined);
+                if these.is_empty() {
+                    continue;
+                }
+                for solver in solvers.iter_mut() {
+                    solver.exec(joining[usize::from(set.joined) - 1].text())?;
+                }
+                initiation(solvers, &enc, &cands, &these, &initial, &mut set.fell)?;
+                joins = these.iter().any(|k| set.fell[*k].is_none());
             }
-            set.fine_joined = true;
-            for solver in solvers.iter_mut() {
-                solver.exec(joining.text())?;
-            }
-            let fine: Vec<usize> = fine.iter().copied().collect();
-            initiation(solvers, &enc, &cands, &fine, &initial, &mut set.fell)?;
-            if fine.iter().all(|k| set.fell[*k].is_some()) {
+            if !joins {
                 break;
             }
             for (k, c) in cands.iter().enumerate() {
@@ -639,7 +649,7 @@ pub fn prove_offered<S: Solver + Send>(
 fn digest(
     enc: &Enc,
     cands: &[Candidate],
-    fine: &BTreeSet<usize>,
+    wait: &[u8],
     declarations: &Script,
     initial: &Result<Script, Unsupported>,
     steps: &[encode::Step],
@@ -653,7 +663,7 @@ fn digest(
     // Bump the tag with any change to which set the rounds keep that the text hashed here
     // does not show (the order of the checks, how a fall is decided): a certificate of the
     // older rounds then misses instead of standing for a set they no longer keep.
-    add("rdra-ish proof certificate 2");
+    add("rdra-ish proof certificate 3");
     add(env!("CARGO_PKG_VERSION"));
     add(&format!("{options:?}"));
     add(declarations.text());
@@ -665,12 +675,7 @@ fn digest(
         add(step.commands.text());
     }
     for (k, c) in cands.iter().enumerate() {
-        add(&format!(
-            "{:?} {} {}",
-            c.origin,
-            c.rlimit,
-            fine.contains(&k)
-        ));
+        add(&format!("{:?} {} {}", c.origin, c.rlimit, wait[k]));
         add(c.pre.text());
         add(violation(enc, c, Frame::Pre).text());
         add(violation(enc, c, Frame::Post).text());
@@ -732,11 +737,10 @@ fn reusable<S: Solver + Send>(
     let fell: Vec<Option<Fall>> = (0..cands.len())
         .map(|k| (!kept.contains(&k)).then_some(Fall::Initial))
         .collect();
-    let empty = BTreeSet::new();
     let set = Set {
         fell,
-        fine: &empty,
-        fine_joined: true,
+        wait: &vec![0; cands.len()],
+        joined: 0,
     };
     let all: Vec<usize> = kept.iter().copied().collect();
     let answers = violated_each(solvers, enc, cands, &all, initial, Frame::Pre)?;
