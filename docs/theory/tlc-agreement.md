@@ -21,7 +21,8 @@ this document relies on. Paths follow the convention of the
 
 **The central point [read].** Agreement with TLC is evidence, not a theorem. No part of the TLA+
 translation is proved. What exists is (1) an argument, written here for the first time,
-that each construct of the printed module denotes what `T_β(M)` (D13) says it should, (2)
+that each construct of the printed module denotes the system the build returned, which is
+`T_β(M)` (D13) when claim [I1](./claims.md#0-the-build) holds, (2)
 runtime agreement rules that turn a detected difference into a tool error, (3) differential
 tests that run both engines on fixed inputs, (4) a few mechanised checks of leaf functions,
 none of which touches the printer, and (5) CI jobs, none of which is a required check. Each

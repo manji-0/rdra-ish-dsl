@@ -9,7 +9,7 @@ the tools print. The theme documents listed in the [index](./README.md) state th
 in this notation. The [claims inventory](./claims.md) refers to the definitions by number
 (D1, D2, …), and each definition has an anchor of its own (`semantics.md#d1` … `#d24`).
 
-**Status of the definitions.** D1 to D13 and D24 define `T_β(M)` from the model's text.
+**What the definitions rest on.** D1 to D13 and D24 define `T_β(M)` from the model's text.
 Each clause names the surface construct it gives meaning to (an entity, a column and its
 annotations, a `relate`, a `sets`, a `transitions` line, a `chooses`, a `.when`, a
 `creates`, a `links`, a copy, a `raises`/`triggers` pair, a `deletes`, a split use case) and
@@ -21,9 +21,7 @@ Where those notes leave a point open, the definition makes a choice, and a remar
 definition marks it. No definition is stated in terms of what a function of the code
 computes. Code appears only in **Implemented by** notes, which say where to look. Whether
 the code computes `T_β(M)` is a claim with evidence, not a definition: claim
-[I1](./claims.md#0-the-build) says that `TransitionSystem::build` returns `T_β(M, σ)`. Open
-problem [P60](./README.md#open-problems) records that this document defined `T_β(M)` as the
-build's output until the owner's review.
+[I1](./claims.md#0-the-build) says that `TransitionSystem::build` returns `T_β(M, σ)`.
 
 The definitions apply to a model `M` that loads and builds at `β` with no diagnostic of
 severity error. Examples are `IntLiteralOutOfBounds`, `DomainTooLarge`, `ConflictingEffects`,
@@ -37,8 +35,7 @@ D14 to D23 define the meaning of rules, properties, and verdicts on a transition
 `T`. They apply to `T_β(M)` and to every system derived from it (a cone, a reduced cone, a
 quotient), and they cite code where a verdict is printed.
 
-This document was checked against commit `670eec79` (origin/main, 2026-11-28). It was first
-written at `b83b9544`. Code is cited by Rust path (`lifecycle::types::Bounds`) or as
+This document was checked against commit `670eec79` (origin/main, 2026-11-28). Code is cited by Rust path (`lifecycle::types::Bounds`) or as
 `file.rs::symbol`, with file paths relative to `crates/rdra-ish-core/src/lifecycle/` unless
 they start with `cli/` (`crates/rdra-ish-cli/`), as in the [claims inventory](./claims.md).
 **Implemented by** notes are pointers, not statements, and carry no read status. A code
@@ -82,9 +79,9 @@ more than 256 values: a nullable Int-like column at `m = 255`, a nullable Enum o
 values, or an Enum of 257 (`DomainTooLarge`, since #470).
 
 *Implemented by* `lifecycle::types::Bounds` (`instances`, `per_entity`, `int_max`,
-`Bounds::STATES`, `Bounds::VERIFY`). Every CLI path that sets the bounds goes through
-`cli/src/export.rs::checked_bounds`. It rejects `--instance-count 0` and `--int-range-max 0`
-as well as values above 255, and `rdra.toml` passes through it. `Bounds::int_max` is a
+`Bounds::STATES`, `Bounds::VERIFY`). Every call that turns the flags into bounds goes
+through `cli/src/export.rs::checked_bounds` (for `check`, `states`, `verify`, and `export`).
+It rejects `--instance-count 0` and `--int-range-max 0`, as well as values above 255. `Bounds::int_max` is a
 public `u8` field, so a library caller could still build at `m = 0`. That bound is outside
 D1 and has no meaning here. The domain-size check is `build/vars.rs::Builder::column_var`.
 
@@ -99,11 +96,17 @@ The z3 encoding of `verify --prove` reads neither `n` nor, for most Int terms, `
 table below, held per slot of its entity. A variable `v` of entity `E` is therefore `n_E`
 state components `v[0] … v[n_E - 1]`. `V` is the set of variables a given system holds.
 
-A column is *read as a number* when an Int literal, an order comparison (`<`, `<=`, `>`,
-`>=`), `now`, or another column read as a number is compared with it. This can happen in a
-`sets` value, a rule, a `@check`, a condition body that `applies_to` or `.when` uses, an
-`after` assertion, or a property. A column is *named* when any of these, or a `chooses`,
-mentions it.
+An Int-like column (Int, Money, Decimal, Date, DateTime) is *read as a number* when any of
+the following holds:
+
+- a `sets` writes an integer to it;
+- it is compared with an integer literal, with `now`, or by an order comparison (`<`, `<=`,
+  `>`, `>=`) in a rule, a `@check`, a condition body that `applies_to` or `.when` uses, an
+  `after` assertion, or a property;
+- it is compared by `==` or `!=` with, or copied to or from, another Int-like column in a
+  `sets` copy, a rule, or a condition.
+
+A column is *named* when any of these, or a `chooses`, mentions it.
 
 | Declaration in `M` | Variable | Domain | In `V` when |
 |---|---|---|---|
@@ -127,8 +130,12 @@ a `@derived` column, a foreign-key column (the owner stands for it), and every c
 published entity. A predicate that reads a Bool `@derived` column reads its defining
 expression ([state-derivation.md, "Variables"](../state-derivation.md#variables)).
 
-*Choice.* That an Int-like `@null` column not read as a number is `{⊥, present}` follows the
-code. The notes say only that such a column "exists when something names it".
+*Choice.* Two points follow the code (`build/naming.rs::Named`), because the notes say only
+that such a column "exists when something names it". First, which columns are read as a
+number. Second, that an Int-like `@null` column not read as a number is `{⊥, present}`. One
+consequence: an `==` between two columns in a temporal property names them but does not
+read them as numbers. The reference interpreter of P26 shares this reading with the build,
+so claim I1 has no independent evidence for it.
 
 *Implemented by* `lifecycle::types::VarKind`, `Domain`, `Domain::size`, and
 `build/vars.rs`. The byte layout of a state (`TransitionSystem::offsets`, `width`) is not
@@ -142,9 +149,10 @@ part of the semantics.
   (`9.99`, a date) is schema text and gives the unset value;
 - for `Exists`, `absent`;
 - for a run mark, a latch, and a counter: `none`, `false`, and `0`;
-- for a proposition, `false`;
+- for a proposition of `drives`, `false`;
 - for `now`, `0`;
-- for an owner, the value D4 gives it.
+- for an owner, `⊥` under `.optional()` and parent slot 0 otherwise. D4 overrides it on
+  pre-existing children, and D8 sets it when a child is created.
 
 A slot that is `absent` or `deleted` holds the base value in every column. A variation
 column's base is its `@default`, else its first value. Only an absent or deleted slot shows
@@ -171,8 +179,9 @@ base value, except that:
      slot, and also `⊥` under `.optional()`.
    - **Identity.** For a 1:1 child or the child of a `1..*:1` key, slot `i` is owned by
      parent slot `i`.
-   - **Base.** For the owner of a created entity, and an `.optional()` owner whose parent is
-     created, the owner is `⊥` (unlinked).
+   - **Base.** The owner of a created entity, and an `.optional()` owner whose parent is
+     created, start at base (D3): `⊥` (unlinked) under `.optional()`, and parent slot 0 on a
+     mandatory key, which only absent rows hold.
 
    A mandatory owner of a pre-existing child whose parent is created still starts by Any or
    Identity, under a parent slot that is `absent`. The info
@@ -287,8 +296,8 @@ parameter `p`, applied to the pre-state `s`:
 | `deletes(UC, E)` | D9 | `Exists[p] := deleted`; every column of `p` returns to base; owners that name `p` keep naming it |
 | `sets(UC, E.c == v)`, `v` a value, a number, `true`, `false`, or `null` | — | `c[p] := v` (a number `k` on a nullable column is `k`, not `⊥`) |
 | `sets(UC, E.c == present)`, `c` of domain `{⊥, present}` | — | `c[p] := present` |
-| `sets(UC, E.c == present)`, `c` a nullable column read as a number | — | one successor per value in `[m+1]` (a choice) |
-| `sets(UC, E.c == present)`, `c` a non-null column | — | none |
+| `sets(UC, E.c == present)`, `c` a nullable Enum, Bool, or number column | — | one successor per non-null value of `c`'s domain, which for a number column is `[m+1]` (a choice) |
+| `sets(UC, E.c == present)`, `c` a non-null column of any type | — | none |
 | `sets(UC, E.c == vᵢ).when(Cᵢ)`, one or more lines for `c` | the step has some successor | one successor per line whose body `Cᵢ` holds, with `c[p] := vᵢ`; the body is read on the post-state for a created row and on the pre-state for an updated row |
 | `sets(UC, E.c == F.d)` (copy) | `F`'s row `q` is a parameter of the step, an `Earlier` row, or `p`'s parent on the join key | `c[p] := d[q]`, with `d[q]` read before the step for an updated or earlier row and after it for a row the step creates |
 | `drives(UC, E.c op r, b)` | — | the proposition of `c op r` on `p` becomes `b` |
