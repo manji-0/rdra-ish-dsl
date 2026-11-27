@@ -941,7 +941,7 @@ violation_message(text, pattern_desc)
         | StateDiag::UnwrittenConstrainedVar { .. }
         | StateDiag::PreExistingChildOfCreatedParent { .. }
         | StateDiag::IdentityStartSlots { .. }
-        | StateDiag::IntRangeLeavesNoNull { .. }
+        | StateDiag::DomainTooLarge { .. }
         | StateDiag::CountAboveBound { .. }
         | StateDiag::MinCardOfPreExistingParent { .. }
         | StateDiag::MinCardNeedsCreate { .. }

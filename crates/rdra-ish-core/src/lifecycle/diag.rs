@@ -375,9 +375,16 @@ pub enum StateDiag {
     /// An Int literal outside the bounded domain `0..=max`: in a rule, or a numeric `@default`
     /// (its site a `ModelRef::Column`).
     IntLiteralOutOfBounds { value: i64, max: u8, site: Site },
-    /// A nullable Int column at `--int-range-max 255`: null and `0..=255` are 257 values, one
-    /// more than a state cell holds, so 255 would wrap to null.
-    IntRangeLeavesNoNull { column: String, site: Site },
+    /// A column with more than the 256 values a state cell holds: a nullable Int at
+    /// `--int-range-max 255` (null and `0..=255`), a nullable Enum of 256 values, or an Enum of
+    /// 257. Its top values would wrap onto its first ones, null for a nullable column. `int`
+    /// says the count comes from the Int range.
+    DomainTooLarge {
+        column: String,
+        values: usize,
+        int: bool,
+        site: Site,
+    },
     /// A cross-entity constraint whose entities no relate path binds.
     UnbindableScope {
         constraint: String,
@@ -654,9 +661,7 @@ impl StateDiag {
             StateDiag::IntLiteralOutOfBounds { value, .. } => {
                 with("IntLiteralOutOfBounds", &[&value.to_string()])
             }
-            StateDiag::IntRangeLeavesNoNull { column, .. } => {
-                with("IntRangeLeavesNoNull", &[column])
-            }
+            StateDiag::DomainTooLarge { column, .. } => with("DomainTooLarge", &[column]),
             StateDiag::UnbindableScope { constraint, .. } => with("UnbindableScope", &[constraint]),
             StateDiag::UnbindableCondition {
                 condition, usecase, ..
@@ -772,7 +777,7 @@ impl StateDiag {
             | StateDiag::AssertOnInertUseCase { site, .. }
             | StateDiag::FairOnInertUseCase { site, .. }
             | StateDiag::IntLiteralOutOfBounds { site, .. }
-            | StateDiag::IntRangeLeavesNoNull { site, .. }
+            | StateDiag::DomainTooLarge { site, .. }
             | StateDiag::UnbindableScope { site, .. }
             | StateDiag::AmbiguousOwnerLink { site, .. }
             | StateDiag::UnboundCopySource { site, .. }
@@ -877,7 +882,7 @@ impl StateDiag {
             | StateDiag::FairOnInertUseCase { .. }
             | StateDiag::IntLiteralOutOfBounds { .. }
             | StateDiag::IdentityStartSlots { .. }
-            | StateDiag::IntRangeLeavesNoNull { .. }
+            | StateDiag::DomainTooLarge { .. }
             | StateDiag::UnbindableScope { .. }
             | StateDiag::UnbindableCondition { .. }
             | StateDiag::UnboundCopySource { .. }
@@ -1233,9 +1238,18 @@ impl fmt::Display for StateDiag {
                 f,
                 "property {property}: .fair({usecase}) names a use case with no effect, so its fairness constrains no step"
             ),
-            StateDiag::IntRangeLeavesNoNull { column, .. } => write!(
+            StateDiag::DomainTooLarge {
+                column,
+                values,
+                int: true,
+                ..
+            } => write!(
                 f,
-                "{column} is a nullable Int, which holds null and 0..254 at most, so --int-range-max 255 leaves no room for null; give it 254 or less"
+                "{column} takes {values} values, null and the Int range, more than the 256 a state holds; give --int-range-max 254 or less"
+            ),
+            StateDiag::DomainTooLarge { column, values, .. } => write!(
+                f,
+                "{column} takes {values} values, more than the 256 a state holds; declare at most 256 values (255 with @null)"
             ),
             StateDiag::IntLiteralOutOfBounds { value, max, site } => match &site.fact {
                 ModelRef::Column { column, .. } => write!(

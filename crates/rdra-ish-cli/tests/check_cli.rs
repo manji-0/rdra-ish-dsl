@@ -922,12 +922,12 @@ forbidden(Item, stock == 0)
     assert!(!stderr.contains("Forbidden_Item_0"), "{stderr}");
 }
 
-/// A nullable Int column holds null and `0..=max`: `max + 2` values, one more than a `u8` holds
-/// at `--int-range-max 255`. There the literal 255 wrapped to null, in the write and in the rule
-/// alike, so every engine checked a model whose use case writes null: a rule the model breaks
-/// at 255 was `ok` (and `proved` under `--prove`), where at 254 it is a counterexample. Such a
-/// range is an error now, before any engine runs; 254 is the largest a nullable Int column
-/// takes, and 256 is no range at all. A model without a nullable Int column still takes 255.
+/// A state cell holds 256 values. A nullable Int column holds null and `0..=max`: 257 values
+/// at `--int-range-max 255`, where a write of 255 wrapped to null, so every engine checked a
+/// model whose use case writes null, and a rule the model breaks at 255 was `ok` (and
+/// `proved` under `--prove`); at 254 it is a counterexample. Such a range is an error now,
+/// before any engine runs; 256 is no range at all, and a model without a nullable Int column
+/// still takes 255.
 #[test]
 fn a_nullable_int_column_takes_no_range_past_254() {
     let src = |top: &str, null: &str| {
@@ -957,8 +957,8 @@ forbidden(Item, n == {top})
         let (code, _, stderr) = run("nullable-top-255", "255", "@null", "255");
         assert_eq!(code, Some(1), "{command}: {stderr}");
         assert!(
-            stderr.contains("error[IntRangeLeavesNoNull_Item_n]")
-                && stderr.contains("n is a nullable Int, which holds null and 0..254"),
+            stderr.contains("error[DomainTooLarge_Item_n]")
+                && stderr.contains("n takes 257 values, null and the Int range, more than the 256 a state holds; give --int-range-max 254 or less"),
             "{command}: {stderr}"
         );
         assert!(!stderr.contains("Forbidden_Item_0"), "{command}: {stderr}");
@@ -973,6 +973,53 @@ forbidden(Item, n == {top})
         let (code, _, stderr) = run("int-top-255", "255", "", "255");
         assert_eq!(code, Some(1), "{command}: {stderr}");
         assert!(stderr.contains("Forbidden_Item_0"), "{command}: {stderr}");
+    }
+}
+
+/// The same for Enums, at the default bounds: a nullable Enum of 256 values (257 with null)
+/// wrote its last value as null, so `forbidden(Row, s != null)` was `ok` though `Create`
+/// writes the last value; an Enum of 257 values wrote its last as its first. Both are errors
+/// now, which stop `verify` before any engine runs (`check` lists the error beside what it
+/// finds). A nullable Enum of 255 values and an Enum of 256 still build, and the write breaks
+/// the rule there.
+#[test]
+fn an_enum_column_takes_no_more_values_than_a_state_holds() {
+    let src = |n: usize, null: &str, rule: &str| {
+        let values: Vec<String> = (0..n).map(|i| format!("v{i}")).collect();
+        format!(
+            r#"entity Row "行" {{ id: Int @pk  s: Enum({}) {null} }}
+usecase Create "作成"
+creates(Create, Row)
+sets(Create, Row.s == v{})
+forbidden(Row, {rule})
+"#,
+            values.join(","),
+            n - 1
+        )
+    };
+    for command in ["check", "verify"] {
+        for (n, null, rule, fits) in [
+            (255, "@null", "s != null", true),
+            (256, "@null", "s != null", false),
+            (256, "", "s != v0", true),
+            (257, "", "s != v0", false),
+        ] {
+            let name = format!("enum-{n}{}", null.trim_start_matches('@'));
+            let (code, _, stderr) = run_on_source(&name, &src(n, null, rule), &[command]);
+            assert_eq!(code, Some(1), "{command} {n} {null}: {stderr}");
+            match fits {
+                true => assert!(
+                    stderr.contains("Forbidden_Row_0") && !stderr.contains("DomainTooLarge"),
+                    "{command} {n} {null}: {stderr}"
+                ),
+                false => assert!(
+                    stderr.contains("error[DomainTooLarge_Row_s]")
+                        && stderr.contains("s takes 257 values, more than the 256 a state holds")
+                        && (command == "check" || !stderr.contains("Forbidden_Row_0")),
+                    "{command} {n} {null}: {stderr}"
+                ),
+            }
+        }
     }
 }
 

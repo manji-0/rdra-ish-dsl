@@ -400,10 +400,12 @@
   clippy.
 - A time budget (`Caps::until`) on the entity cones `check` explores leaves their findings
   undecided (`UndecidedWhy::TimeBudget`) instead of panicking.
-- A nullable Int column at `--int-range-max 255` is an error, `IntRangeLeavesNoNull`: null and
-  `0..255` are one value more than a state cell holds, and the top value wrapped to null in
-  writes and rules alike, so a rule the model breaks at 255 printed `ok` and `proved`. Such a
-  column takes 254 at most; a model without one still takes 255.
+- A column with more than the 256 values a state cell holds is an error, `DomainTooLarge`: a
+  nullable Int at `--int-range-max 255`, a nullable Enum of 256 values, or an Enum of 257. Its
+  top values wrapped onto its first ones (null, for a nullable column) in writes, defaults and
+  choices, so a rule the model breaks printed `ok`, and `proved` under `--prove`; for the Enums
+  at the default bounds. A nullable Int column takes `--int-range-max 254` at most; a model
+  without one still takes 255.
 
 ## v3.0.0 - 2026-11-26
 

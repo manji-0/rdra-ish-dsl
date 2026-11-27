@@ -36,8 +36,10 @@ fn one_of_each() -> Vec<StateDiag> {
             parent_slots: 1,
             site: site(),
         },
-        StateDiag::IntRangeLeavesNoNull {
+        StateDiag::DomainTooLarge {
             column: "amount".into(),
+            values: 257,
+            int: true,
             site: site(),
         },
         StateDiag::CountAboveBound {
@@ -282,7 +284,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::NoCreationPath
             | StateDiag::PreExistingChildOfCreatedParent { .. }
             | StateDiag::IdentityStartSlots { .. }
-            | StateDiag::IntRangeLeavesNoNull { .. }
+            | StateDiag::DomainTooLarge { .. }
             | StateDiag::CountAboveBound { .. }
             | StateDiag::MinCardOfPreExistingParent { .. }
             | StateDiag::MinCardNeedsCreate { .. }

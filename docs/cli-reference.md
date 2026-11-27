@@ -138,7 +138,7 @@ The consistency checks cover:
 | `--memory <SIZE>` | `memory` under `[check]`, else `4GiB` | What the run may hold. A cone past it stops with the `MemoryCapReached` error. See [Memory limit](#memory-limit). |
 | `--instance-count <N>` | `1` | Slots per entity, `1..=255`. A violation that needs two rows of an entity shows only from `2`. A larger value raises the default `--max-patterns`. |
 | `--instances <ENTITY=N>` | `instances` under `[check]` | One entity's slots, `1..=255`; repeatable. See [Per-entity instance counts](#per-entity-instance-counts). |
-| `--int-range-max <N>` | `5` | The Int domain is `0..=N`, `1..=255`; at most `254` when the model has a nullable Int column (`IntRangeLeavesNoNull`). |
+| `--int-range-max <N>` | `5` | The Int domain is `0..=N`, `1..=255`; at most `254` when the model has a nullable Int column (`DomainTooLarge`). |
 | `--buc`, `--entity`, `--without-usecase`, `--without-buc`, `--actor` `<ID>` | whole model | Check part of the model; each repeatable. See [Partial runs](#partial-runs). |
 
 **Output.** stderr opens with a `bounds:` line (the slots per entity, the Int range, the state

@@ -274,7 +274,7 @@ impl Domain {
         }
         match self {
             Domain::Int => Some(Value(n as u8)),
-            // At int_max 255 the top has no value (`IntRangeLeavesNoNull`): never wrap to null.
+            // At int_max 255 the top has no value (`DomainTooLarge`): never wrap to null.
             Domain::NullableInt => (n as u8).checked_add(1).map(Value),
             _ => None,
         }
@@ -317,13 +317,15 @@ impl Domain {
     }
 
     /// The value of declared value `i` of an Enum domain (`false` is 0 and `true` 1 of a Bool
-    /// one): `i`, or `i + 1` past the null of a nullable one.
+    /// one): `i`, or `i + 1` past the null of a nullable one. A value past the 256 a state
+    /// holds is the top one, never a wrap onto null or the first value; the build reports such
+    /// a domain (`DomainTooLarge`), which no engine then explores.
     pub fn of_variant(&self, i: usize) -> Value {
         let shift = usize::from(matches!(
             self,
             Domain::NullableEnum(_) | Domain::NullableBool
         ));
-        Value((i + shift) as u8)
+        Value(u8::try_from(i + shift).unwrap_or(u8::MAX))
     }
 
     /// The declared value an Enum or Bool value stands for, as `of_variant` numbers it; `None`
