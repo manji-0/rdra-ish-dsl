@@ -488,6 +488,7 @@ Vacuity is a warning about a rule that holds and never changes a verdict.
 
 <!-- derived-from ../language-reference.md#temporal-path-properties -->
 <!-- derived-from ../language-reference.md#order-and-stability-stable-unchanged-precedes -->
+<!-- derived-from ../language-reference.md#goals-on-present-rows-present -->
 
 A property has binders `E₁ … E_k`, a link predicate `ℓ` (the owner equalities of `.along`,
 or `true` without it), a formula, and a set of fair use cases. For a binding `b`, define the

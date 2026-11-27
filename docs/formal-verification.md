@@ -152,7 +152,7 @@ system.
 | An action that creates a parent and updates an existing child | The action links the child. An `.optional()` key links only an unlinked child; a mandatory key moves it. |
 | `invariant(...).when(...).none/has(...)` | `\A` / `\E` over the ids, named `Quantifier_<Entity>_<n>` |
 | `after(UC).assert(...)` | `PROPERTY AfterAssert_<UC>_<n>`: `[][(\A p : UC(p) => post')]_vars` on the last action of each run |
-| `always`, `eventually`, `leads_to` | A named formula and a `PROPERTY`, per present instance: `[](present => x)`, `[](present => <>x)`, `(present /\ x) ~> y`. `.along` joins the owner link to `present`. |
+| `always`, `eventually`, `leads_to` | A named formula and a `PROPERTY`, per present instance: `[](present => x)`, `[](present => <>x)`, `(present /\ x) ~> y`. `.along` joins the owner link to `present`. With `.present()` the goal is `present /\ x` (`present /\ y`). |
 | `stable(p)` | `[][\A b0 \in E_Ids : (present /\ p) => (present' => p')]_vars` |
 | `unchanged(E.col, ..).when(p)` | `[][\A b0 \in E_Ids : (present /\ p) => (present' => E_col'[b0] = E_col[b0] /\ ..)]_vars` |
 | `precedes(p, q)` | A latch `P_seen`, set by every action once `present /\ p` holds, and `[](\A b0 : (present /\ q) => P_seen[b0])`. Only a module whose `.cfg` checks `P` declares it. |
