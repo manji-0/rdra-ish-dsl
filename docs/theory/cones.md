@@ -8,8 +8,10 @@ on a smaller system decides what `T_β(M)` (D13) would: a cone of influence, a c
 an independent sub-lifecycle, a run up to slot permutations, and a run at more instances. It
 uses the notation of [semantics.md](./semantics.md) and does not redefine it.
 
-The code read is commit `c97c88ef0531a528a69809cdc55b2f83147cd9e8` (origin/main,
-2026-11-28, the merge of #525). The document was first written against `fb6928c7` and was
+The code read is commit `307ee4e84ffc466bd69ce998c047092f37c6ccc6` (origin/main,
+2026-11-28, the merge of #511), the pin of the [index](./README.md). Its `crates/` are those
+of `c97c88ef` (the merge of #525): #511 changes only `Cargo.toml`, adding the `ci-checked`
+profile, and the CI workflow. The document was first written against `fb6928c7` and was
 brought up to date with `c97c88ef` after the final audit of docs/theory: the code that the
 fixes of P1, P7, P10, P11, P20, P30, P31, P32 and P33 changed (#477, #480, #488, #509, #512,
 #516, #518, #521, #522) was re-read at `c97c88ef`, and for every other function, type and
@@ -1301,7 +1303,9 @@ Changes to statements of this document after it was first written, newest last.
   [counterexamples](#instance-symmetry) paragraph says a lifted trace that does not replay is a
   fault.
 - **2026-11-28, after the final audit of docs/theory** (findings 1, 2 and 27 to 35; commit
-  `065e53d7`). Re-pinned from `fb6928c7` to `c97c88ef`, with the method of the first
+  `065e53d7`). Re-pinned from `fb6928c7` to `307ee4e8`, whose crates are those of `c97c88ef`
+  (commit `2e9ff3e6` named the content commit; a follow-up moved the pin from `c97c88ef` to
+  `307ee4e8`, the index's pin, after #511), with the method of the first
   paragraph; the sentence that every statement held at both `b83b9544` and `fb6928c7` is gone.
   Statements that described P1, P7, P10, P11, P20, P30 and P32 as open now describe the code
   at the pin and give each fix in the past tense with its pull request and test: the

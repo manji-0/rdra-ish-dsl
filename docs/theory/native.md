@@ -10,8 +10,11 @@ of [semantics.md](./semantics.md) (D1 to D25) without redefining it. `T` is the 
 build returns; that it is `T_β(M)` (D13) is claim [I1](./claims.md#0-the-build), not a step
 of any proof here.
 
-It describes the code at commit `c97c88ef0531a528a69809cdc55b2f83147cd9e8` (origin/main,
-2026-11-28, the merge of #525). The document was first written against `fb6928c7` and was
+It describes the code at commit `307ee4e84ffc466bd69ce998c047092f37c6ccc6` (origin/main,
+2026-11-28, the merge of #511), the pin of the [index](./README.md). Its `crates/` are those
+of `c97c88ef` (the merge of #525): #511 changes only `Cargo.toml`, adding the `ci-checked`
+profile (Threats to validity, "Fixed-width integers"), and the CI workflow. The document was
+first written against `fb6928c7` and was
 brought up to date with `c97c88ef` after the final audit of docs/theory: the code that the
 fixes of P19, P20, P50, P51, P52, P53, P54 and P55 changed (#470, #478, #479, #484, #487,
 #494, #510, #518, #522) was re-read at `c97c88ef`, and for every other function, type and
@@ -891,7 +894,10 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   edges; fixed in #479). #479 also audited the narrowing casts of the explore store (state
   numbers, edge numbers, slot counts), and #513 replaced the narrowing `as` casts of the
   lifecycle code with the checked `id8` and `id32` (`narrow.rs`), which panic rather than
-  wrap.
+  wrap. Since #511 the CI jobs that verify the samples, the corpus and engine agreement build
+  with the `ci-checked` profile of the workspace `Cargo.toml` (release with
+  `overflow-checks`), so an arithmetic overflow panics there; the `release` profile, which
+  users run, still wraps silently.
 - **Fairness wording.** N9's (⇒) direction, hence every liveness `ok`, rests on assumption
   τ, which D20 states since #475 (P56).
 - **Determinism of memory stops beside other runs** rests on the reruns of N4; the CLI's
@@ -1037,7 +1043,9 @@ Changes to statements of this document after it was first written, newest last.
   #495: a `.present()` goal in "The goal on absent rows"; `2a373175`, #510: `StateTooWide`;
   `79c4d186` and `9519199b`, #522: N13 and the N16 reading list say a failed replay is a fault).
 - **2026-11-28, after the final audit of docs/theory** (findings 1, 2, 4, 16, 45 to 49;
-  commit `065e53d7`). Re-pinned from `fb6928c7` to `c97c88ef`, with the method of the
+  commit `065e53d7`). Re-pinned from `fb6928c7` to `307ee4e8`, whose crates are those of `c97c88ef`
+  (commit `2e9ff3e6` named the content commit; a follow-up moved the pin from `c97c88ef` to
+  `307ee4e8`, the index's pin, after #511), with the method of the
   first paragraph; the sentence that the verifier was the same at `b83b9544` and `fb6928c7`
   is gone, and semantics.md is cited for D1 to D25, N14 citing D25 with its `has_way_on`
   condition. N2's preconditions are enforced (`DomainTooLarge`, #470; `u32` offsets, #479;
