@@ -143,7 +143,7 @@ pub fn run_codegen(args: CodegenArgs<'_>) -> Result<()> {
         return Ok(());
     }
     if let (Some((path, _)), Some((text, stats))) = (args.conformance, &generated.traces) {
-        write_traces(path, text, stats)?;
+        write_traces(path, text, stats, unchecked(&generated))?;
     }
     match args.out {
         Some(path) => write_file(path, &generated.code)?,
@@ -305,7 +305,7 @@ fn write_configured(loaded: &Loaded, inputs: &[PathBuf], probe_only: bool) -> Re
         if !probe_only {
             write_file(&dir.join(&target.domain), &generated.code)?;
             if let (Some(path), Some((text, stats))) = (&target.traces, &generated.traces) {
-                write_traces(&dir.join(path), text, stats)?;
+                write_traces(&dir.join(path), text, stats, unchecked(&generated))?;
             }
         }
         for (path, text) in
@@ -352,7 +352,18 @@ fn write_file(path: &Path, text: &str) -> Result<()> {
     Ok(())
 }
 
-fn write_traces(path: &Path, text: &str, traces: &Traces) -> Result<()> {
+/// What the harness of `generated` does not compare (`PortDecl::unchecked`).
+fn unchecked(generated: &Generated) -> &[String] {
+    generated
+        .domain
+        .as_ref()
+        .and_then(|d| d.port.as_ref())
+        .map_or(&[], |p| &p.unchecked[..])
+}
+
+/// Writes the traces, then their summary and coverage statement on stderr, with a warning
+/// when their BFS stopped at its cap.
+fn write_traces(path: &Path, text: &str, traces: &Traces, unchecked: &[String]) -> Result<()> {
     if let Some(parent) = path.parent().filter(|p| !p.as_os_str().is_empty()) {
         fs::create_dir_all(parent)
             .with_context(|| format!("failed to create {}", parent.display()))?;
@@ -372,6 +383,13 @@ fn write_traces(path: &Path, text: &str, traces: &Traces) -> Result<()> {
             "; BFS stopped at --conformance-states"
         }
     );
+    let subject = shown(path);
+    for line in traces.coverage(&subject, unchecked) {
+        eprintln!("{line}");
+    }
+    if let Some(warning) = traces.incomplete(&subject) {
+        eprintln!("warning: {warning}");
+    }
     Ok(())
 }
 

@@ -350,6 +350,42 @@ is fresh, but the service does not use it, or implements only part of it.
 
 1, 3 and 4 narrow as the harness grows. 2, 5, 6 and 7 stay.
 
+### What a passing run claims
+
+<!-- constrained-by #what-it-cannot-detect -->
+
+Decided by the owner on 2026-11-27 (#439): a passing `--code=run` is **bounded conformance**,
+never equivalence. If the service passes the traces, the safety rules the model verified
+(invariant, forbidden, `@check`, after-assert) over tracked columns hold for every run driven
+through the port, with at most N rows created per entity (the traces' bound; deleted slots
+are not reused). The claim rests on five assumptions:
+
+- **H1 Deterministic.** The answer depends only on the tracked columns, ids, run marks and
+  raised marks, and on the call; not on hidden state, untracked columns or the clock.
+- **H2 Complete coverage.** Every reachable state and every call in the finite label domain
+  is tried, run and refused. This needs the BFS to finish.
+- **H3 Real store.** `seed` and `snapshot` reach the production store.
+- **H4 Port-only writes.** Every write goes through the port, one call is one transaction,
+  and writes are conditional.
+- **H5 Tracked columns.** The rule reads tracked columns only.
+
+The C rows give only model ⊑ implementation; the safety direction needs the X rows, every
+call the model refuses refused with the store unchanged. A BFS stopped at its cap has no X
+rows, so H2 fails there and the safety direction is not checked at all.
+
+`--code=run` prints this on stdout before its summary line, one statement per table: the
+bound, whether the BFS completed or stopped at its cap, the moves run and left out, the
+refused calls tried, what the harness does not compare, H1 to H5 in one line, and what no
+test can show (the [list above](#what-it-cannot-detect), shortened) in another. A capped suite
+gets `warning[CodeCoverageIncomplete]` and the exit status does not change; `--deny-incomplete`
+makes it an error. `codegen` prints the same statement after it writes the traces.
+
+`--deny-incomplete` fails on the cap only. A complete BFS with no refused call means the
+model refuses none of the calls the harness tries as refused, which are calls on one existing
+row; the model may still refuse a create or an action over several rows, which no trace
+tries (gap 2 of #439), and the statement says `calls on one existing row` for that reason.
+Counting those untried refusals, and failing `--deny-incomplete` on them, is left open.
+
 ## Phases
 
 Each phase ships and is verified on its own.

@@ -351,13 +351,53 @@ fn backend(name: &str) -> Box<dyn Backend> {
     }
 }
 
+/// The coverage statement of the traces `t` ran, and a finding when they are not complete: a
+/// warning, or an error with `deny_incomplete`.
+fn coverage(t: &Target<'_>, deny_incomplete: bool) -> (Vec<String>, Option<CodeDiagnostic>) {
+    let Some((_, traces)) = &t.generated.traces else {
+        return (Vec::new(), None);
+    };
+    let subject = format!("[code.{}]", t.name);
+    let unchecked = t
+        .generated
+        .domain
+        .as_ref()
+        .and_then(|d| d.port.as_ref())
+        .map(|p| p.unchecked.clone())
+        .unwrap_or_default();
+    let finding = traces.incomplete(&subject).map(|message| CodeDiagnostic {
+        name: "CodeCoverageIncomplete".to_string(),
+        message,
+        model: None,
+        code: None,
+        fix: Some(format!(
+            "raise `conformance_states` in [code.{}] of rdra.toml and run `codegen --code` again{}",
+            t.name,
+            if deny_incomplete {
+                ""
+            } else {
+                "; --deny-incomplete fails the check on it"
+            }
+        )),
+        warning: !deny_incomplete,
+    });
+    (traces.coverage(&subject, &unchecked), finding)
+}
+
 /// Checks the code `manifest`'s `[code]` names at `level`; prints the findings on stderr and
-/// a summary line on stdout. Whether it passed.
-pub(crate) fn run(inputs: &[PathBuf], manifest: &Manifest, level: CodeLevel) -> Result<bool> {
+/// a summary line on stdout, after the coverage statement of each conformance run. With
+/// `deny_incomplete`, traces whose BFS stopped at its cap fail the run. Whether it passed.
+pub(crate) fn run(
+    inputs: &[PathBuf],
+    manifest: &Manifest,
+    level: CodeLevel,
+    deny_incomplete: bool,
+) -> Result<bool> {
     let loaded = Loaded::load(inputs)?;
     let code = manifest.code.as_ref().expect("the caller checked [code]");
     let mut failed = 0usize;
     let mut findings: Vec<CodeDiagnostic> = Vec::new();
+    let mut statements: Vec<String> = Vec::new();
     // The ledger's inputs: the model's obligations (sites as the check shows them), the
     // roots to scan for markers, and the generated files, which are not scanned.
     let mut obligations: Option<Vec<rdra_ish_emit::codegen::ir::Obligation>> = None;
@@ -419,7 +459,12 @@ pub(crate) fn run(inputs: &[PathBuf], manifest: &Manifest, level: CodeLevel) -> 
                     break;
                 }
                 Some(result) => {
-                    let found = result?;
+                    let mut found = result?;
+                    if at == CodeLevel::Run {
+                        let (lines, finding) = coverage(&t, deny_incomplete);
+                        statements.extend(lines);
+                        found.extend(finding);
+                    }
                     let errors = found.iter().filter(|d| !d.warning).count();
                     findings.extend(found);
                     if errors > 0 {
@@ -475,6 +520,9 @@ pub(crate) fn run(inputs: &[PathBuf], manifest: &Manifest, level: CodeLevel) -> 
         CodeLevel::Build => "build",
         CodeLevel::Run => "run",
     };
+    for line in &statements {
+        println!("{line}");
+    }
     if failed > 0 {
         println!("FAIL: code: {failed} error(s) at --code={level_name}");
         return Ok(false);
