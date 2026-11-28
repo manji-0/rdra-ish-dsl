@@ -42,6 +42,7 @@ mod partition;
 #[cfg(feature = "shadow")]
 mod reference;
 mod split;
+mod table;
 
 pub use cache::QuotientCache;
 use extended::Extended;
@@ -49,6 +50,7 @@ pub use fold::{Fold, FoldKey};
 pub use partition::Divergence;
 use partition::{NoQuotient, Quotient};
 use split::Split;
+pub use table::{ClassTable, NoClassTable, CLASS_TABLE_CAP};
 
 /// The most cells (`Reduction::tla_cells`) a reduced cone may print for TLC; the native
 /// checker reduces under the same budget, so both check the same cones. A cone past it is

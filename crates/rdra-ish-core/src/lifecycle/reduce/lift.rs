@@ -54,12 +54,7 @@ impl TransitionSystem {
         };
         let n = run.states.len();
         let blocks = partition(&ext, &run.system, run).blocks;
-        let block_of_class: HashMap<u32, u32> = run
-            .states
-            .iter()
-            .enumerate()
-            .filter_map(|(i, s)| r.class_of.get(&s.0).map(|c| (*c, blocks[i])))
-            .collect();
+        let block_of_class: HashMap<u32, u32> = r.rep_blocks(run, &blocks).collect();
         let succ = Succ::new(run, &ext.rise);
         // The concrete start: an initial S state in the start's class. The run reaches its
         // initial states first.

@@ -24,11 +24,12 @@ cd "$(git rev-parse --show-toplevel)"
 
 # Run in release by engine-equivalence, formal-verify, and engine-corpus; proof_equivalence
 # runs whole in engine-equivalence (in debug its solver-count test alone took 4 minutes).
-# `test()` matches a part of the name, so a new `bfs_and_tlc_*` or `tlc_alone_*` test is
-# skipped too.
+# `test()` matches a part of the name, so a new `bfs_and_tlc_*`, `tlc_alone_*` or
+# `tlc_refinement_*` test is skipped too.
 release_only=(
   bfs_and_tlc_
   tlc_alone_
+  tlc_refinement_
   a_property_cone_decides_what_the_whole_model_decides
   reduced_domain_cones_decide_what_the_cones_decide
   reduced_domain_cones_hold_each_fold_bit_where_its_action_runs

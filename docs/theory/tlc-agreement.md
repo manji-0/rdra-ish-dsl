@@ -401,7 +401,9 @@ code computed it. It checks the native exploration of that quotient, not the quo
 soundness (A8). This document gives no paper argument that the printed class move (the
 `is_class_move` branch of `action`), the `Rise` lookup, and the bits denote the native
 reduced step (`moves_of_into` with a reduction). Step 3 on reduced systems therefore rests on the graph comparison
-of reduced sample cones alone. The sample comparison does compare the reduced cone's violated
+of reduced sample cones and, on the corpus, on the refinement check of
+[The reduction, step by step](#the-reduction-step-by-step), which holds every step of the
+unreduced cone to a step of the printed reduced module. The sample comparison does compare the reduced cone's violated
 checks with the unreduced cone's, through TLC on both
 ([Sample comparison](#the-sample-comparison)), but only on cones whose unreduced BFS fits
 its cap. TLC never checks a property under `WF_vars(Next)` on a reduced module: the `_WF`
@@ -425,7 +427,7 @@ invariants of `print_state_models`, which are one-sided by design (T6).
 | Step of T1 | Paper argument | Test | Assumed |
 |---|---|---|---|
 | 1, 2, 3 (states, init, steps) on unreduced systems | above; step 3 for multi-target transitions under the builder's effect-order invariant, which the build enforces (`ConflictingEffects`), and for every effect under the assumption, not checked, that no two params of one action that can bind one slot write one variable | graph equality on every sample cone under 300,000 states, at 1 and 2 instances, edges with their params; the 36 `bfs_and_tlc_*` tests of `engine_equivalence.rs` | TLC's `-dump dot` lists every edge, self-loops included |
-| 3 on reduced systems | none (not argued here) | graph equality on reduced sample cones, class moves by action alone; the reduced cone's violated set against the unreduced one's | the quotient tables (common-mode) |
+| 3 on reduced systems | none (not argued here) | graph equality on reduced sample cones, class moves by action alone; the reduced cone's violated set against the unreduced one's; on the 17 reduced corpus cones, every step of the unreduced cone a step of the reduced module or a stutter ([The reduction, step by step](#the-reduction-step-by-step)) | the quotient tables (common-mode) outside the corpus |
 | 4, state rules and `after` | above, with D17's stuttering exemption | verdict and violated-set comparison on every compared cone; each TLC trace replayed through the native step relation | TLC |
 | 4, temporal properties and fairness | above | verdicts only: 23 `TEMPORAL_CASES` at 2 instances (under `-lncheck final`, [Batch JVMs](#batch-jvms)) and the corpus at each case's flags | TLC's liveness checking under quantified weak fairness |
 | 5, latch | above | verdicts only: `explored_along` (a `TEMPORAL_CASES` fixture) and the corpus case `safety_precedes_latch`. The graph comparison prints `PrintMode::Safety` modules, which declare no latch (`mod.rs::checked_properties` checks no property in that mode), so it never sees one | |
@@ -623,6 +625,76 @@ therefore sees 45 random models per main run, the same 45 each time. The generat
 generator mode, `reduction-diff.py --counted` (`.counted(k)` with `k` of 1 or 2 on every
 `triggers` line), which no workflow passes.
 
+### The reduction, step by step
+
+<!-- derived-from ./cones.md#the-reduction-by-an-independent-sub-lifecycle -->
+
+`cli/tests/engine_corpus.rs::tlc_refinement_holds_on_every_reduced_cone_of_the_corpus` (A8,
+T1 on reduced systems) has TLC check a reduced cone `R` against its cone `C` step by step,
+not only by verdict. [read] for the description; what a pass shows is [test].
+
+- **Modules.** For each reduced cone of a corpus case at the case's header bounds (the cones
+  of its targets and of its properties, each distinct pair of modules once), the test prints
+  `C`, the cone unreduced, and `R`, the cone reduced by that target's seed alone (as
+  `a_reduced_wf_next_run_decides_what_the_unreduced_one_decides` reduces it, not with the
+  seeds of every target sharing the cone united), both in `PrintMode::Safety`, and a third
+  module from `emit/tla/refine.rs::print_refinement`. That module `EXTENDS` `C` and
+  instantiates `R` with its class variable set to `RefClass`, the class of the state's key
+  `x(t, s)`: the S variables and raw inputs as `C` holds them, and the input bits through
+  `R`'s own `In_<g>` operators. The class comes from a table of every state the extended
+  sub-lifecycle's run reaches, with the class of its block
+  (`core/reduce/table.rs::TransitionSystem::class_table`, the run and partition that `lift`
+  uses), printed as a hash table: the module hashes the key's codes as the printer does and
+  searches one bucket. `RefClass` is 0 for a key the table does not list.
+- **Checks.** The cfg is `C`'s `Init` and `Next`, `INVARIANT RefReached` (`RefClass # 0`) and
+  `PROPERTY RefSteps` (`RefR!Init /\ [][RefR!Next]_RefR!vars`). On every reached state of `C`,
+  the key is a state of `X_n` (the first conjunct of
+  [Lemma 6](./cones.md#the-reduction-by-an-independent-sub-lifecycle)). Every initial state of
+  `C` maps to an initial state of `R`. Every step of `C`, its S part replaced by its class, is a
+  step of `R` or leaves `R`'s variables alone: an `S_a` step is a class move of the printed
+  `Succ_` table or stays in its class, and a `T` step that changes the inputs moves the class
+  as `R`'s `Rise` lookup does, stage by stage. So it checks the `C ⇒ R` half of Theorem A8's
+  correspondence on the reached states of `C`, and the printed `Rep_`, `Succ_` and `Rise`
+  tables with it.
+- **Independence.** TLC explores `C` from `C`'s module, whose agreement with the cone is T1
+  for unreduced systems, and computes `R`'s steps from `R`'s module. The check shares with the
+  reducer the extended sub-lifecycle and its partition, through the table. It shares no
+  class move, `Reduction::recanon`, `plain_moves` or lift. A step the extended sub-lifecycle
+  drops leaves its successor's key out of the table, which `RefReached` reports.
+- **Nested reductions.** The run of an extended sub-lifecycle that is itself reduced holds
+  each state with its inner S part replaced by the inner class's representative. Its table
+  lists, for each such state, every state whose inner S part is in that inner class, from the
+  inner reduction's own table, so the key a cone state has is listed. Two corpus cones are
+  nested. A sub-lifecycle explored up to `H` (#212 phase 2) is refused
+  (`NoClassTable::UpToH`): its run stores one form per orbit, which is not a key of `C`.
+  A table past 200,000 states (`CLASS_TABLE_CAP`) is refused too. The test pins 17 cones
+  checked and none refused.
+- **Planted faults.**
+  `::tlc_refinement_catches_class_moves_left_out_that_tlc_on_the_reduced_cone_misses` empties
+  the first five nonempty cells of `Succ_Use` in `R` on `cone_triggered_param_on_a_stub`'s
+  cone of `Order`. TLC on `R` alone prints the same verdicts as on the unplanted `R`, and the
+  check reports `RefSteps` violated. `::tlc_refinement_catches_a_param_left_on_a_stub`
+  (shadow builds only) runs the check in a process with
+  `RDRA_ISH_DROP_RULE=bind_stub_params_unchecked`, which leaves every parameter on a stub
+  unbound and skips the stub check, so that the extended sub-lifecycle drops `Issue` and
+  `Note`'s rise. `RefReached` is violated on `cone_triggered_param_on_a_stub` at `Issue` and on
+  `cone_rise_param_on_a_stub` at `Note`'s rise.
+- **Cost.** 17 TLC runs of at most 1,680 table states, four at a time: about 14 s locally
+  in release for the two tests that run in every release job.
+- **Cannot detect.**
+  - The `R ⇒ C` direction, which would hide the S variables outside `obs`. A16's lift and
+    replay certify that direction for each printed counterexample.
+  - Fairness through the mapping. TLC (tlaplus 1.7.4) does not evaluate `ENABLED` of an
+    instantiated action whose variable is substituted by an expression over the outer
+    module's variables: a property such as `WF_<<RefR!vars>>(\E p \in Order_Ids :
+    RefR!Pay(p))` stops with "the identifier `Ticket_exists` is either undefined or not an
+    operator". So A15's `WF_vars(Next)` argument is not checked here.
+  - A cone whose `C` TLC cannot explore. The check runs on the corpus only: not on the
+    samples' reduced cones (the 30 `VERIFY_REDUCED_ONLY` cones among them), nor on the
+    `reduction-diff.py` seeds, which run `verify` through the CLI, and the CLI prints no
+    refinement module.
+  - A shape no corpus case has, the limit of [the corpus](#the-corpus).
+
 ### Batch JVMs
 
 Most of `engine_equivalence`'s TLC runs take milliseconds inside a JVM that takes far longer
@@ -729,6 +801,7 @@ included, so they are lower bounds on that fraction.
 | Temporal cone comparison | liveness and ladder verdicts | same | same | no | 23 cases, 2 instances |
 | `verify --with-tlc` in CI | verdicts | verdicts | verdicts | no | 5 domain roots and flagged header lines, header bounds |
 | Random models with TLC | verdicts | verdicts | verdicts | no | 45 fixed seeds, main only |
+| Refinement of reduced cones | the reduced step and its tables, step by step | the reduced module's tables | where TLC on the two modules differs | the extended sub-lifecycle, on the corpus traps | 17 reduced corpus cones, header bounds, safety steps only |
 | Mutation run, liveness | cone ladder and liveness only, through headers | no | no | ladder only | corpus, by hand, rates in [Mutation run](#mutation-run) |
 | Mutation run, TLC side | no | printer, comparison, TLC readers | no | no | corpus and CLI tests with TLC, by hand, no completed run |
 

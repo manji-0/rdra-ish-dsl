@@ -737,8 +737,14 @@ builds the top-level `X` of every target and property cone of the samples, the d
 and the corpus, with and without inputs, and the check passes on each.
 `reduce/extended.rs::tests::a_stub_param_no_fold_or_rise_stands_for_is_left_and_reported` counts
 `Note`'s rise among the `S_a` actions: `bind_stub_params` leaves its parameter's role, and the
-check reports it as unfolded. This is evidence on
-these models and bounds, not a proof of Lemma 6; cone-soundness.md, "Proof obligation", states
+check reports it as unfolded. TLC checks the first conjunct and the `C ⇒ X` direction of the
+others on every reached state of each of the 17 reduced corpus cones
+(`cli/tests/engine_corpus.rs::tlc_refinement_holds_on_every_reduced_cone_of_the_corpus`,
+[tlc-agreement.md](./tlc-agreement.md#the-reduction-step-by-step)): each state's key is a
+state of `X_n`, and each `S_a` step and rise of the cone is a class move or a rise of the
+printed reduced module, or a stutter. With the stub parameters left unbound and unchecked,
+it fails on both stub cases at the step dropped (`Issue`, and `Note`'s rise). This is
+evidence on these models and bounds, not a proof of Lemma 6; cone-soundness.md, "Proof obligation", states
 the lemma in points 2, 3, and 5.
 
 **Theorem A8 (the reduced cone is stuttering equivalent to the cone).** Assume (B1) to (B3) for

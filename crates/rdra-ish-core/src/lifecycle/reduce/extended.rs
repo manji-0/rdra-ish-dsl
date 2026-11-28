@@ -130,7 +130,8 @@ impl Extended {
                 acts[to.index()] = Some(ActId::at(from));
             }
         }
-        let mut stubs = match dropped("bind_stub_params") {
+        let unchecked = dropped("bind_stub_params_unchecked");
+        let mut stubs = match unchecked || dropped("bind_stub_params") {
             true => StubCheck::default(),
             false => bind_stub_params(&mut system, &map, &acts, all.len(), s_actions, folds),
         };
@@ -169,7 +170,7 @@ impl Extended {
             acts.extend([None, None]);
         }
         system.layout();
-        if stubs.fault.is_none() {
+        if stubs.fault.is_none() && !unchecked {
             stubs.fault = stub_param(&system, all.len());
         }
         let rise = acts
