@@ -668,8 +668,9 @@ the folds; the cone system over `T_v × S_v` reaches a pair iff the action-level
 its valuation (`cone_reach_iff`). The proof does not read
 the code. `Local` is a theorem for the action model read off the slot-level model of Theorem A18
 (`proofs/lean/RdraIsh/SymActModel.lean::local_`), whose read and write sets are computed from the
-syntax of guards and effects as `action_reads`, `copy_reads` and `effect_writes` compute them;
-that the code's actions are that syntax is read from the code. That `raw_reads` and the folds
+syntax of guards and effects as `action_reads`, `copy_reads` and `effect_writes` compute them,
+except that a `Triggered` parameter's existence always counts as read; that the code's actions
+are that syntax is read from the code. That `raw_reads` and the folds
 meet `FoldData` is a hypothesis.
 
 **Definition 4 (extended sub-lifecycle and quotient).** `X` is

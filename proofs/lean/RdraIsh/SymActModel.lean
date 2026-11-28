@@ -23,8 +23,8 @@ A18 ((G1)–(G6), on `S`) and those of Lemmas 5 and 6 that concern locality.
   delete the existence with every column and owner of its entity, a write or choice its
   variable, a tick the clock.
 - **Guards** (`Sys.og`): the role conjuncts of `Act.roleConjs` with the semantics `rows`,
-  then one conjunct for the slot bounds, one for the choices' picks, and one per guard
-  predicate, evaluated against the successor (a guard may read `At::Next`).
+  then one conjunct per parameter for its slot bound, one for the choices' picks, and one
+  per guard predicate, evaluated against the successor (a guard may read `At::Next`).
 - **Effects** (`Sys.eff`): a written variable takes its value in `post`, every other keeps
   its own. On the valuations `enc s` this is `post` (`eff_enc`).
 
@@ -211,11 +211,41 @@ def rowsV : Rows Val where
 theorem rowsV_cand (r : Role) (v : Val) (k : Nat) : rowsV.cand r v k ↔ rows.cand r v.exOf k := by
   cases r <;> exact Iff.rfl
 
-/-- The conjunct that bounds every parameter's slot by its class's count. It reads
-nothing. -/
-def boundConj (a : A) : Conj (Var E C O) Val where
+/-- The conjunct that bounds the slot of the parameter at position `j` by its class's count.
+It reads nothing and names only that position, so a fold can take the bound of each of its
+free parameters among its folded guards and leave the others out (`Lemma6Hyp.other_names`,
+`folded_names`). -/
+def boundConj (j : Nat) (q : Param E) : Conj (Var E C O) Val where
   rd := []
-  holds b _ := ∀ p q, (S.params a)[p]? = some q → b.slot p < S.n (S.cls q.entity)
+  holds b _ := b.slot j < S.n (S.cls q.entity)
+
+/-- The bound conjuncts of a parameter list, numbered from `n`. -/
+def boundConjs : Nat → List (Param E) → List (Conj (Var E C O) Val)
+  | _, [] => []
+  | n, q :: ps => S.boundConj n q :: boundConjs (n + 1) ps
+
+theorem mem_boundConjs : ∀ (n : Nat) (ps : List (Param E)) (j : Nat) (q : Param E),
+    ps[j]? = some q → S.boundConj (n + j) q ∈ S.boundConjs n ps
+  | _, [], _, _, h => by simp at h
+  | n, p :: ps, 0, q, h => by
+    simp only [List.getElem?_cons_zero, Option.some.injEq] at h
+    subst h
+    exact List.mem_cons_self
+  | n, p :: ps, j + 1, q, h => by
+    simp only [List.getElem?_cons_succ] at h
+    have := mem_boundConjs (n + 1) ps j q h
+    rw [show n + (j + 1) = n + 1 + j by omega]
+    exact List.mem_cons_of_mem _ this
+
+theorem mem_boundConjs_inv : ∀ (n : Nat) (ps : List (Param E)) (g : Conj (Var E C O) Val),
+    g ∈ S.boundConjs n ps → ∃ j q, ps[j]? = some q ∧ g = S.boundConj (n + j) q
+  | _, [], g, h => by simp [boundConjs] at h
+  | n, p :: ps, g, h => by
+    simp only [boundConjs, List.mem_cons] at h
+    rcases h with rfl | h
+    · exact ⟨0, p, rfl, by simp⟩
+    · obtain ⟨j, q, hq, rfl⟩ := mem_boundConjs_inv (n + 1) ps g h
+      exact ⟨j + 1, q, by simpa using hq, by rw [show n + (j + 1) = n + 1 + j by omega]⟩
 
 /-- The conjunct that every choice picks one of its values. -/
 def picksConj (a : A) : Conj (Var E C O) Val where
@@ -229,7 +259,7 @@ def predConj (a : A) (φ : Pred E C O) : Conj (Var E C O) Val where
 
 /-- The conjuncts of an action besides its roles. -/
 def og (a : A) : List (Conj (Var E C O) Val) :=
-  S.boundConj a :: S.picksConj a :: (S.guards a).map (S.predConj a)
+  S.boundConjs 0 (S.params a) ++ S.picksConj a :: (S.guards a).map (S.predConj a)
 
 /-- The effect on valuations: a written variable takes its value in `post`. -/
 def eff (LC : List C) (LO : List O) (a : A) (b : Binding) (σ : Var E C O → Val) :
@@ -510,9 +540,10 @@ theorem local_ (hb : S.Built) : Local (S.model LE LC LO LA hE hC hO hA) where
           exact List.mem_filterMap.2 ⟨q, List.mem_iff_getElem?.2 ⟨_, hq⟩, by
             simp [hrole, Role.needsPresent]⟩
       · cases hv
-    · simp only [og, List.mem_cons, List.mem_map] at ho
-      rcases ho with rfl | rfl | ⟨φ, hφ, rfl⟩
-      · cases hv
+    · simp only [og, List.mem_append, List.mem_cons, List.mem_map] at ho
+      rcases ho with hbd | rfl | ⟨φ, hφ, rfl⟩
+      · obtain ⟨j, q, _, rfl⟩ := S.mem_boundConjs_inv 0 (S.params a) g hbd
+        cases hv
       · exact List.mem_append_left _ (List.mem_append_right _ hv)
       · exact List.mem_append_left _ (List.mem_append_left _ (List.mem_append_right _
           (List.mem_flatMap.2 ⟨φ, hφ, hv⟩)))
@@ -521,9 +552,10 @@ theorem local_ (hb : S.Built) : Local (S.model LE LC LO LA hE hC hO hA) where
     rcases List.mem_append.1 hg with hr | ho
     · obtain ⟨j, q, _, rfl⟩ := Act.mem_roleConjs_inv rowsV Var.ex 0 (S.params a) g hr
       exact Act.roleConj_local rowsV Var.ex _ q b hag hh
-    · simp only [og, List.mem_cons, List.mem_map] at ho
-      rcases ho with rfl | rfl | ⟨φ, _, rfl⟩
-      · exact hh
+    · simp only [og, List.mem_append, List.mem_cons, List.mem_map] at ho
+      rcases ho with hbd | rfl | ⟨φ, _, rfl⟩
+      · obtain ⟨j, q, _, rfl⟩ := S.mem_boundConjs_inv 0 (S.params a) g hbd
+        exact hh
       · exact picks_local hag hh
       · have hs := VAgree.of_dec hag
         show S.eval (dec τ) (S.post a b (dec τ)) b.slot [] φ = true
@@ -557,14 +589,28 @@ theorem roles_iff {a : A} {b : Binding} {s : St E C O} :
     rw [Nat.zero_add]
     exact (rowsV_cand _ _ _).2 (h j q hq)
 
+theorem bounds_iff {a : A} {b : Binding} {σ : Var E C O → Val} :
+    (∀ g ∈ S.boundConjs 0 (S.params a), g.holds b σ) ↔
+      ∀ p q, (S.params a)[p]? = some q → b.slot p < S.n (S.cls q.entity) := by
+  constructor
+  · intro h p q hq
+    have := h _ (S.mem_boundConjs 0 (S.params a) p q hq)
+    simp only [boundConj, Nat.zero_add] at this
+    exact this
+  · intro h g hg
+    obtain ⟨j, q, hq, rfl⟩ := S.mem_boundConjs_inv 0 (S.params a) g hg
+    show b.slot (0 + j) < _
+    rw [Nat.zero_add]
+    exact h j q hq
+
 /-- The guard of `model` on `enc s` is the step condition of `S.lts`. -/
 theorem guard_enc {a : A} {b : Binding} {s : St E C O} :
     (S.model LE LC LO LA hE hC hO hA).guard a b (enc s) ↔
       S.BindOk (S.params a) b.slot s ∧ PicksOk (S.effs a) s b ∧
         ∀ φ ∈ S.guards a, S.eval s (S.post a b s) b.slot [] φ = true := by
   show (∀ g ∈ roleConjs rowsV Var.ex 0 (S.params a) ++ S.og a, g.holds b (enc s)) ↔ _
-  simp only [List.mem_append, or_imp, forall_and, og, List.mem_cons, List.mem_map,
-    forall_eq, roles_iff]
+  simp only [og, List.mem_append, or_imp, forall_and, List.mem_cons, List.mem_map,
+    forall_eq, roles_iff, bounds_iff]
   constructor
   · rintro ⟨hr, hbd, hpk, hg⟩
     exact ⟨fun p q hq => ⟨hbd p q hq, hr p q hq⟩, hpk, fun φ hφ => hg _ ⟨φ, hφ, rfl⟩⟩
@@ -612,7 +658,8 @@ any anchor: `split_computed` with `Local` discharged. -/
 theorem split_computed (hb : S.Built) {mono : Var E C O → Bool} {keep : A → Bool}
     {anchor : Option (Var E C O)} {seeds : List (List (Var E C O))} :
     let M := S.model LE LC LO LA hE hC hO hA
-    RdraIsh.Split (Act.cone M (Act.computed M mono keep anchor).1 (Act.computed M mono keep anchor).2)
+    RdraIsh.Split
+      (Act.cone M (Act.computed M mono keep anchor).1 (Act.computed M mono keep anchor).2)
       (Act.obsMap (Act.computed M mono keep anchor).1
         (Act.lemma5ab_of_closed (seeds := seeds) Act.computed_closed).obs_s) :=
   Act.split_computed (local_ hb)

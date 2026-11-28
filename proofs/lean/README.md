@@ -611,8 +611,8 @@ The model differs from the code in these ways:
   are not in the syntax; the scan leaves their class out (`OwnerChoice`).
 - The domain sizes of data columns are not checked, and `null` data values are not
   modelled.
-- The roles carry no data. `Parent` and `Triggered` bind a present slot, and what else they
-  ask is in the guard.
+- The roles carry no data but `Earlier`'s step, which `roleOk` ignores. `Parent` and
+  `Triggered` bind a present slot, and what else they ask is in the guard.
 - The reduced cone (`G_T`) and the run of `S` up to `H` (A22) are not modelled.
 
 ### One model of the actions
@@ -634,8 +634,10 @@ owners and actions:
   `Tick`'s clock.
 - **`wr`**, after `effect_writes`: a create writes the existence; a delete the existence and
   every column and owner of its entity; a write or a choice its variable; a tick the clock.
-- **Guards**: the role conjuncts `roleConjs` with `rowsV`, then `og`: the slot bounds, the
-  choices' picks, and each guard predicate evaluated against the successor.
+- **Guards**: the role conjuncts `roleConjs` with `rowsV`, then `og`: one slot bound per
+  parameter (`boundConjs`), the choices' picks, and each guard predicate evaluated against the
+  successor. A bound names only its own position, so a fold can hold the bounds of its free
+  parameters among its folded guards, as `Lemma6Hyp.other_names` needs.
 - **Effect**: a variable of `wr` takes its value in `post`, and every other keeps its own.
 
 | Lean (`RdraIsh.`) | File | Claim | Statement |
