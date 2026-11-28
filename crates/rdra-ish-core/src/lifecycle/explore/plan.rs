@@ -152,10 +152,10 @@ impl TransitionSystem {
     }
 
     /// Checks that a step of `act` from `s` to `next` changes only bytes of vars
-    /// `action_writes` names (open problem P35): the cone's closure (Lemma 2 of
-    /// docs/theory/cones.md) reads `Wr(a)` as every var a step of `a` can change, so a step
-    /// that changes another var would make a cone drop a writer it needs. Panics, naming the
-    /// action and the var, when one does.
+    /// `action_writes` names (claims A1, B6 of docs/theory/claims.md): the cone's closure
+    /// (Lemma 2 of docs/theory/cones.md) reads `Wr(a)` as every var a step of `a` can change,
+    /// so a step that changes another var would make a cone drop a writer it needs. Panics,
+    /// naming the action and the var, when one does.
     #[cfg(any(debug_assertions, feature = "shadow"))]
     pub(crate) fn check_writes(
         &self,

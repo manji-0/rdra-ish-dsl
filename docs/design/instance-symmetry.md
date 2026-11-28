@@ -16,7 +16,7 @@ default.
 - **Open.** The rest of phase 4: `stable`, `unchanged`, `precedes`, `can_reach`, and an
   `always` property on a reduced cone still run plain. The flip of the default to `always`,
   a `### Breaking` entry whose release is the owner's call. `PinnedStart` has a witness
-  since #512 (P33). #212 and #284 stay open.
+  since #512 (claim A20 of [the claims inventory](../theory/claims.md)). #212 and #284 stay open.
 - **Superseded.** The `retry` default of [Decisions](#decisions), by
   [Always by default](#always-by-default) (2026-11-25). The cone line with an orbit count,
   by `(about <m> states)`.
@@ -152,8 +152,8 @@ permuted among themselves) when any of these touches one of its entities:
 5. A start that pins a slot: `Start::Identity` on a pair of unequal slot counts (an error
    today; checked anyway), or any start the scan cannot classify.
 
-These are the first five of the ten rules the code has (`symmetry/mod.rs::Rule`, P31 of
-[the theory's open problems](../theory/README.md#open-problems)). The later phases added
+These are the first five of the ten rules the code has (`symmetry/mod.rs::Rule`; claim A20 of
+[the claims inventory](../theory/claims.md)). The later phases added
 five more:
 
 6. `UnlinkedCreate`: a creation leaves an owner naming the class's rows at its base value,
@@ -478,8 +478,8 @@ runs in `cargo test` in seconds.
 `apply_of_a_composition_is_the_composition_of_applies` in `symmetry/mod.rs`: `apply(g ∘ h) =
 apply(g) ∘ apply(h)` for symbolic `s`, `g` and `h`, on a 2-slot parent and a 2-slot child
 with a key to it. It never calls `canonical`. The plan also named `canonical(apply(g, s)) =
-canonical(s)` at one class of 3 slots; that harness was not built (P8 of
-[the theory's open problems](../theory/README.md#open-problems)). The invariance is checked by
+canonical(s)` at one class of 3 slots; that harness was not built (claim A18 of
+[the claims inventory](../theory/claims.md)). The invariance is checked by
 the exhaustive unit test above, on every state of its layouts and every element of `G_s`,
 and on every call by the `canonical` twin while `G_s` has at most 6^4 elements; neither is a
 proof for symbolic states past those layouts.
@@ -1036,7 +1036,7 @@ build, and a per-thread hook in unit tests (`dropped`). It names a scan rule by 
 | Rule or reason | Witness |
 |---|---|
 | `OrderedId`, `IdAgainstLiteral`, `MixedIds`, `OwnerLiteral`, `OwnerChoice`, `UnlinkedCreate`, `AbsentOwner` | (b): `explore/symmetry/witnesses.rs`, one test each |
-| `PinnedStart` | an always-on assertion: `witnesses.rs::pinned_start_has_a_witness` (P33, #512) |
+| `PinnedStart` | an always-on assertion: `witnesses.rs::pinned_start_has_a_witness` (claim A20, #512) |
 | `JointTooLarge` | (d): `joint_too_large_is_a_cost_cap`, `past_the_branch_cap_the_verdict_stands` |
 | `G_T` "S" | (c): implied by "S var", asserted in `Reduction::fixed_why` |
 | `H` "obs", "input" | the assertion in `up_to_h` (`reduce/partition.rs`) that `H` moves nothing the quotient reads; `each_h_reason_a_case_shows_has_a_witness` in engine_corpus |
@@ -1083,7 +1083,7 @@ in `explore/symmetry/snapshot.rs`.
 
 Why no witness was found:
 
-- `PinnedStart` has one since #512 (P33). Only the start depends on it, and the
+- `PinnedStart` has one since #512 (claim A20). Only the start depends on it, and the
   transitions do not, so dropping it leaves the quotient a bisimulation with the same
   verdicts, as dropping it on `sym_identity_pair` showed. What breaks is the trace: the run
   stores the canonical form of each initial state, and where that form is no initial state

@@ -227,7 +227,8 @@ const INITIAL: u32 = u32::MAX;
 
 /// The number of the edge at `at` in reading order, or the count of the edges before a state
 /// (`EdgeList::first`): a `u32` below `INITIAL`. Panics, in a release build too, past it,
-/// rather than wrapping and making every reader of the graph read the wrong rows (P55).
+/// rather than wrapping and making every reader of the graph read the wrong rows (claim N1 of
+/// docs/theory/claims.md).
 fn edge_number(at: u64) -> u32 {
     u32::try_from(at)
         .ok()
@@ -671,7 +672,7 @@ impl StepEnds {
 #[cfg(test)]
 mod tests {
     /// An edge's number is its place in reading order up to the last `u32` below `INITIAL`,
-    /// and past it the run panics rather than wrapping (P55).
+    /// and past it the run panics rather than wrapping (claim N1).
     #[test]
     fn an_edge_number_past_u32_panics() {
         use super::{edge_number, INITIAL};

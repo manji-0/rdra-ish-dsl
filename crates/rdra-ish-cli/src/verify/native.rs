@@ -526,7 +526,7 @@ pub(super) fn native_properties(
     for (k, (native, vacuity)) in ks.into_iter().zip(ran) {
         let (native, vacuity) = match native.crowded {
             // Alone, with the whole room of the pool (`Caps::alone`): where its runs stop
-            // then depends on them alone, as at one job (P53).
+            // then depends on them alone, as at one job (claims N4, N17 of docs/theory/claims.md).
             true => {
                 drop((native, vacuity));
                 decide((k, None), caps.alone())

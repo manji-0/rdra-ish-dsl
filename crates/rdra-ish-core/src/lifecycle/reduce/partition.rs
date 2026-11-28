@@ -399,9 +399,10 @@ impl Classes {
         } = partition(ext, sub, run);
         #[cfg(any(test, feature = "shadow"))]
         reference::check(n, &silent, &rise_edges, &initial, &blocks);
-        // The worklist's partition is certified before the reduction uses it (P7): a
-        // partition that is not stable could merge states the cone tells apart. One that
-        // fails is a tool bug; the sweeps' partition, stable when they stop, takes its place.
+        // The worklist's partition is certified before the reduction uses it (claims A8, A9 of
+        // docs/theory/claims.md): a partition that is not stable could merge states the cone
+        // tells apart. One that fails is a tool bug; the sweeps' partition, stable when they
+        // stop, takes its place.
         let blocks = match reference::stable(n, &silent, &rise_edges, &initial, &blocks) {
             true => blocks,
             false => {
@@ -765,7 +766,7 @@ impl<'a> Succ<'a> {
 
     /// The BFS path over silent edges from `from` to the first state `done` accepts, or
     /// `None` when no such path exists: a class move with no S path behind it, which the
-    /// caller reports as a fault of the reduction, never a panic (P20).
+    /// caller reports as a fault of the reduction, never a panic (claim A16).
     pub(super) fn shortest_path(
         &self,
         from: u32,
@@ -1121,7 +1122,7 @@ property JobStarts eventually(Job.status == running).fair(Start)
         }
     }
 
-    /// P7: the certificate the reduction checks every partition against rejects one that
+    /// Claims A8, A9: the certificate the reduction checks every partition against rejects one that
     /// mixes labels, one where a state of a block reaches a block another cannot, and one
     /// where a state of a block rises into a block another does not.
     #[test]

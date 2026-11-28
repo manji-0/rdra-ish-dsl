@@ -73,7 +73,7 @@ pub(super) enum Graph {
 
 /// The system one run of a property's cone decides: the property, the graph, and the
 /// fairness. `--with-tlc` pairs a native run with the TLC run of the same system, never by
-/// the module a note names (P23 of docs/theory/README.md).
+/// the module a note names (claim T3 of docs/theory/claims.md).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct RunOn {
     pub(super) property: usize,

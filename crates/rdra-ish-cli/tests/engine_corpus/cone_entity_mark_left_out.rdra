@@ -2,9 +2,10 @@
 // Order's exit ShipOrder reads Payment.status == paid. ConfirmPayment, run on EvPaid, writes
 // that status, so Order's cone takes it. The raiser ReadNotice writes only Notice and starts
 // at `read`, which no use case reaches: EvPaid is never raised, Payment never becomes paid,
-// and Order is stuck at `placed`. A cone that left the mark out ran ConfirmPayment unordered,
-// so Payment reached `paid`, Order shipped, and the deadlock and the missing witness of
-// `shipped` went unreported (docs/theory P32).
+// and Order is stuck at `placed`. A cone that left the mark out would run ConfirmPayment
+// unordered, so Payment would reach `paid`, Order ship, and the deadlock and the missing
+// witness of `shipped` go unreported; an entity's cone keeps the mark (claim A1 of
+// docs/theory/claims.md).
 // expect Deadlock_Order_status_placed: native=counterexample tlc=counterexample
 // expect Witness_Order_status_shipped: native=counterexample tlc=counterexample
 // The rest follow from the same unreached `read`: Notice never leaves `new`, Payment never

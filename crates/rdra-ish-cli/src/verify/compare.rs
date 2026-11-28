@@ -194,9 +194,8 @@ mod tests {
     use std::path::Path;
 
     /// A TLC counterexample whose trace leaves the native step relation is a disagreement,
-    /// on any job, and one that replays is none. Such a trace was once only printed, and
-    /// on a safety cone it silently skipped the comparison of the violated sets (P12 of
-    /// docs/theory/README.md).
+    /// on any job, and one that replays is none; on a safety cone the violated sets are
+    /// compared as well (claim T2 of docs/theory/claims.md).
     #[test]
     fn a_tlc_trace_that_does_not_replay_is_a_disagreement() {
         let sample = Path::new(env!("CARGO_MANIFEST_DIR"))

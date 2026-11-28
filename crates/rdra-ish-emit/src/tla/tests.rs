@@ -83,8 +83,8 @@ fn check_cfg_names_each_invariant_and_explore_cfg_checks_nothing() {
 }
 
 /// `print_bound` splits `Next` into one operator per binding, which TLC names each step
-/// by, and `bound_action_index` reads the action and binding back from that name (P25 of
-/// docs/theory/README.md). The cfg is `print`'s.
+/// by, and `bound_action_index` reads the action and binding back from that name (claim T1 of
+/// docs/theory/claims.md). The cfg is `print`'s.
 #[test]
 fn a_bound_module_names_each_binding_of_an_action() {
     let ts = system(&sample("order.rdra"));

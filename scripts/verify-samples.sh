@@ -251,8 +251,8 @@ while IFS= read -r root; do
       mismatches=$((mismatches + 1))
     fi
     printf '%-8s %-56s %-22s %7ss %6s MB\n' "$verdict" "$root" "$label" "$wall" "$rss"
-    # A `shadow` build names each twin that let a call through unchecked (P17 of
-    # docs/theory/README.md); a sample past a twin's cap does, and the log says so.
+    # A `shadow` build names each twin that let a call through unchecked (claim T14 of
+    # docs/theory/claims.md); a sample past a twin's cap does, and the log says so.
     unchecked="$(sed -n 's|^shadow: compared/skipped/stopped ||p' "$work/out" | tr ' ' '\n' \
       | grep -E '=[0-9]+/([1-9][0-9]*/[0-9]+|[0-9]+/[1-9][0-9]*)$' | tr '\n' ' ')"
     [[ -z "$unchecked" ]] || echo "  shadow twins let calls through (compared/skipped/stopped): $unchecked"

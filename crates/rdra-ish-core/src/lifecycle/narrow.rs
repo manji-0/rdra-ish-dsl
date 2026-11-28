@@ -1,7 +1,7 @@
 //! The two narrowings of the lifecycle layer, checked. `clippy::cast_possible_truncation` is
-//! denied here (P50, P54, P55 of docs/theory/README.md: a fixed-width integer that wrapped gave
-//! a wrong verdict); an `as` that narrows goes through one of these, which panic where an `as`
-//! would wrap, or carries an `#[allow]` whose comment proves its bound.
+//! denied here (claims N1 and N2 of docs/theory/claims.md: a fixed-width integer that wraps
+//! gives a wrong verdict); an `as` that narrows goes through one of these, which panic where an
+//! `as` would wrap, or carries an `#[allow]` whose comment proves its bound.
 
 /// A number of a state, an edge, a component, a block, or a row of a run's table, as a `u32`.
 /// A run admits at most `MOST_STATES = u32::MAX` states (`explore/bfs.rs::admit_packed`) and

@@ -2162,8 +2162,8 @@ fn bfs_and_tlc_agree_on_relinks() {
 /// Every `Touch` is a self-loop once each item's flag is set, so at two items a state has
 /// two `Touch` edges to itself that differ only in the item they bind. The graph comparison
 /// reads TLC's edges from a module with one `Next` disjunct per binding (`tla::print_bound`),
-/// so the two engines must agree on each edge's params, not only on its action (P25 of
-/// docs/theory/README.md).
+/// so the two engines must agree on each edge's params, not only on its action (claim T1 of
+/// docs/theory/claims.md).
 const TOUCH: &str = r#"
 entity Item "品目" { id: Int @pk  flag: Bool @default(true)  status: Enum(open, closed) @default(open) }
 usecase Add "追加"

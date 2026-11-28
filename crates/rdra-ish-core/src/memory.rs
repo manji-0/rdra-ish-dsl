@@ -165,7 +165,8 @@ impl MemoryPool {
     /// charge to this pool from now on does not stop it, so where it stops is a function of
     /// the run alone. The callers rerun once every other run of their pass has ended and
     /// every result they keep holds no charge, so the room left is the whole room; a debug
-    /// build checks that (P53), and a release build never lets the run pass the limit.
+    /// build checks that (claim N17 of docs/theory/claims.md), and a release build never lets
+    /// the run pass the limit.
     pub fn whole(&'static self) -> &'static MemoryPool {
         debug_assert_eq!(
             self.left(),

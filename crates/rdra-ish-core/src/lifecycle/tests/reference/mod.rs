@@ -1,8 +1,8 @@
-//! A reference interpreter for the builder (open problem P26 of docs/theory/README.md).
+//! A reference interpreter for the builder (claim I1 of docs/theory/claims.md).
 //!
 //! The native checker and TLC both read the one `TransitionSystem` the builder makes, so a
-//! fault in the builder moves both and TLC agreement cannot see it (P40 and P54 were such
-//! faults: a value past a byte wrapped in `T`). `interp.rs` reads a subset of the language
+//! fault in the builder moves both and TLC agreement cannot see it (a value past a byte that
+//! wraps in `T` is such a fault; claim N2). `interp.rs` reads a subset of the language
 //! from the `SemanticModel` on its own and explores it by brute force; this harness compares
 //! what it finds with the native checker's run of the whole model (no cone, no reduction, no
 //! symmetry): the initial states, the reachable states, the labelled edges, the rules the
@@ -446,7 +446,7 @@ fn sweep(seeds: std::ops::Range<u64>, what: &str) {
     );
 }
 
-/// The wraps of P40 and P54: a nullable Int written `present` at `--int-range-max 255`
+/// Values past a byte (claim N2): a nullable Int written `present` at `--int-range-max 255`
 /// takes 256 values beside null, and a nullable Enum of 256 values has 257. A build that
 /// accepts either must reach the top value as itself, not as null; at 254 values (where no
 /// byte wraps) the comparison must run and agree.

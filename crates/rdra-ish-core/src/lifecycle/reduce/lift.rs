@@ -18,7 +18,8 @@ impl TransitionSystem {
     /// concrete S state the lifted path holds. Returns the start with its S part concrete and
     /// the lifted steps, grouped per input step. Every lifted step is checked against the
     /// unreduced cone's step relation in every build: a step that is not one of its moves is
-    /// the `ReplayError` of that step, a fault of the reduction, never a panic (P20).
+    /// the `ReplayError` of that step, a fault of the reduction, never a panic (claim A16 of
+    /// docs/theory/claims.md).
     pub(crate) fn lift(
         &self,
         start: &State,
@@ -63,7 +64,7 @@ impl TransitionSystem {
         // The concrete start: an initial S state in the start's class. The run reaches its
         // initial states first.
         // A start with no class, or whose class holds no initial S state, is no initial state
-        // of the cone: the path's fault, never a panic (P20).
+        // of the cone: the path's fault, never a panic (claim A16).
         let start_block = *(r.class(self, start))
             .and_then(|c| block_of_class.get(&c))
             .ok_or(ReplayError::NotInitial)?;

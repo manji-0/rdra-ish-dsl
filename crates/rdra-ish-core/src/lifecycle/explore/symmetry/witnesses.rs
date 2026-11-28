@@ -246,7 +246,7 @@ fn absent_owner_has_a_witness() {
     // `Place` runs only when the new order's key, read before the step, names the shop it
     // places under. The order is absent then and its key holds the base value, the shop in
     // slot 0, so orders go only under that shop, and a promoted shop in slot 0 is not a
-    // promoted shop in slot 1 (P30).
+    // promoted shop in slot 1 (claim A18 of docs/theory/claims.md).
     let mut ts = shops();
     let (key, place, _) = order_key(&ts);
     let params = &ts.actions[place].params;

@@ -6,7 +6,7 @@
 //! vars the target reads, closed under what writes them), and `TargetExploration::entity_views`
 //! projects the reached states onto per-entity views shaped like the `states` output.
 // A narrowing `as` goes through `narrow`, or carries an `#[allow]` whose comment proves its
-// bound (P50, P54, P55). Tests build their inputs with plain casts.
+// bound (claims N1 and N2 of docs/theory/claims.md). Tests build their inputs with plain casts.
 #![cfg_attr(not(test), deny(clippy::cast_possible_truncation))]
 
 mod build;

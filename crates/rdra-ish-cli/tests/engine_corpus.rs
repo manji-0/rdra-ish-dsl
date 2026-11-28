@@ -396,7 +396,7 @@ struct RunLine {
     verdict: V,
     /// The other runs the line names, `Cone_P_WF: ok`, by module. A run no module prints,
     /// `WF_vars(Next) on the reduced cone (native only): ok`, is left out: TLC runs no system
-    /// to pair it with (P23 of docs/theory/README.md).
+    /// to pair it with (claim T3 of docs/theory/claims.md).
     notes: BTreeMap<String, V>,
 }
 
@@ -694,8 +694,8 @@ struct Report {
 }
 
 /// The runs of a corpus case whose input is past a twin's cap, and those twins: the harness
-/// lets them skip calls there and fails a case on any other skip (P17 of
-/// docs/theory/README.md). Each entry says how far past the cap the run is.
+/// lets them skip calls there and fails a case on any other skip (claim T14). Each entry says
+/// how far past the cap the run is.
 const PAST_A_TWIN_CAP: &[(&str, &str, &[&str])] = &[
     // The unreduced cone at 3 instances holds 670,896 states, past the 200,000 at which the
     // orbit twins' plain run stops; the run up to symmetry completes.
@@ -1344,9 +1344,8 @@ fn case_with(name: &str, header: &str) -> Case {
 }
 
 /// Rule 2 fails a native `Cone_` line that TLC printed no line for when the header gives its
-/// check a TLC verdict, so a missing TLC run is no longer compared with nothing; a native
-/// `RdraSpec_` line may stand alone, and a check with `tlc=none` needs no TLC line (P13 of
-/// docs/theory/README.md).
+/// check a TLC verdict, so a missing TLC run is not compared with nothing; a native
+/// `RdraSpec_` line may stand alone, and a check with `tlc=none` needs no TLC line (claim T3).
 #[test]
 fn rule_2_fails_a_tlc_line_the_header_expects_and_the_run_lacks() {
     let case = case_with(
@@ -1370,7 +1369,7 @@ fn rule_2_fails_a_tlc_line_the_header_expects_and_the_run_lacks() {
 }
 
 /// Rule 8 fails a check the plain run decides and the run up to instance symmetry leaves
-/// `not decided`, as well as one it decides differently (P13 of docs/theory/README.md).
+/// `not decided`, as well as one it decides differently (claim T10).
 #[test]
 fn rule_8_fails_a_check_symmetry_leaves_undecided() {
     let case = case_with(
@@ -1392,7 +1391,7 @@ fn rule_8_fails_a_check_symmetry_leaves_undecided() {
 /// A twin that lets a call pass unchecked says so without `RDRA_ISH_SHADOW_STATS`: at 7
 /// instances a state's group can have 7! elements, past the 6^4 the canonical form's twin
 /// enumerates, so the twin skips those calls, and the process names the twin and the count
-/// (open problem P17 of docs/theory/README.md). The corpus harness fails a case on such a
+/// (claim T14). The corpus harness fails a case on such a
 /// line. Only a `shadow` build has twins.
 #[cfg(feature = "shadow")]
 #[test]

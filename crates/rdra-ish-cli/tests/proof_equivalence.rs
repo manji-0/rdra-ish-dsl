@@ -546,7 +546,7 @@ fn a_proof_is_the_same_on_any_number_of_solvers() {
 /// verdicts it compares rest on no such answer. The checks z3 gives up on by itself (the
 /// Houdini rounds run without MBQI, where every `sat` is `unknown`) are counted, not asserted.
 /// It also assumes BFS's counterexample is real, which a cone that leaves a raised mark out
-/// does not guarantee (P1 in docs/theory/README.md).
+/// does not guarantee (claims A2 and A6 of docs/theory/claims.md).
 #[test]
 fn a_refuted_rule_left_out_changes_no_other_verdict() {
     let Some(z3) = find_z3() else { return };

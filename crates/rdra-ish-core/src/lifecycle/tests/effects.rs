@@ -406,7 +406,8 @@ invariant(Child).when(alive == true).has(Parent).label("every child has a parent
 /// which the lifecycle does not do: the child keeps naming the deleted row. The use case that
 /// deletes such a parent draws the warning `DeleteLeavesChildKeys`, once per key, naming the
 /// action; a use case that also deletes the child, or moves its key (`unlinks`, `relinks`),
-/// and a `@soft_delete` parent, which no SQL delete removes, draw nothing (#P63).
+/// and a `@soft_delete` parent, which no SQL delete removes, draw nothing (claim I3 of
+/// docs/theory/claims.md).
 #[test]
 fn a_delete_leaves_the_keys_of_a_set_null_or_set_default_key_and_says_so() {
     let src = |key: &str, extra: &str, soft: &str| {
@@ -914,9 +915,8 @@ sets(Pay, Order.note == y)
 
 /// A guarded `sets` of a created row's lifecycle column and a `transitions` of the same use
 /// case write one slot twice: a `Choose` and then a `Transition` with a choice. The native
-/// step applied both and kept the chosen value; the printed TLA+ let the transition's
-/// choice replace it, so on this model the native checker found the forbidden state and TLC
-/// did not (P24 of docs/theory/README.md). The build now fails the model instead.
+/// step and the printed TLA+ would order the two writes differently, so the engines would
+/// part on this model (claim T1); the build fails the model instead.
 #[test]
 fn a_created_rows_guarded_set_beside_its_transitions_conflicts() {
     let built = built_from(

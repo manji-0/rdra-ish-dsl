@@ -26,7 +26,8 @@ pub(crate) struct Packing {
     bits: Box<[u8]>,
     /// Per cell: the bit its value starts at, the bits of the cells before it summed. A `u32`:
     /// a state of 255 rows of 34 Int columns already passes bit 65,535, and a `u16` that
-    /// saturated there wrote every later cell to one place (P50).
+    /// saturated there would write every later cell to one place (claim N2 of
+    /// docs/theory/claims.md).
     offs: Box<[u32]>,
     /// The bytes a packed state takes.
     bytes: usize,
@@ -61,7 +62,7 @@ pub(crate) fn packed_bits(ts: &TransitionSystem) -> u64 {
         .sum()
 }
 
-/// The most bits a packed state addresses: each cell's bit offset is a `u32` (P50).
+/// The most bits a packed state addresses: each cell's bit offset is a `u32` (claim N2).
 pub(crate) const MOST_PACKED_BITS: u64 = u32::MAX as u64;
 
 /// Per cell of `bits`: the bit it starts at. Panics, in a release build too, when a state
@@ -366,7 +367,7 @@ mod tests {
         assert_eq!(back, state);
     }
 
-    /// Past bit 65,535 (P50): a cell starts where the bits before it end, and patching and
+    /// Past bit 65,535 (claim N2): a cell starts where the bits before it end, and patching and
     /// reading one cell agree with packing and unpacking the whole state, on either side of
     /// the first cell that starts past `u16::MAX`. 8,192 cells of 8 bits end at bit 65,536,
     /// so the 8,193rd is the first past it; the cells of 3 bits after the 8-bit ones start at

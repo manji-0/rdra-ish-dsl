@@ -28,7 +28,7 @@ pub enum PropertyVerdict {
     /// The run stopped at the state cap with no violation in what it reached.
     Undecided,
     /// The counterexample found fails its own check: its path does not replay or does not
-    /// lift (P20). A tool bug, never a verdict about the model.
+    /// lift (claim N16 of docs/theory/claims.md). A tool bug, never a verdict about the model.
     Fault(LassoFault),
 }
 
@@ -93,7 +93,7 @@ impl ComponentRun {
             .map(|k| self.states.at(k as usize).into_state())
             .collect();
         // The path the search found breaks the property at its last state, checked in every
-        // build: one that does not is a fault of the search, never a verdict (P20).
+        // build: one that does not is a fault of the search, never a verdict (claim N16).
         let Some((instance, at)) = ts.property_failure(p, &states, states.len() - 1) else {
             return Some(PropertyVerdict::Fault(LassoFault::Satisfies));
         };

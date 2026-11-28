@@ -1,4 +1,4 @@
-// trap: the top Int value of a nullable column, one value past a byte (P40).
+// trap: the top Int value of a nullable column, one value past a byte (claim N2).
 // A nullable Int holds null and 0..m: 257 values at `--int-range-max 255`, one more than a
 // state cell holds. Before #470 the write of 255 wrapped to null, in BFS, TLC and z3 alike, so
 // `forbidden(Item, n == 255)` was `ok` and `proved` though `Top` writes 255, while the same

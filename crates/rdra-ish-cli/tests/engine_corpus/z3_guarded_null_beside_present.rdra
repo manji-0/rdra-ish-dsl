@@ -1,4 +1,4 @@
-// trap: a `.when`-guarded `null` write beside a `.when`-guarded `present` of one column (P66).
+// trap: a `.when`-guarded `null` write beside a `.when`-guarded `present` of one column (claim B1).
 // `Fill` writes a number to `n` while `k <= 5` and null while `k > 5`; `Bump` writes any number
 // to `k`. At `--int-range-max 5` no `k` passes 5, so no step writes null and BFS and TLC say
 // `ok`; at a range of 6 `Bump` writes 6 and `Fill` then null, so the rule holds at no range

@@ -280,7 +280,7 @@ pub enum StateDiag {
     /// trace lifted to the cone does not certify itself: `fault` says why, as it does for a
     /// liveness lasso (`LassoFault::Satisfies`: the lifted last state does not violate the
     /// check). The reduction or its lift is at fault, never the model, and the check is not
-    /// decided on this cone (P52).
+    /// decided on this cone (claim N16 of docs/theory/claims.md).
     LiftFault {
         name: String,
         site: Site,
@@ -288,7 +288,7 @@ pub enum StateDiag {
     },
     /// The trace of the finding `name` (a deadlock, a `can_reach` failure, a view's witness)
     /// does not replay through the step relation or its lift to the cone fails: the finding
-    /// is not reported, and the run is a tool error (P20). It goes on the finding's entity.
+    /// is not reported, and the run is a tool error (claim N16). It goes on the finding's entity.
     TraceFault {
         name: String,
         fault: crate::lifecycle::LassoFault,
@@ -420,7 +420,7 @@ pub enum StateDiag {
     },
     /// A state of the system packs into more than the `most` bits a packed state addresses:
     /// each cell's bit offset is a `u32` (`explore/packing.rs`), and past it two cells would
-    /// share bits (P50). The width-of-a-state member of `DomainTooLarge`'s family.
+    /// share bits (claim N2). The width-of-a-state member of `DomainTooLarge`'s family.
     StateTooWide { bits: u64, most: u64 },
     /// A cross-entity constraint whose entities no relate path binds.
     UnbindableScope {

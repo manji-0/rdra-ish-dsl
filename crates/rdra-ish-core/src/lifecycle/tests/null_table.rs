@@ -1,5 +1,6 @@
 //! The truth table of a comparison over null in the language reference (§ Null), computed
-//! here through the builder and the evaluator, so the table cannot drift from them (P62).
+//! here through the builder and the evaluator, so the table cannot drift from them (claim I2 of
+//! docs/theory/claims.md).
 //!
 //! Each row is a `@check` on a row whose `x` and `y` (`Int @null`) are null and whose `k`
 //! (`Int`) is 3: the check fails exactly where the comparison is false. Its negation is a
@@ -84,7 +85,7 @@ fn the_null_truth_table_in_the_reference_is_the_evaluators() {
     );
 }
 
-/// The cells the owner's review (P62) names, stated outright so a regenerated table that
+/// The cells claim I2 names, stated outright so a regenerated table that
 /// changed them fails here too.
 #[test]
 fn null_meets_no_comparison_but_every_ne_and_not_flips_that() {

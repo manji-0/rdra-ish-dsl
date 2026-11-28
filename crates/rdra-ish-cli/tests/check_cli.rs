@@ -1457,7 +1457,7 @@ fn a_mark_the_lifecycle_lacks_is_an_error() {
 }
 
 /// `check` prints the lint warning `negated-order-admits-null` at the `@check` it flags, with
-/// its rule id and hint, and it does not fail the run (P62).
+/// its rule id and hint, and it does not fail the run (claim I2 of docs/theory/claims.md).
 #[test]
 fn check_warns_on_a_negated_order_over_a_nullable_column() {
     let dir = std::env::temp_dir().join(format!("rdra-negated-null-{}", std::process::id()));

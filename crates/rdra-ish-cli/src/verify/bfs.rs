@@ -21,7 +21,7 @@ pub(super) struct Bfs {
     /// Errors of the `can_reach` cones: their violations, a `TraceFault` aside.
     pub(super) reach_errors: usize,
     /// Findings of either whose trace fails to replay (`StateDiag::TraceFault`): a fault of the
-    /// tool, counted with the other tool errors (P20).
+    /// tool, counted with the other tool errors (claim N16 of docs/theory/claims.md).
     pub(super) trace_faults: usize,
     /// Findings an entity cone, and `can_reach` properties their cone, left undecided at the
     /// state cap or the memory limit.
@@ -249,7 +249,7 @@ pub(super) struct Explored {
     /// Properties whose cone BFS stopped at the state cap or the memory limit before a violation.
     pub(super) capped: usize,
     /// Properties whose counterexample fails its own check: a path that does not replay or
-    /// lift (P20), a tool error.
+    /// lift (claim N16), a tool error.
     pub(super) faults: usize,
     /// Each property's index and its verdict, `None` when not decided, for `--with-tlc` to
     /// compare.
@@ -339,7 +339,7 @@ pub(super) enum BfsCone {
         /// shortest trace: what TLC's run of the module is compared with.
         found: Vec<Diag>,
         /// Violations of a reduced cone that do not lift to the cone (`StateDiag::LiftFault`):
-        /// a tool bug, which makes the verdict a tool error (P52).
+        /// a tool bug, which makes the verdict a tool error (claim N16).
         faults: Vec<Diag>,
         /// Each violation of `found` the cone cannot vouch for (`Trace::vouched`), by name,
         /// decided again on its exact cone (`recheck_cones`); empty until then.
@@ -497,7 +497,7 @@ impl BfsCone {
         else {
             return self;
         };
-        // A violation that did not lift (P52) stays a tool error, whatever the proof says.
+        // A violation that did not lift (claim N16) stays a tool error, whatever the proof says.
         if !faults.is_empty() {
             return self;
         }
@@ -546,7 +546,7 @@ impl BfsCone {
     /// none or its exact cone showed each one it found spurious, and `None` when the run
     /// stopped first or a violation is neither vouched for nor rechecked to hold.
     pub(super) fn verdict(&self) -> Option<Outcome> {
-        // A violation that did not lift to the cone (P52) is a tool error first.
+        // A violation that did not lift to the cone (claim N16) is a tool error first.
         if let BfsCone::Ran { faults, .. } = self {
             if !faults.is_empty() {
                 return Some(Outcome::ToolError);
@@ -876,7 +876,7 @@ pub(super) fn bfs_cones(
     // dropped here.
     // A run that met the memory limit says `crowded`, the first run of a cone with partners
     // too: beside other runs it may stop where it completes alone, and the run after it
-    // would then decide the cone where one job decides it on the complete run (P53).
+    // would then decide the cone where one job decides it on the complete run (claims N4, N17).
     let decide = |at: usize, caps: Caps| -> (BfsCone, Vec<Diag>, bool, Vec<(usize, Plain)>) {
         if partners[at].is_empty() {
             return alone(at, caps);
@@ -910,7 +910,8 @@ pub(super) fn bfs_cones(
         .collect();
     let decided = in_parallel(open.clone(), rdra_ish_core::jobs(), |at| decide(at, caps));
     // A run that met the memory limit runs again alone, with the whole room of the pool
-    // (`Caps::alone`): where it stops then depends on the run alone, as at one job (P53).
+    // (`Caps::alone`): where it stops then depends on the run alone, as at one job
+    // (claims N4, N17).
     for (&at, (verdict, vacuous, crowded, plains)) in open.iter().zip(decided) {
         let (verdict, vacuous, _, plains) = match crowded {
             true => {
@@ -951,7 +952,7 @@ pub(super) struct Safety {
     pub(super) violated: usize,
     /// Cones the state cap or the memory limit stopped before a violation.
     pub(super) capped: usize,
-    /// Violations of reduced cones that do not lift to their cone (P52): tool errors.
+    /// Violations of reduced cones that do not lift to their cone (claim N16): tool errors.
     pub(super) faults: usize,
 }
 
@@ -1007,7 +1008,7 @@ mod tests {
     use std::path::Path;
 
     /// A cone whose reduced run found a violation that does not lift (`LiftFault`) is a tool
-    /// error, never `ok`, though `found` holds no violation and the run is complete (P52); it
+    /// error, never `ok`, though `found` holds no violation and the run is complete (claim N16); it
     /// covers no other cone.
     #[test]
     fn a_violation_that_does_not_lift_makes_the_cone_a_tool_error() {

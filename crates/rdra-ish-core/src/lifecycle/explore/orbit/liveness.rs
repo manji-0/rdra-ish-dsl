@@ -87,8 +87,9 @@ pub(super) struct Search {
 
 impl<'r> Product<'r> {
     pub(super) fn new(run: &'r OrbitRun, i: usize) -> Self {
-        // Unchecked internal invariant (P20): a precondition of `decide_liveness`, whose
-        // callers run it on `run_annotated_orbits` only.
+        // Unchecked internal invariant (docs/theory/claims.md, "Panics left on a lift's way"):
+        // a precondition of `decide_liveness`, whose callers run it on `run_annotated_orbits`
+        // only.
         let perms = run
             .perms
             .as_ref()
@@ -447,8 +448,9 @@ impl<'r> Product<'r> {
     ) -> Result<PropertyVerdict, LassoFault> {
         let run = &self.run.run;
         // The BFS path to the start's state, its binding read back to the initial state.
-        // Unchecked internal invariant (P20): `path_to` returns the parent edges the BFS
-        // stored, each one of its source's edges, so the look-up finds it.
+        // Unchecked internal invariant (claims.md, "Panics left on a lift's way"): `path_to`
+        // returns the parent edges the BFS stored, each one of its source's edges, so the
+        // look-up finds it.
         let path: Vec<usize> = (run.path_to(self.state_of(start)).iter())
             .map(|e| {
                 let range = run.edges().range_of(e.from);
@@ -460,8 +462,8 @@ impl<'r> Product<'r> {
             .collect();
         let mut walk = path;
         let mut at = start;
-        // Unchecked internal invariant (P20): `search` set `toward[at]` from one of `at`'s
-        // real edges, so the walk finds that edge.
+        // Unchecked internal invariant (claims.md, "Panics left on a lift's way"): `search` set
+        // `toward[at]` from one of `at`'s real edges, so the walk finds that edge.
         while search.toward[at as usize] != at {
             let to = search.toward[at as usize];
             let (k, _) = self
@@ -538,7 +540,8 @@ impl<'r> Product<'r> {
     /// Also returns the first concrete state and the last `τ`. `before` is the number of steps
     /// the lasso has before these, so a fault names the lasso's state. An edge that is not the
     /// move at its place, or whose permutation does not take that move to its target, is a
-    /// `ReplayError::NoMove` (P20), as `orbit::lift_path` reports a stored edge it cannot find.
+    /// `ReplayError::NoMove` (claim N13), as `orbit::lift_path` reports a stored edge it cannot
+    /// find.
     fn lift(
         &self,
         first: u32,
@@ -640,9 +643,10 @@ impl<'r> Product<'r> {
                 }
             }
         }
-        // Unchecked internal invariant (P20): `fair_loop` asks only for a thread enabled in
-        // a component `search` marked fair, and a fair component has, for every thread, an
-        // edge that takes it or a pair where it is not enabled.
+        // Unchecked internal invariant (claims.md, "Panics left on a lift's way"): `fair_loop`
+        // asks only for a thread enabled in a component `search` marked fair, and a fair
+        // component has, for every thread, an edge that takes it or a pair where it is not
+        // enabled.
         panic!("a fair component covers every thread")
     }
 
@@ -684,8 +688,8 @@ impl<'r> Product<'r> {
                 }
             }
         }
-        // Unchecked internal invariant (P20): `from` and `to` are pairs of one strongly
-        // connected component, so a walk inside it joins them.
+        // Unchecked internal invariant (claims.md, "Panics left on a lift's way"): `from` and
+        // `to` are pairs of one strongly connected component, so a walk inside it joins them.
         panic!("a component's pairs reach each other")
     }
 }
@@ -756,7 +760,7 @@ property PaidShips leads_to(Order.status == paid, Order.status == shipped)
 "#;
 
     /// A stored edge whose permutation does not take the move at its place to its target is
-    /// a `ReplayError` of the lasso's lift, not a panic (P20): every edge lifts under the
+    /// a `ReplayError` of the lasso's lift, not a panic (claims N13, T8): every edge lifts under the
     /// run's own permutations, and some edge does not under the identity in their place.
     #[test]
     fn an_edge_its_permutation_does_not_explain_is_a_replay_error() {

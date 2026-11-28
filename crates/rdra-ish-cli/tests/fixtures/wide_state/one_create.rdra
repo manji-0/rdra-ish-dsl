@@ -1,4 +1,4 @@
-// P50: every row is created with c0 .. c33 = 1, so no reachable state has c33 = 0: ok at
+// Claim N2: every row is created with c0 .. c33 = 1, so no reachable state has c33 = 0: ok at
 // every bound, 255 instances included, where the state passes bit 65,535.
 entity Row "行" {
   id: Int @pk

@@ -545,7 +545,7 @@ case.
 Phase 3 changes scheduling, so there is no `reference.rs` twin for it (CLAUDE.md, "A
 speed-up change"). The parts that compute something new do get one.
 
-**What was built** (P18 of [the theory's open problems](../theory/README.md#open-problems)):
+**What was built** (claim N4 of [the claims inventory](../theory/claims.md); [known limitations](../theory/README.md#known-limitations)):
 items 2 (without the jitter and the 4-bucket table), 3, and the two Kani harnesses of item 5
 for the tag match and the growth rule (`explore/table.rs`). The jitter, the loom model of
 item 4, the "probe finds every key" harness of item 5, and a Miri job (item 6) were not

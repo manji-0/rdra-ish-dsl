@@ -1072,7 +1072,8 @@ impl TransitionSystem {
             "the run evaluates the rule"
         );
         let violated = run.diagnostics().iter().any(
-            // A violation that did not lift (P52) says nothing of the premises either.
+            // A violation that did not lift (claim N16 of docs/theory/claims.md) says nothing
+            // of the premises either.
             |d| matches!(&d.diag, StateDiag::ConstraintViolated { name, .. } | StateDiag::LiftFault { name, .. } if *name == inv.name),
         );
         if violated {
@@ -1139,7 +1140,7 @@ impl TransitionSystem {
             return Some(vec![UnmetPremise::NeverRuns { usecase }]);
         }
         // A stuttering step is not checked (D17), so an assert whose step never changes the
-        // state is never evaluated, though the use case runs (P51).
+        // state is never evaluated, though the use case runs (claims N5, N18).
         let ran: Vec<(&AfterStep, bool)> = (ran.into_iter())
             .filter(|(_, ends)| ends.moved)
             .map(|(step, ends)| (step, ends.with_rows))

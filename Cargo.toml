@@ -51,8 +51,8 @@ tempfile     = "3"
 # cargo mutants (.cargo/mutants.toml): release, with incremental builds, since each mutant
 # rebuilds only the crate it changed and what depends on it.
 # The profile of the CI jobs that verify samples, the corpus and engine agreement: release
-# with overflow-checks, so a fixed-width integer that wraps (P50, P54, P55 of
-# docs/theory/README.md) panics there instead of giving a wrong verdict. The release and
+# with overflow-checks, so a fixed-width integer that wraps (claims N1 and N2 of
+# docs/theory/claims.md) panics there instead of giving a wrong verdict. The release and
 # PyPI builds keep `release`, which wraps silently.
 [profile.ci-checked]
 inherits = "release"

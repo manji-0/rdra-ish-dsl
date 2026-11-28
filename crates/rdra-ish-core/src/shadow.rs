@@ -39,7 +39,7 @@
 //! | the reader's look-up of a `Miss` among the states admitted since its chunk was handed out (`Recent`, `explore/bfs.rs`, #296 3.1) | `Seen::find_hashed` on the run's whole table |
 //! | a graph's adjacency, its two directions built side by side (`Graph::adjacency`, `explore/graph.rs`, #296 3.1) | `Adjacency::new`: one direction after the other |
 //! | the states that can leave each column and slot, side by side (`leave_columns`, `findings.rs`, #296 3.1) | `can_leave` on each column and slot in turn |
-//! | every step of an action changes only the vars `action_writes` names, which the cones read as `Wr(a)` (P35 of docs/theory/README.md) | the bytes the step changed, against `Plan::writes`; not a fast path but the over-approximation Lemma 2 of docs/theory/cones.md rests on, also checked by a debug build |
+//! | every step of an action changes only the vars `action_writes` names, which the cones read as `Wr(a)` (claims A1 and B6 of docs/theory/claims.md) | the bytes the step changed, against `Plan::writes`; not a fast path but the over-approximation Lemma 2 of docs/theory/cones.md rests on, also checked by a debug build |
 //!
 //! A `shadow` build also runs the checks `shadow_assert!` makes, as a debug build does: each
 //! reader of a run's check results reads only checks the run evaluated (#251), and a steady
