@@ -321,3 +321,13 @@ an axiom outside Lean's three standard ones (`propext`, `Classical.choice`, `Quo
 #print axioms RdraIsh.ExampleMonoSys.ex_monotone
 #print axioms RdraIsh.Sweep.stable_of_check
 #print axioms RdraIsh.ExampleMonoSys.steps_covered
+#print axioms RdraIsh.PCert.wf_of
+#print axioms RdraIsh.PCert.marked_of_exit
+#print axioms RdraIsh.PCert.b2_of_check
+#print axioms RdraIsh.PCert.enters_rep
+#print axioms RdraIsh.PCert.reach_of_check
+#print axioms RdraIsh.PCert.complete_of_check
+#print axioms RdraIsh.PCert.cert_of_validate
+#print axioms RdraIsh.PCert.stable_of_check
+#print axioms RdraIsh.PCert.reach_onReach
+#print axioms RdraIsh.PCert.extended_of_check

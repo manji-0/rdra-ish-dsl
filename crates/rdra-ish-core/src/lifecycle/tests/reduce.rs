@@ -2705,6 +2705,63 @@ fn dump_lemma5_certificates() {
     assert!(reducing > 0, "a certificate with an S side");
 }
 
+/// Writes every flat run of `X` that `Classes::of_graph` partitions while the cones of
+/// `every_quotient_passes_the_checks_of_its_hypotheses` are reduced, at `Bounds::STATES` and
+/// `Bounds::VERIFY`, to the file `RDRA_LEAN_RUNS` names, for the Lean checker of proofs/lean
+/// (`scripts/check-lean-certificates.sh` runs both). A record holds the numbered run (each
+/// state's `obs`, `S` and input values, the silent edges, the rises, the initial states), the
+/// class of each state and each class's representative (`partition/dump.rs`). Equal runs are
+/// written once. The runs left out are counted by reason (`Dump::left_out`): runs under an
+/// inner reduction, runs up to `H`, partitions that are the identity, runs a cap stopped,
+/// unobserved sub-lifecycles, and runs past `RDRA_LEAN_RUNS_CAP` states (default 200,000).
+#[test]
+#[ignore = "run by scripts/check-lean-certificates.sh"]
+fn dump_partition_certificates() {
+    use crate::lifecycle::reduce::partition_dump as dump;
+    use std::io::Write;
+    let path = std::env::var("RDRA_LEAN_RUNS").expect("RDRA_LEAN_RUNS names the output");
+    let cap = std::env::var("RDRA_LEAN_RUNS_CAP").map_or(200_000, |c| c.parse().expect("a cap"));
+    let caps = Caps::new(usize::MAX, 50_000);
+    let ((), dump) = dump::recording(cap, || {
+        for (name, model) in &walked_models() {
+            for (label, bounds) in [("states", Bounds::STATES), ("verify", Bounds::VERIFY)] {
+                let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+                dump::name(&format!("{name} {label}"));
+                for (cone, seed) in cones_with_seeds(&ts) {
+                    let (sys, local) = ts.cone_system(&cone, [seed]);
+                    sys.reduced(&local, caps);
+                }
+            }
+        }
+    });
+    let mut out = std::io::BufWriter::new(std::fs::File::create(&path).expect("create"));
+    let mut seen = std::collections::HashSet::new();
+    let (mut written, mut states) = (0, 0usize);
+    for record in &dump.records {
+        let (head, body) = record.split_once('\n').expect("a name line");
+        if !seen.insert(body) {
+            continue;
+        }
+        write!(out, "{head}\n{body}").expect("write");
+        written += 1;
+        states += body[2..]
+            .split(' ')
+            .next()
+            .map_or(0, |n| n.parse().unwrap_or(0));
+    }
+    out.flush().expect("flush");
+    let left_out: Vec<String> = (dump.left_out.iter())
+        .map(|(why, k)| format!("{k} {why}"))
+        .collect();
+    eprintln!(
+        "{} runs, {written} distinct ({states} states, cap {cap}) written to {path}; left out: \
+         {}",
+        dump.records.len(),
+        left_out.join(", ")
+    );
+    assert!(written > 0, "a run");
+}
+
 /// The checks of `reduce/hypotheses.rs` (`RiseTable` and the stages of `Lemma6Staged`,
 /// `hloop`, the inner split) pass on the samples, the domain samples, and the engine corpus
 /// cases that build a model: every target and property cone is reduced at `Bounds::STATES`,
