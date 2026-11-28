@@ -33,6 +33,18 @@ takes about 2 seconds.
 CI's `lean` job runs the script on every pull request that touches this directory, the
 script or `ci.yml`, and on every run on main. The job caches `~/.elan`.
 
+`scripts/check-lean-refs.py` runs in CI's `check` job on every pull request, prose-only
+ones included, and takes under a second. It checks three things:
+
+- every Rust name this README, the Lean doc comments and the Lean-citing lines of
+  claims.md and cones.md cite (`split_at`, `Reduction::stages`, `partition.rs::divergence`)
+  names a definition in `crates/`;
+- every name in the first column of a table below is declared in the file of its `File`
+  column;
+- every such name is listed in CheckAxioms.lean.
+
+Its docstring gives the exact rule.
+
 The toolchain is pinned in [lean-toolchain](./lean-toolchain) (`leanprover/lean4:v4.36.0`).
 elan installs it on the first build. Without elan, run `nix shell nixpkgs#elan` and then
 the script.
@@ -160,7 +172,8 @@ The proofs assume the following hypotheses and do not derive them:
     hypothesis of the proof.
   - `hloop`: every block whose silent edges between different states contain a cycle from
     a reachable state can loop (`SilentCycle`, Definition 5, case 1). The code's
-    `divergence` and, for `obs = ∅`, `s_cycles` must make it true; cones.md argues both.
+    `partition.rs::divergence` and, for `obs = ∅`, `s_cycles` must make it true; cones.md
+    argues both.
 - **The fairness model** (`Behaviour.lean`). A fair instance is a set of `T_a` labels (fair
   actions are `T_a` actions, Lemma 5 (e), assumed by giving instances on `Ta` only). A step
   takes an instance only when it changes the state (assumption τ of native.md). Behaviours
