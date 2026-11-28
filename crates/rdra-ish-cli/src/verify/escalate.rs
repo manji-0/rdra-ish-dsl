@@ -105,6 +105,14 @@ pub(super) fn escalate(
                     said.push(format!("not decided at {n} instances"));
                     break;
                 }
+                // The exact cone's counterexample is not one it vouches for (claim A2): a
+                // tool error, which fails the run as a counterexample does.
+                Recheck::Fault(d) => {
+                    said.push(format!("tool error at {n} instances"));
+                    eprintln!("error[TraceFault]: {}", d.diag);
+                    broken += 1;
+                    break;
+                }
                 Recheck::Holds => said.push(format!("ok at {n} instances")),
             }
         }

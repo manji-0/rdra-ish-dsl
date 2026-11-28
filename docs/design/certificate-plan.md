@@ -1,6 +1,7 @@
 # Replacing "read from the code" with certificates: inventory and plan
 
-Status: research draft against main at 6042d0af (2026-11-28). Nothing here is implemented or
+Status: research draft against main at 6042d0af (2026-11-28). Phase 1a (C9, C10) is
+implemented and measured (marked **Done** below); nothing else here is implemented or
 measured. Every cost below is an estimate. Each phase has a measurement as its exit
 criterion (see [Measurement](#measurement)).
 
@@ -58,8 +59,8 @@ implementation gives a wrong verdict that nothing in the run sees.
 | C6 | A10 | the guards give `Pre` at each step; `Monotone.lean`'s write graph is not joined to the action model; `split.rs::acyclic` decides `Acyclic` | `split.rs::monotone_vars`, `::acyclic`; `narrow.rs`; `Reduction::rises_from` | read; R checks 5(d) statically, but with `monotone_vars` itself | yes: a non-monotone input breaks the quotient (wrong `ok`) | D |
 | C7 | A9 | the sweeps' fallback partition meets `Sweep.Cert`; `stuttering_blocks` computes the marked set | `partition.rs::quotient_blocks`; `partition/reference.rs::stable`, `::stuttering_blocks`, `::same_partition` | read (the partition used is certified, but only the fast one's path is) | yes, on the fallback only | D |
 | C8 | A12, A3 | no counter is an input; a counted mark keeps its raiser and handler out of `S` | `split.rs::split_at`, `::monotone_vars`; `cone.rs::plain_reads`; `build/events.rs::count_up`, `::count_down` | P-full by reading; M (`Split.lean`) | yes, in principle | D |
-| C9 | A2 | `Trace::free_triggers` lists every step that runs an action reading a mark outside the cone; the exact cone's counterexample is vouched for | `trace.rs::free_triggers`, `::vouched`; `targets.rs::recheck_on`; `cone.rs::exact_target_cone` | read; `debug_assert!` only | **yes: a spurious counterexample prints as real**; replay inside the cone cannot see it | D |
-| C10 | A16 | the lifted start is an initial state of the unreduced cone | `explore/graph.rs::ComponentRun::lifted_path`; `reduce/lift.rs::lift` | read | partly: the trace replays from a non-initial state | D |
+| C9 | A2 | `Trace::free_triggers` lists every step that runs an action reading a mark outside the cone; the exact cone's counterexample is vouched for | `trace.rs::free_triggers`, `::vouched`; `targets.rs::recheck_on`; `cone.rs::exact_target_cone` | **Done (1a):** TV + R, `vouch.rs` | **yes: a spurious counterexample prints as real**; replay inside the cone cannot see it | D |
+| C10 | A16 | the lifted start is an initial state of the unreduced cone | `explore/graph.rs::ComponentRun::lifted_path`; `reduce/lift.rs::lift` | **Done (1a):** R, `vouch.rs::lifted_start` | partly: the trace replays from a non-initial state | D |
 | C11 | residual risk 1 | the cone choice: the closure under Lemma 2, with its documented exceptions (a latch read inexactly stays out and its guards are dropped; existence vars join without their columns) | `cone.rs::cone`, `::target_cone`, `::property_cone`, `::keep_writers`, `::reach_seed`; `restrict.rs::restrict_to` | P-full; D (`assert_cones_exact` on samples) | yes: a cone missing a writer gives a wrong `ok` | D |
 | C12 | A4, A5, native.md:853 | the staging of a property cone's runs (plain, then `_WF`, then `after`) | `cli/src/property_cone.rs`; `verify/native.rs::native_property_after` | argued, "for the order of its runs only" | yes, in principle | D |
 | C13 | A13, A14 | budget rejection; dropped checks get their own cone | `reduce/mod.rs::TLA_CELL_BUDGET`, `drop_unreadable_checks` | read / test gap | A13 no (performance only); A14 covered by 5(e) in `split_faults` | D |
@@ -185,17 +186,30 @@ closure. Whether `Sweep.Marked` must be the least such set is to be confirmed in
 **C8, R.** Two clauses in `split_faults`: no var that `is_counted` marks is an input (a
 new `Clause::Counter`), and every raiser and handler of a counted mark is in `T_a`. Free.
 
-**C9, TV and R, on counterexamples only.** `free_triggers` re-derived: for each step of
+**C9, TV and R, on counterexamples only. Done (1a).** `free_triggers` re-derived: for each step of
 the trace, test `action_reads(a) ∩ marks ⊄ cone.vars` directly from the action, not from
 the cone's bookkeeping, and require equality with `free_triggers`' list. Promote the
 `debug_assert!`s of `targets.rs::recheck_on` and `cone.rs::exact_target_cone` to checks
 that make the violation a `tool_error`. The cost applies only to cones with a candidate
 counterexample. This closes the main silent path to a wrong `violated`. N11's shared lasso
 code (C20) and A24's cap-stopped counterexamples are the others.
+As built (`core/vouch.rs`): the free triggers are read again off each step's guards with
+`pred_reads`, not through `action_reads`, which goes through `mark_reads`, the code the
+list is built from. A mismatch, or a step whose action the system lacks, adds what the list
+lacks, so the trace stays a candidate and `recheck_on` decides it (fallback); the run warns.
+`exact_target_cone` falls back to the whole system when its cone leaves a mark out or frees
+slots; an exact round whose counterexample is not vouched for is `Recheck::Fault`, a
+`TraceFault` (`LassoFault::Unvouched`), so the cone's verdict is `tool_error`. Each fault
+panics with `shadow:` in a debug or `shadow` build.
 
-**C10, R.** In `ComponentRun::lifted_path`, check that the lifted path's first state is in
+**C10, R. Done (1a).** In `ComponentRun::lifted_path`, check that the lifted path's first state is in
 `initial_states` of the unreduced cone (enumerate it, or test it against the init
 predicate). A failure is a `ReplayError`. This runs only on counterexamples.
+As built: the check sits at the reduced exit of `reduce/lift.rs::lift`, so every caller
+(`ComponentRun::lifted_path`, TLC replays, `lift_cycle`, the orbit traces, the inner lift)
+goes through it. `vouch.rs::is_unreduced_initial` tests the state against the initial-state
+definition and enumerates nothing. A failure is `ReplayError::NotInitial`; in `lift_cycle`
+it makes the reduced lasso spurious, and the property is decided unreduced.
 
 **C11, TV.** Check the invariant Theorem A1 needs, not minimality:
 `cone_faults(system, cone)` checks two things on the restricted system that `restrict_to`
@@ -376,7 +390,7 @@ and the planted-bug test that every certificate needs (as
 
 | Phase | PR | Points | Kind | Effort | Est. cost (instructions / RSS) | Classes that change | Depends on |
 |---|---|---|---|---|---|---|---|
-| 1 | 1a counterexample vouching | C9, C10 | TV, R | 2 d | 0 off counterexamples / 0 | A2 gap closed; A16 "lifted start" closed | none |
+| 1 | 1a counterexample vouching (**Done**) | C9, C10 | TV, R | 2 d | 0 off counterexamples / 0 | A2 gap closed; A16 "lifted start" closed | none |
 | 1 | 1b reduction syntax | C1, C7, C8, C15 | R | 5 d | once per reduction, ~0 / 0 | A8's 8 fields, half of `cover` and `X`'s initial states move from read to R (`FoldKey::Param` folds); A9 fallback and marking, A12, A3 → R; N16's two internal facts → R | none |
 | 1 | 1c cone and build syntax | C11, C3 (R half), C33 | TV, R | 3 d | once per cone/build, ~0 / 0 | residual risk 1 "cone choice" → TV; A8/A18 syntax tie → R; T1 aliasing assumption → R | none |
 | 2 | 2a prover TVs | C22, C25, C24 | TV, W | 5 d | `--prove` only: ms + two builds already made + states × helper lemmas / 0 | B1 compare → TV; B2 Lemma U, B3 → TV; false helper lemmas → W on explored states (B16 unchanged) | none |

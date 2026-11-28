@@ -570,15 +570,8 @@ impl TransitionSystem {
             vars: self.cone(&seed, &keep),
             keep,
         };
-        debug_assert!(
-            !self.cone_leaves_marks(&cone),
-            "an exact cone reads every mark"
-        );
-        debug_assert!(
-            !slots || !self.cone_frees_slots(&cone),
-            "and counts every slot"
-        );
-        cone
+        // Checked in every build: it reads every mark and, with `slots`, counts every slot.
+        self.certified_exact(target, slots, cone)
     }
 
     /// The targets `check` and `states` explore: views and safety checks. A `can_reach` is a
