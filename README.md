@@ -150,7 +150,7 @@ lists what changed. A model written for 0.4.x upgrades with
 ## Development
 
 ```sh
-nix develop          # Rust, maturin, uv, Java, TLC, z3, Node.js, TypeScript, Go, pre-commit
+nix develop          # Rust, maturin, uv, Java, TLC, z3, Node.js, TypeScript, Go, pre-commit, elan
 cargo test --all
 nix build            # rdra-ish and rdra-ish-lsp into ./result
 ```

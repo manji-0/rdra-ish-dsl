@@ -7,11 +7,14 @@
 <!-- derived-from ../../docs/theory/semantics.md#verdicts -->
 
 This directory holds a Lean 4 project. It proves parts of Theorems A8, A15, A18, A20, A21 and A23 of
-[cones.md](../../docs/theory/cones.md) from their hypotheses, and Lemma 5 from Definition 3.
-The theorems of A8 and the others are stated over abstract transition systems; Lemma 5 is
-stated over a model of the cone by its actions
-([Definition 3 and Lemma 5 over actions](#definition-3-and-lemma-5-over-actions)). None of
-them reads the Rust code.
+[cones.md](../../docs/theory/cones.md) from their hypotheses, Lemma 5 from Definition 3,
+Lemma 6 from Definition 4, and Theorem A18's commutation from (G1)–(G6). The theorems of A8 and the
+others are stated over abstract transition systems; Lemmas 5 and 6 are stated over a model of
+the cone by its actions
+([Definition 3 and Lemma 5 over actions](#definition-3-and-lemma-5-over-actions),
+[Definition 4 and Lemma 6 over actions](#definition-4-and-lemma-6-over-actions)), and A18's
+commutation over a model of the cone by its slots
+([Theorem A18 over slots](#theorem-a18-over-slots)). None of them reads the Rust code.
 
 ## Building
 
@@ -46,8 +49,8 @@ ones included, and takes under a second. It checks three things:
 Its docstring gives the exact rule.
 
 The toolchain is pinned in [lean-toolchain](./lean-toolchain) (`leanprover/lean4:v4.36.0`).
-elan installs it on the first build. Without elan, run `nix shell nixpkgs#elan` and then
-the script.
+elan installs it on the first build. `nix develop` provides elan; `nix shell nixpkgs#elan`
+does too.
 
 **No Mathlib.** The project imports only Lean's core. The proofs need five things:
 
@@ -132,7 +135,9 @@ The proofs assume the following hypotheses and do not derive them:
   also asks that the edge's action stands for the step's action with its binding. A `T_a`
   step is matched by a sequence of rises from `x(t, s)` to `x(t', s)`; `Lemma6Staged` asks
   for one rise per stage of `stages`. `x(t, s) ∈ Reach(X)` is not assumed: `x_reach`
-  derives it. Every build certifies the side of `Lemma6Staged` that `X` holds
+  derives it. Over the action model, `lemma6_by`, `lemma6_staged` and `lemma6` derive all
+  four from `Lemma6Hyp` ([below](#definition-4-and-lemma-6-over-actions)).
+  Every build certifies the side of `Lemma6Staged` that `X` holds
   (`reduce/hypotheses.rs::rise_faults`, `::layout_faults`). Each rise of a block's
   representative sets the raw inputs or flips one bit slot, and `stages` lists it as exactly
   one stage; by (B3) so does every rise of the run of `X`. The engines read the input bytes
@@ -153,7 +158,7 @@ The proofs assume the following hypotheses and do not derive them:
   (`reduce/hypotheses.rs::inner_faults`). This enters as the choice of observation and
   visibility of the map, and the reindexing of `S × I` as `T' × S'` as an `InnerMap.ofIso`.
 - **Definition 4's shape of `X`** (`Extended`). A silent edge keeps the input bytes, and a
-  rise keeps `S`.
+  rise keeps `S`. `Ext.extended` proves it of the `X` of `Restrict.lean`.
 - **(B1)–(B3)** (`Stable`), on the reachable states of `X`, with
   `rep(B x) ∈ Reach(X) ∩ B x`.
 - **A18's commutation** (`Sym`). This covers:
@@ -161,11 +166,11 @@ The proofs assume the following hypotheses and do not derive them:
   - `G_{g(s)} = G_s`;
   - (G3).
 
-  cones.md derives the commutation from (G1)–(G6). The Lean statement assumes it on every
-  state, where cones.md states it on reachable states. `SymOn` assumes it on a set `W` that
-  holds the initial states and is closed under steps and every `G_s`, which the quotient's
-  stored states need; reachable states alone do not suffice
-  (`ExampleReachOnly.reach_only_counterexample`).
+  `Sym` assumes it on every state. `SymOn` assumes it on a set `W` that holds the initial
+  states and is closed under steps and every `G_s`, which the quotient's stored states need;
+  reachable states alone do not suffice (`ExampleReachOnly.reach_only_counterexample`).
+  `SymActions.lean` derives a `SymOn` from (G1)–(G6), with `W` the states whose absent rows
+  hold base values ([below](#theorem-a18-over-slots)).
 - **A23's extra hypotheses** (`SymLive`, `LiveEqui`, `a23`).
   - `G` acts on fair instances and on bindings, with the composition and inverse laws, and
     moves a label of an instance to a label of the moved instance.
@@ -198,9 +203,13 @@ The proofs assume the following hypotheses and do not derive them:
 
 - **The code.** No theorem here reads `Extended::build`, `restrict_to`, the folds,
   `quotient_blocks`, `Group::apply` or `Canon::canonical`.
-  - The gap between Lemma 6 and the code is where the stub-param bug sat, and it stays
-    open. Closing it would need a deep embedding of the transition-system builder.
-  - The same holds for (G1)–(G6) and the symmetry scan.
+  - Lemma 6 is proved over the action model, whose `X` is built as `Extended::build` builds
+    it. The fields of `Lemma6Hyp` are read from the code, and the model leaves out what
+    [below](#what-the-lemma-6-model-leaves-out) lists. Reading the builder itself would need
+    a deep embedding of it.
+  - (G1)–(G6) are stated over a slot-level model of the code's syntax
+    ([below](#theorem-a18-over-slots)). That the model's `act`, hypotheses and effects are
+    `Group::apply`, `breaks::scan` and `each_successor` is read from the code, not derived.
   - (B1)–(B3) are certified at run time on each partition (claim A8, R). That certificate
     is the nearest link from the code to `Stable`, but it is not `Stable` itself. The code
     checks that one sweep with every block as a splitter splits nothing, while `Stable.b2`
@@ -209,10 +218,10 @@ The proofs assume the following hypotheses and do not derive them:
 - **A8, the rest of the theorem.** The proofs leave out these parts:
   - The rises carry no `stands`. Consequences 2 to 4 read only the `T_a` labels of `C` and
     `R`, and `R`'s `T` move reads a rise only through the input bytes it ends at.
-  - What `stages` returns. `Lemma6Staged` takes the stage list as a parameter. The run-time
-    certificate shows that each rise of `X` is one stage of `Reduction::stages`. That a
-    `T_a` step of `C` is matched by rises through the stages it lists is part of the Lemma 6
-    gap.
+  - What `stages` returns. `Lemma6Staged` takes the stage list as a parameter. Over the
+    action model `Ext.stages` is `Reduction::stages`, and `lemma6_staged` proves that the
+    rises of that `X` follow it. The run-time certificate shows that each rise of `X`
+    is one stage of `Reduction::stages`.
   - The outer representative in the nested case. The code takes it among the inner run's
     states, so its `S` bytes are an inner representative's, which need not be a reachable
     state of `X`; `a8_nested` takes a reachable member of the block (`exists_rep`). `R`
@@ -238,9 +247,10 @@ The proofs assume the following hypotheses and do not derive them:
     decides it is N9. `always` is an invariant (consequence 1).
   - The folds. Their effect is inside the step relations that Lemma 6 relates. Lemma 5
     (c)–(e) are derived over the action model with `FoldData`
-    ([below](#definition-3-and-lemma-5-over-actions)), but what a fold bit computes is not
-    modelled; Lemma 5 (e) enters `a15` and `a8_plain_iff` as fair instances given on `T_a`
-    labels.
+    ([below](#definition-3-and-lemma-5-over-actions)). Lemma 6's model reads a param fold's
+    bit and takes `Fold::holds` computing it exactly as the hypothesis `Lemma6Hyp.exact`;
+    node folds and groups of folds that share a bit are not modelled. Lemma 5 (e) enters
+    `a15` and `a8_plain_iff` as fair instances given on `T_a` labels.
 - **A15, the rest of the theorem.**
   - The run's search. `a15` reads the run's verdict as "no lasso of `R` with the fairness
     and stops above violates the property". That the search over strongly connected
@@ -336,11 +346,188 @@ keeps `T` small.
   The write-edge acyclicity that `monotone_vars` computes is not modelled.
 - **The labels.** `Act.cone` labels a step `.inl` when its action is in `T_a`, and `.inr`
   otherwise. So the `.inr` side holds the `S_a` actions and the actions that write nothing
-  and are not kept, which neither set contains. Those stutter (`Local.idle`). Lemma 6 must
-  match them by a self-loop of `X`, or count them out of `S_a`'s steps.
+  and are not kept, which neither set contains. Those stutter (`Local.idle`). Lemma 6 counts
+  them out: `coneW` is `cone` without their steps, `X` holds no such action (`restrict_to`
+  drops an action that writes nothing in `S_v ∪ inputs`), and `coneW_reach_iff` shows that
+  `coneW` and `cone` reach the same states.
 - **The pass.** `computed` applies the conditions simultaneously, while `split_at` updates
   `T` in place. `mem_eq_of_sound` shows that both give `Mem`, provided every insert of the
   loop applies one condition. That much is read from the code.
 
-The folds stay abstract, and so does what a fold bit computes. The cone that `restrict_to`
-builds is not part of this model.
+The folds stay abstract in this model. Lemma 6's model below adds them, with the cone that
+`restrict_to` builds.
+
+## Definition 4 and Lemma 6 over actions
+
+<!-- constrained-by #definition-3-and-lemma-5-over-actions -->
+
+`Restrict.lean`, `Lemma6.lean` and `Lemma6Example.lean` build the extended sub-lifecycle `X`
+of Definition 4 from the action model and a split, and prove Lemma 6 for it. With them the
+hypotheses `Lemma6Fwd`, `Lemma6`, `Lemma6By`, `Lemma6Staged` and `Extended` of the theorems
+above are theorems whose one hypothesis is `Lemma6Hyp`, and `a8_actions` is Theorem A8 with
+`recanon` from `Lemma6Hyp`, (B1)–(B3) and the rise table alone.
+
+The model (`Ext`, `Ext.ext`):
+
+- **Roles.** `Rows.cand` is `candidate_slots`: `existing`, `parent` and `triggered` bind a
+  present row, `new` the lowest absent one, `earlier` any slot. A role is a guard conjunct
+  on its entity's existence (`roleConj`), and an action's guard is its role conjuncts
+  followed by its other conjuncts `og`.
+- **Sides.** A parameter's entity is on `S`, an input, a stub, or dropped, by where its
+  existence lies (`side`).
+- **The input bytes.** The raw inputs and one bit per key (`Inp`, `inp`, `bitOf`).
+- **`X`'s roles** (`xrole`). A parameter keeps its role on `S` and on an input. A fold's key
+  off `S` gets `Earlier { step: 0 }` (`fold_param`), and so does a stub parameter that needs
+  a present row, of a rise or a folded action (`bind_stub_params`; the flag `bindStubs`
+  turns it off). A parameter on a dropped entity, and a `new` one on a stub, is dropped. A
+  stub's existence reads `dflt` in `X`.
+- **`X`'s guard** (`xguard`). The roles `X` gives, the conjuncts `kept` names, and the bit at
+  the key's slot.
+- **`X`'s edges.** A silent edge is an `S_a` action under `xguard`. A rise is a `T_a` action
+  that writes an input, under `xguard`, which writes the raw inputs, or the free flip of one
+  bit (`reduce/extended.rs::flips`). `Ext.stages` is `Reduction::stages`: the raw inputs,
+  then each bit that changes, in the order of `keys`.
+- **The cone** (`coneW`). The cone system without the steps of actions that write nothing
+  and are not kept ([the labels](#what-these-hypotheses-are)).
+
+| Lean (`RdraIsh.`) | File | Claim | Statement |
+|---|---|---|---|
+| `Act.mem_roleConjs` | `Restrict.lean` | none | The role conjunct of each position of a parameter list is among the list's role conjuncts. |
+| `Act.mem_roleConjs_inv`, `Act.roleConj_local` | `Lemma6.lean` | none | Every role conjunct of a parameter list is that of one of its positions, and each depends only on what it reads. |
+| `Act.Ext.unfolded_side` | `Lemma6.lean` | Lemma 6, "Parameters", the unfolded table | Every parameter of an unfolded `S_a` action whose role reads its row is on `S` or an input: the row's existence is in `Rd ∪ Wr`, so in `S_v ∪ inputs` by Lemma 5 (a)(c). This derives the table's stub and dropped cells. |
+| `Act.Ext.xrole_cand`, `Act.Ext.xguard_of_guard`, `Act.Ext.eff_x` | `Lemma6.lean` | Lemma 6, (P1)–(P4) | The role `X` gives a parameter admits the slot the cone binds it to; a guard of the cone at `(t, s)` is the guard of `X` at `x(t, s)` for the same binding; an `S_a` action writes the same `S_v` values at both. |
+| `Act.Ext.s_fwd`, `Act.Ext.s_back` | `Lemma6.lean` | Lemma 6, the `S_a` half | An `S_a` step of the cone is a silent edge of `X` by the same action and binding. A silent edge of `X` from `x(t, s)` is an `S_a` step of the cone by the same action, at a binding equal to the edge's outside the fold's free `T` parameters (`stands`), whose slots come from step (a). |
+| `Act.Ext.flips_end`, `Act.Ext.rise_fwd` | `Lemma6.lean` | Lemma 6, step (c) | A `T_a` step of the cone is matched by one rise of `X` per stage of `stages`: the restricted action for the raw inputs when they change, then one flip per bit that changes. |
+| `Act.Ext.extended`, `Act.Ext.lemma6_by`, `Act.Ext.lemma6_staged`, `Act.Ext.lemma6`, `Act.Ext.lemma6_fwd` | `Lemma6.lean` | Definition 4, Lemma 6 | `X` has the shape `Extended` asks for, and `Lemma6By stands`, `Lemma6Staged stages`, `Lemma6` and `Lemma6Fwd` hold of `coneW` and `X`. |
+| `Act.Ext.reads_of_lemma5` | `Lemma6.lean` | Lemma 5 (c) | `Lemma6Hyp.reads` is `Lemma5.c`, with the inputs and the folds' reads as its sets. |
+| `Act.split_coneW`, `Act.coneW_reach_iff` | `Lemma6.lean` | none | `coneW` satisfies `Split` under `Local` and Lemma 5 (a)(b), and reaches the states `cone` reaches. |
+| `Act.a8_actions`, `Act.a8_actions_holds_iff` | `Lemma6.lean` | A8 | Under `Lemma6Hyp`, (B1)–(B3) of a partition of `X` and a complete rise table, A8's relation is a divergence-blind branching bisimulation between `coneW` and the reduced cone whose `T` move is `recanon` over `stages`, and it preserves `T_v` and `obs`. An invariant over `T_v ∪ obs` holds on `cone` iff it holds on that reduced cone. |
+| `ExampleLemma6.hyp`, `lemma6`, `rise_from_init`, `fold_step`, `mark_step` | `Lemma6Example.lean` | none | A five-variable cone with a folded `S_a` action (its key on an input, a free `T` parameter on a stub), an unfolded `S_a` action with a kept conjunct, a rise with a parameter on a stub and a bit writer. `Lemma6Hyp` is discharged, and reachable steps of each kind are matched in `X`. It has no parameter on a dropped entity and no `new` or `earlier` parameter. |
+| `ExampleLemma6.stub_bug` | `Lemma6Example.lean` | Lemma 6, (P3) | With `bind_stub_params` off, the rise's stub parameter keeps its `Parent` role, which `X`'s absent stub never meets, so the `C ⇒ X` half of Lemma 6 fails on that cone. |
+
+### What `Lemma6Hyp` assumes
+
+Each field is a fact about one action, read from the code:
+
+- `local_`, `lemma5`, `reads`: `Local`, and Lemma 5 (a)(b) and (c), with a fold's reads
+  those of `Fold::reads`. `reduce/lemma5.rs::split_faults` certifies Lemma 5 at run time.
+  `lemma5ab_of_closed` derives (a)(b) from Definition 3, and `lemma5_of_closed` derives (c)
+  given `FoldData` (`reads_of_lemma5`).
+- `shape`: an action's guard is its role conjuncts followed by `og`.
+- `new_writes`: a `new` parameter comes with its `Create`, which writes its entity's
+  existence (`build/actions.rs`).
+- `kept_rd`: a conjunct `X` keeps reads only `S_v ∪ inputs` (`restrict_to`).
+- `cover`: every conjunct in `og` of an `S_a` action is kept or folded.
+- `rise_eff`: step (c), a `T_a` action's value on an input depends only on `S_v ∪ inputs`.
+- `fold_sa`, `folded_og`: a fold belongs to an `S_a` action, and its folded guards are
+  conjuncts of it.
+- `exact`: step (a), `Fold::holds` computes the bit exactly. The bit at slot `c` holds at
+  `t` iff some binding with the key at `c` puts each `T` parameter whose role needs a
+  present row on one and makes every folded guard true. It is stated for every slot number,
+  where the code has bits only for the key entity's slots.
+- `folded_names`: the folded guards name only `T` parameters and the key (`fold_of` lets
+  them name at most one `S` parameter, which is then the key).
+- `other_names`, `eff_names`: no other conjunct and no effect names a `T` parameter but the
+  key (`fold_of`'s link guards, and the one `T` parameter an effect may reference).
+- `eff_s`: a folded action's effect on its writes reads only `S_v ∪ inputs`. For an unfolded
+  action, `Local` and Lemma 5 (c) give it.
+- `bind`: `bind_stub_params` runs.
+
+### What the Lemma 6 model leaves out
+
+- **Initial states.** `X`'s initial states are the projections of the cone's. That
+  `restrict_to`'s initial states are those projections (Lemma 2) and that every bit starts
+  where the cone starts (`fold_initial`) is not derived.
+- **Folds.** The model has one bit per folded action. A group of folds sharing a bit (the
+  disjunction of `push_bits`, `Signature::Param`) and node folds (`FoldKey::Linked`, which
+  add a parameter) are not modelled.
+- **Parameter positions.** A binding of `X` keeps the cone's positions, so step (b) (the
+  renumbering of `Extended::cone_params`) is not modelled. Nothing states that `X`'s kept
+  conjuncts and a rise's effects ignore the slots of the parameters `X` drops. A silent
+  edge's binding is the cone's outside the fold's free `T` parameters, either way. `X` reads
+  a fold's bit at the key's position whatever the key's side, so the rule that a fold whose
+  key the restriction drops stays unfolded (`Fold::key_kept`, `Fault::KeyDropped`) plays no
+  part.
+- **The rest.** The nested case is not modelled, and nothing reads `StubCheck`, which checks
+  at run time that the built `X` is the one `bind_stub_params` is meant to build.
+- **Consequences 2 to 4.** These are stated for `coneW`. `a8_actions_holds_iff` reads
+  invariants on `cone` itself.
+
+## Theorem A18 over slots
+
+<!-- derived-from ../../docs/theory/cones.md#instance-symmetry -->
+
+`SymActions.lean` models the cone system by its slots and derives Theorem A18's commutation
+from (G1)–(G6). The model (`SymAct.Sys`):
+
+- entities in classes, each class with its slot count and whether the scan lets it move;
+- a state gives each slot an existence (absent, present, deleted), each data column and each
+  owner a value per slot, and the clock. An owner holds a parent slot or `null`;
+- a permutation per class that fixes the slots past the class's count. `G_s` is the
+  permutations that fix every absent slot and every slot of a class that does not move.
+  `act` is `Group::apply`: a slot's variables move with it, and an owner on a row that is
+  not absent is relabelled by its parent's permutation;
+- terms, predicates and effects after `lifecycle/types.rs`. A term reads at a parameter, at
+  a parameter's slot in the successor, or at a quantifier's slot. Quantifiers range over the
+  present slots of the pre-state. Effects are read pointwise: a location takes the last
+  write in the list;
+- a step binds each parameter by its role (`Existing`, `Parent`, `Triggered` a present slot,
+  `New` the lowest absent slot, `Earlier` any slot), and each choice effect picks a value.
+
+`BaseAbsent`, the `W` of Theorem A18, is the set of states whose absent rows hold base values.
+
+| Lean (`RdraIsh.`) | File | Claim | Statement |
+|---|---|---|---|
+| `SymAct.Sys.act_mul`, `SymAct.Sys.mem_act` | `SymActions.lean` | Definition 6 | `act` composes, and `G_{g(s)} = G_s` for `g ∈ G_s`. |
+| `SymAct.Sys.eval_mv` | `SymActions.lean` | A18, predicates | Under (G1), (G6) and well-typedness, a predicate has the same value at `(s, t, p)` and `(g(s), g(t), g(p))` when the rows it may read an owner of are not absent. |
+| `SymAct.Sys.post_comm` | `SymActions.lean` | A18, effects | On `W`, the successor of `g(s)` under `g(p)` is `g` of the successor of `s` under `p`, by (G2) and (G4). |
+| `SymAct.Sys.step_comm`, `SymAct.Sys.mem_step` | `SymActions.lean` | A18 | A step from a state of `W` commutes with every `g ∈ G_s`, and a step keeps `g ∈ G_t` on every state. |
+| `SymAct.Sys.W_step`, `SymAct.Sys.W_act`, `SymAct.Sys.init_act` | `SymActions.lean` | A18, (G3) | `W` holds the initial states and is closed under steps and every `G_s`; (G3) closes the initial set under every `G_s`. |
+| `SymAct.Sys.symOn` | `SymActions.lean` | A18, A23 | These give the `SymOn` of `a23_on`, with `W` the base-absent states. |
+| `SymOn.quotient_reach_iff`, `SymAct.Sys.a18_holds_iff` | `SymActions.lean` | A18, A21 | The canonical quotient of a system reaches what the quotient of its restriction to `W` reaches; so an invariant that `G_s` preserves gets the plain run's verdict on the canonical quotient of the cone system. |
+| `ExampleOffW.off_W_counterexample` | `SymActionsExample.lean` | none | Shops and orders, a creation that does not write the order's optional owner: every hypothesis of `step_comm` holds, and a step from a state outside `W`, with the absent order's owner on shop 0, has no image under the swap of the shops. |
+
+### What these hypotheses are
+
+- **`WF`**: a term reads, and an effect writes, a column or an owner on a row of its own
+  entity, and every parameter it names exists.
+- **`Built`**, what the builder gives and the scan does not check. A `New` parameter is
+  created by its action, and an `Earlier` parameter carries a run-mark conjunct `mark = k`
+  whose base is not `k`. The `Earlier { step: 0 }` parameters of the extended sub-lifecycle
+  carry no such conjunct; they bind entities `H` leaves out.
+- **`Hyp`**, (G1)–(G4) and (G6) as `breaks::scan` states them. (G1): a term naming rows of a
+  class that moves is compared only by `=` or `≠` with a term naming rows of the same class
+  or with `null`, and appears in no `In`. (G2): an owner is written from a parameter of its
+  parent's class or from `null`, and an owner choice ranges over every row. A data column is
+  not written from the slot of a class that moves. (G3): an identity start couples its child
+  and parent classes, and a pre-existing row's owner starting at its base names no row. (G4):
+  a creation writes every owner of the created row whose base names a row. (G6): no guard
+  reads an owner on a `New` parameter in the pre-state. Each condition also holds when the
+  class it names does not move, which is how the scan's leaving a class out enters.
+- **(G5)** is the semantics: a delete resets the row's columns (not its run marks) and keeps
+  its owners.
+- **Guards only.** Invariants, `after` assertions and properties are not in the model, so
+  (G6) outside guards is not derived; `a18_holds_iff` takes the invariance of its invariant
+  under `G_s` as a hypothesis.
+
+Outside `W` the commutation can fail. Take an absent row whose optional owner names a row,
+created by a step that does not write that owner: the step from `g(s)` keeps the value and
+`g(t)` relabels it (`ExampleOffW.off_W_counterexample`).
+
+The model differs from the code in these ways:
+
+- Effects are read in list order. `each_successor` applies the deletes after the other
+  effects and the choices last, and it drops a choice on a deleted row.
+- A `Transition` is a choice among its arms from the pre-state value. Owner `Transition`s
+  are not in the syntax; the scan leaves their class out (`OwnerChoice`).
+- The domain sizes of data columns are not checked, and `null` data values are not
+  modelled.
+- The roles carry no data. `Parent` and `Triggered` bind a present slot, and what else they
+  ask is in the guard.
+- The reduced cone (`G_T`) and the run of `S` up to `H` (A22) are not modelled.
+
+The slot model and the action model of `Actions.lean` are separate. `Act.Model` keeps guards
+and effects opaque behind read and write sets, and `SymAct.Sys` gives them a syntax. Its
+`Param` and `Role` restate `Act.Param` and `Act.Role` without `Role.earlier`'s step. A
+common model would read `Act.Model`'s guard and effect from `SymAct`'s syntax and share one
+`Role` with the semantics Lemma 6 gives it.

@@ -6,7 +6,7 @@
 #   scripts/check-lean-proofs.sh
 #
 # Needs `lake` on PATH (elan installs it and the toolchain proofs/lean/lean-toolchain pins;
-# without elan, `nix shell nixpkgs#elan` gives it).
+# `nix develop` provides elan, and `nix shell nixpkgs#elan` does too).
 set -euo pipefail
 cd "$(dirname "$0")/../proofs/lean"
 
