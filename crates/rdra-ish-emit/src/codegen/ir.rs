@@ -258,6 +258,9 @@ pub struct DomainModel {
     /// The conformance port: its contracts are printed whenever it is set, and the harness
     /// when [`PortDecl::harness`] says so.
     pub port: Option<PortDecl>,
+    /// Why there is no port, and so no contract, when `check` passed and it could not be
+    /// built.
+    pub no_port: Option<String>,
 }
 
 // ── Transition functions ─────────────────────────────────────────────────────

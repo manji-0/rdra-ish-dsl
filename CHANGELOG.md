@@ -219,6 +219,9 @@
   and `this phase does not print` (``reads `now` ``, `a choice among some values of a column`).
   The `--verus` error says `does not cover this model`, and `check --code` notes a level it
   does not support without `yet`. No behavior changes.
+- `codegen`: a model whose conformance port cannot be built (an entity without a one-column,
+  non-`Bool` primary key) gets the header line `No contracts: <why>.`, where before it got
+  no contracts and no line saying why.
 - `verify --prove` (output change): every line that says a rule or lemma is proved, the
   `proof (...)` header, the count of the `OK:` line, and the `--deny-unproved` error state one
   claim, the bounds the proof covers and the scope it holds in: `proved: R (for any number of

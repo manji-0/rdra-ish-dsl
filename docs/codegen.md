@@ -263,8 +263,10 @@ X NotEnabled Pay 1 2026-01-01T00:00:00Z
 ...
 ```
 
-`S`/`A` define a state and its rows, `T` starts a trace, `G` ends its seed, `C` is a call
-and the state it reaches, and `X` is a call that must be refused. Per trace, the harness
+`S`/`A` define a state and its rows, `T` starts a trace, `R` is a row its seed stores, `G`
+ends the seed, `C` is a call and the state it reaches, `X` is a call that must be refused, and
+`I <state> <call> | <call>` prepares the first call, makes the second (reaching `<state>`),
+then commits the first, which must be refused (an interleaved commit). Per trace, the harness
 makes a fresh port, seeds it, makes each call, and compares the store with the state, cut
 down to what the model tracks: an enum's value, null or present, an integer, a key's parent.
 
@@ -283,16 +285,8 @@ same words. See [The model adapter](./cli-reference.md#the-model-adapter).
 Verus release and Rust toolchain it was checked with (`0.2026.11.22.1ce6a59`, Rust
 `1.100.0`).
 
-| File | Edited by | Holds |
-|---|---|---|
-| `main.rs` | rdra-ish | the module list and the harness's entry |
-| `types.rs` | rdra-ish | the data types |
-| `prelude.rs` | rdra-ish | rows as a map, and the lemmas for quantifiers and counts |
-| `model.rs` | rdra-ish | the state, one step per action, the rules, the inductive set, the preservation lemmas |
-| `contract.rs` | rdra-ish | what each function must do, as a trait |
-| `core.rs` | the user | the functions, as the trait's methods |
-| `port.rs` | rdra-ish | the trusted store, and one verified port call per action |
-| `harness.rs` | rdra-ish | a differential test against BFS successors (not verified) |
+The crate's files, and which one the user edits (`core.rs`), are listed in
+[the Verus design note](./design/verus.md#the-crate).
 
 When Verus reports no error, the model keeps its rules for any number of rows, the core
 meets its contracts, and each port call moves the store as one step of the model or not at
@@ -320,8 +314,9 @@ Error: --verus does not cover this model (3 reason(s) above); the ordinary outpu
 | Contracts | type of `readonly` members returning `Promise` | synchronous trait (`&mut self`) | interface |
 | Sealing a state | `--seal` (`seal = true`): a literal fails with TS2741 | always: private fields | always: unexported struct |
 | Serialization | `parse<Entity>Row` reads a row from `unknown` | `serde = true` derives serde on the data types | `json` tags on the rows |
-| `check --code=build` | `tsc --noEmit -p tsconfig.rdra.json` | `cargo check --test <probe>` | `go test -count=1 -run ^$ -gcflags=-e` |
-| `check --code=run` | `node <probe>` (Node 22.18 or later) | `cargo test --test <probe> -- rdra_conformance` | `go test -count=1 -run ^TestRdraConformance$` |
+
+The commands `check --code=build` and `--code=run` start per language are in
+[`check --code`](./cli-reference.md#check---code).
 
 ## What the output guarantees
 
@@ -444,11 +439,13 @@ the moves and 16 seeded at a reached state) and `seed` empties the store each ti
 - The Verus crate covers no `Int` or nullable column, `now`, proposition, run mark, split use
   case, event, choice, entity no use case creates, optional key, deleted parent, nested
   quantifier, condition on a successor or created row, two rows of one entity in one action,
-  ordering comparison, or input other than a row's id. Verus may also reject a model in scope: a rule that holds but
+  ordering comparison, entity whose key is not one `Int` column, list argument, or input
+  other than a row's id. Verus may also reject a model in scope: a rule that holds but
   is not inductive with the key lemmas alone fails its preservation lemma.
 - The contracts and the conformance port need every entity to have a one-column primary
-  key that is not `Bool`. For another model the code has no contracts, and `--conformance`
-  fails with `no conformance harness for this model`.
+  key that is not `Bool`. For another model the code has no contracts, its header says
+  `No contracts: <why>`, and `--conformance` fails with `no conformance harness for this
+  model`.
 - Use cases outside the printed vocabulary get no function (see
   [Transition functions](#transition-functions-dispatchers-and-contracts)).
 - The Rust contracts are synchronous. An async service implements them on a small adapter

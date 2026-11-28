@@ -358,6 +358,24 @@ fn a_derived_name_falls_back_to_an_underscore() {
     assert!(err.contains("Taken_"), "{err}");
 }
 
+/// A model the port cannot name the rows of gets no contracts, and the header says why in
+/// every language.
+#[test]
+fn a_model_with_no_port_says_why_it_has_no_contracts() {
+    let src = "entity Line \"Line\" {\n  a: Int @pk\n  b: Int @pk\n  status: Enum(open, done) @default(open)\n}\nusecase Open \"Open\"\nusecase Close \"Close\"\ncreates(Open, Line)\ntransitions(Close, Line.status, open -> done)\n";
+    for lang in [Lang::Rust, Lang::TypeScript, Lang::Go] {
+        let out = generated_from(src, "k2.rdra", lang);
+        assert!(
+            out.contains(
+                "No contracts: entity Line has no one-column primary key to name its rows by."
+            ),
+            "{lang:?}:\n{out}"
+        );
+        assert!(!out.contains("CloseUseCase"), "{lang:?}");
+    }
+    assert!(!generated(Lang::Rust).contains("No contracts:"));
+}
+
 /// The port and its contracts are built whenever `check` passed: one contract per use case,
 /// named `<UseCase>UseCase`, in the order of the port's methods, and the Rust output prints the contracts without the harness.
 #[test]

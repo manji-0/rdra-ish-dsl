@@ -397,7 +397,8 @@ A passing run means bounded conformance: under H1 to H5, the safety rules the mo
 over tracked columns hold for runs driven through the port, with at most that many rows
 created per entity. It does not mean the service is equivalent to the model. When the BFS
 stopped at its cap, the `BFS` line says `stopped at its cap of <N> states`, the refused calls
-are `none tried`, and stderr gets `warning[CodeCoverageIncomplete]`: a service that runs a
+are only the `NotFound` calls on rows that do not exist (`<n> tried, each on a row that does
+not exist`, or `none tried` when there are none), and stderr gets `warning[CodeCoverageIncomplete]`: a service that runs a
 call the model refuses passes such a suite. The same warning names untried refusals and
 use cases never run. The exit status does not change unless `--deny-incomplete` is given.
 Raise `conformance_states` and run `codegen --code` again to complete a capped suite. The statement describes the traces, so it is the same when `run` in the table
@@ -2178,8 +2179,8 @@ made valid only by `Issue<Actor>Capability()`. Go cannot forbid the zero value o
 caller; `Valid()` and `CallerValid(by)` report them. Whether the code that calls `issue`
 authenticated the actor is not checked. The contracts name rows by their key, so they need
 every entity to have a one-column primary key that is not `Bool`. When the conformance port
-cannot be built for the model (chiefly for that key; the `--conformance` error names why), the
-output has no contracts, entry points, callers, or conformance port (the functions, rule
+cannot be built for the model (chiefly for that key), the header says `No contracts: <why>`,
+the output has no contracts, entry points, callers, or conformance port (the functions, rule
 checks and dispatchers stay), `check --code` has no contract to check the service against,
 and `--conformance` fails with `codegen: no conformance harness for this model: <why>`.
 

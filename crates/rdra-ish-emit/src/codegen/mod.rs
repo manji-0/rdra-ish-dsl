@@ -358,6 +358,17 @@ fn obligation_lines(domain: &DomainModel) -> Vec<String> {
             lines.push(format!("- {}: {}", s.action, s.reason));
         }
     }
+    if let Some(why) = &domain.no_port {
+        lines.push(String::new());
+        lines.push(format!("No contracts: {why}."));
+        lines.push(
+            "The functions, rule checks and dispatchers are below; there is no contract, entry"
+                .to_string(),
+        );
+        lines.push(
+            "point, caller or conformance port, and --conformance fails on this model.".to_string(),
+        );
+    }
     lines
 }
 
@@ -701,7 +712,8 @@ pub fn build_for(
                 conformance::claim_unimplemented(&domain, &mut names)?;
             }
             Err(e) if port => return Err(e),
-            Err(_) => {}
+            Err(CodegenError::Conformance(why)) => domain.no_port = Some(why),
+            Err(e) => domain.no_port = Some(e.to_string()),
         }
         for uc in &mut domain.usecases {
             uc.actions = built
