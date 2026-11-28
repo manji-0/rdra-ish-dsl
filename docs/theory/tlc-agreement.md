@@ -9,10 +9,10 @@ This document states what assurance exists that the native verifier and TLC, rea
 TLA+ module rdra-ish prints, give the same verdicts, and what kind of assurance each piece
 is. It owns rows T1 to T16 of the [claims inventory](./claims.md#d-agreement-with-tlc) and
 uses the notation of [semantics.md](./semantics.md) (D1 to D25) without redefining it. It
-describes the code at commit `5f59fae2` (origin/main, 2026-11-28, the merge of #537).
+describes the code at commit `5ae62f2c` (origin/main, 2026-11-28, the merge of #542).
 
 It was first written against `fb6928c7`, then pinned to `fec53d6a`; [Appendix: the pinned
-commit](#appendix-the-pinned-commit) says what changed in the cited code up to `5f59fae2` and
+commit](#appendix-the-pinned-commit) says what changed in the cited code up to `5ae62f2c` and
 what was read again. Paths follow the convention of the
 [claims inventory](./claims.md#how-to-read-a-row): `core` is
 `crates/rdra-ish-core/src/lifecycle`, `cli` is `crates/rdra-ish-cli`, `emit` is
@@ -171,14 +171,15 @@ pipelines did not fail differently on that input. Three kinds of fault survive a
    adding it changes neither which `X`-valuations are reachable nor the steps between them.
 
 Status [read]: **not proved**. The argument below is a paper argument per construct, read from
-`emit/tla/module.rs`, `emit/tla/pred.rs`, and `emit/tla/mod.rs` beside the native step
+`emit/tla/module.rs`, `emit/tla/pred.rs`, `emit/tla/mod.rs`, and `emit/tla/names.rs` beside the native step
 relation in `core/explore/moves.rs` and the evaluator `core/expr.rs`. The argument for step 3
 needs an invariant of the builder: no action writes one `(var, param)` with a multi-target
 `Transition` and also an `Assign` after it or a `Choose` before it
 ([Effects](#per-construct-argument)). Since #485 the build enforces it: an action that
 writes one slot twice fails with `ConflictingEffects` (`Action::slots_written_twice`,
 checked by `build/mod.rs::Builder::one_write_per_slot`, which `Builder::finish` calls; P24,
-fixed). Steps 1 and 2, and step 3 per binding on unreduced
+fixed). It also assumes that no two params of one action that can bind one slot write the
+same variable, which no check enforces ([Effects](#per-construct-argument)). Steps 1 and 2, and step 3 per binding on unreduced
 cones, are also checked as graph equality on every sample cone that fits the comparison's
 cap, with edges compared with their params since #507
 ([Sample comparison](#the-sample-comparison)); step 3 on a reduced cone's class moves, which
@@ -224,8 +225,20 @@ left-to-right evaluation, not for the meaning of the conjunction.
 
 **Effects [paper; read for the P24 cases; the invariant enforced since #485].** `module.rs::effects` folds the effects into one
 `v' = [v EXCEPT …]` per written variable and `UNCHANGED` for the rest, and
-`moves.rs::each_successor` applies them to a copy of the pre-state. Case by case:
+`moves.rs::each_successor` applies them to a copy of the pre-state. The fold is per
+`(var, param)`: the printer writes one `v' = [v EXCEPT ![p0] = …, ![p1] = …]` with the params in
+ascending order, and the native step writes by slot in effect order. If two params of one
+action bound one slot and both wrote `v`, TLA+'s `EXCEPT` would keep the higher param's value
+and the native step the later effect's, and on a delete the printer resets only the deleted
+param's entries while the native step drops every choice keyed by that param. Neither
+`candidate_slots` nor `bindings_for` keeps two params of one entity apart, and
+`Action::slots_written_twice` and `Builder::one_write_per_slot` compare `(var, param)` pairs,
+not slots. No builder path was found that gives one action two params of one entity that
+write the same variable, but none was shown to be impossible either: the argument below
+assumes it, and it is not checked. Case by case:
 
+- `Create`: both set the entity's `Exists` to `present` at the new slot, at once and in effect
+  order (`Post::Expr` of `Value::PRESENT` against `next.set`).
 - `Assign` with a literal or a parameter: the same value; a later assignment to the same
   slot replaces an earlier one in both.
 - `Transition` whose every source has one target: both read the source on the pre-state. A
@@ -271,7 +284,7 @@ left-to-right evaluation, not for the meaning of the conjunction.
 - `Tick`: the action's guard `now < m` is an ordinary guard (`build/vars.rs`), and the
   effect prints `now' = now + 1`.
 
-Hence step 3 for unreduced systems. Step 3 includes self-loops: a step whose successor
+Hence step 3 for unreduced systems, under the assumption about params stated above. Step 3 includes self-loops: a step whose successor
 equals its pre-state satisfies the action formula in both, and `vars' = vars` makes it a
 stuttering step in TLA+. That matters for fairness and `after` (below).
 
@@ -281,7 +294,8 @@ on a slot is `\in`/`\notin` of rendered values, and otherwise the disjunction of
 equalities. In `numeric`, `null` is `-1`, which lies outside `IntRange`; `=` and `#` compare
 it as a value, so `null` equals only `null` and differs from every number, as D5 says; an
 ordered comparison conjoins `x # -1` for each nullable operand, so `null` is never
-ordered. Non-numeric operands compare by rendered value, which is index equality because
+ordered. A slot index read as a number prints as `(p - 1)`, the slot itself, since a TLA+
+index is the slot plus one, as `expr.rs::compare` reads `Operand::Slot`. Non-numeric operands compare by rendered value, which is index equality because
 `render_value` is injective. An owner against a slot index is `owner = index`, where an
 unlinked owner `0` equals no index. The native side of these rules has Kani harnesses
 (`core/expr.rs`: `numbers_compare_as_i64_and_null_is_never_ordered`,
@@ -352,7 +366,8 @@ three places: outside the temporal operator for `always`, `eventually` and `lead
 **Fairness [paper; test].** For a property with `.fair(UC, …)`, `module.rs::fairness`
 prints, per action `a` of a listed use case, `\A κ : WF_vars(\E new : A_a(κ, new))`, the
 quantifier over the parameters that key a fair instance (`ParamRole::keys_fair_instance`)
-outside and the `New` parameters inside. In TLA+, `WF_vars(B)` requires `<B>_vars` to occur
+outside and the `New` parameters inside; when a scope keeps no action of the listed use
+cases, `Fair_P` is `TRUE`. In TLA+, `WF_vars(B)` requires `<B>_vars` to occur
 infinitely often if it is continuously enabled, where `ENABLED <B>_vars` asks for a
 `B`-step that changes `vars`. That is D20 per fair instance: enabled means a successor
 `s' ≠ s`, taken means a step of that instance to another state. Two consequences that
@@ -364,8 +379,9 @@ the native checker must match, and that have corpus cases:
   (`fair_same_edge_two_bindings`).
 
 The property is printed as `Fair_P => (…)`. `ConeProperty(i)` omits `WF_vars(Next)`
-(`Plain` in D20). The other print modes conjoin it to `Spec` exactly when `T'` has a
-liveness property ([Module](#terms)); the `_WF` run's module is `Property(i)` of a liveness
+(`Plain` in D20). The other modes of `print` conjoin it to `Spec` exactly when `T'` has a
+liveness property ([Module](#terms)), and `print_state_models` (the `Deadlocks` and
+`Witnesses` modules) never does; the `_WF` run's module is `Property(i)` of a liveness
 property, so it always has it (`WfNext`). Where a module has it but checks only safety, it
 is harmless: `WF_vars(Next)` is a fairness condition on a subaction of `Next`, so `Init /\
 [][Next]_vars /\ WF_vars(Next)` is machine closed (Lamport 2002, §8.9; the notion is
@@ -402,10 +418,10 @@ design (T6).
 
 | Step of T1 | Paper argument | Test | Assumed |
 |---|---|---|---|
-| 1, 2, 3 (states, init, steps) on unreduced systems | above; step 3 for multi-target transitions under the builder invariant of P24, which the build enforces since #485 | graph equality on every sample cone under 300,000 states, at 1 and 2 instances, edges with their params since #507; the 36 `bfs_and_tlc_*` tests of `engine_equivalence.rs` | TLC's `-dump dot` lists every edge, self-loops included |
+| 1, 2, 3 (states, init, steps) on unreduced systems | above; step 3 for multi-target transitions under the builder invariant of P24, which the build enforces since #485, and for every effect under the assumption, not checked, that no two params of one action that can bind one slot write one variable | graph equality on every sample cone under 300,000 states, at 1 and 2 instances, edges with their params since #507; the 36 `bfs_and_tlc_*` tests of `engine_equivalence.rs` | TLC's `-dump dot` lists every edge, self-loops included |
 | 3 on reduced systems | none (not argued here) | graph equality on reduced sample cones, class moves by action alone; the reduced cone's violated set against the unreduced one's | the quotient tables (common-mode) |
 | 4, state rules and `after` | above; P22 | verdict and violated-set comparison on every compared cone; each TLC trace replayed through the native step relation | TLC |
-| 4, temporal properties and fairness | above | verdicts only: 23 `TEMPORAL_CASES` at 2 instances (under `-lncheck final` since af6354a4, [Batch JVMs](#batch-jvms)) and the corpus at each case's flags | TLC's liveness checking under quantified weak fairness |
+| 4, temporal properties and fairness | above | verdicts only: 23 `TEMPORAL_CASES` at 2 instances (under `-lncheck final` since #539, [Batch JVMs](#batch-jvms)) and the corpus at each case's flags | TLC's liveness checking under quantified weak fairness |
 | 5, latch | above | verdicts only: `explored_along` (a `TEMPORAL_CASES` fixture) and the corpus case `safety_precedes_latch`. The graph comparison prints `PrintMode::Safety` modules, which declare no latch (`mod.rs::checked_properties` checks no property in that mode), so it never sees one | |
 
 [read] Until #507 no step of T1 was checked on a binding: the graph comparison compared
@@ -631,7 +647,7 @@ the same way, also by hand. In CI, `RDRA_REQUIRE_TLC_BATCH=1` only requires that
 ran batched without falling back. This bears on the test harness only: `verify --with-tlc`
 does not use batch JVMs.
 
-Since af6354a4 (after the pin) every TLC run `engine_equivalence.rs::run_tlc_on` starts,
+Since #539 (af6354a4) every TLC run `engine_equivalence.rs::run_tlc_on` starts,
 batched or a process, which includes every cone, state-model and property run of the
 comparisons, and every replay of `recorded_tlc_runs_are_the_same_in_a_batch_jvm` pass
 `-lncheck final` (`LIVENESS_AT_THE_END`), so TLC checks liveness once, at the end
@@ -811,10 +827,13 @@ the sections it cites, and carries the tag of the statements it rests on.
    that its path breaks the property at its last state and, on a reduced system, reads an
    `always` again on the lifted last state (`PropertyVerdict::Fault`); since #531 the lasso
    lift of a run up to symmetry (`explore/orbit/liveness.rs::Product::lift`) returns `NoMove`
-   as well. What remains is narrower: the `expect`s and `panic!`s the index's P20 row lists, with
-   the reason each holds (`reduce/lift.rs::lift_stop`, `Product::new`, the searches before a
-   lasso lift, callers' preconditions, and two reads of a lifted path that hold whatever path
-   is lifted), would stop the command rather than print a fault; and a
+   as well; and since #541 so does `reduce/lift.rs::lift` for a class move with no S path behind
+   it (`reduce/partition.rs::Succ::shortest_path` returns `None`, where it ended in a `panic!`
+   that this item, pinned at `5f59fae2`, did not name). What remains is narrower: the `expect`s and `panic!`s the index's P20 row lists, with
+   the reason each holds or the assumption it rests on (`reduce/lift.rs::lift_stop`, `Product::new`, the searches before a
+   lasso lift, callers' preconditions, the rebuilt extended sub-lifecycle that `lift` explores
+   again, which holds if `Extended::rebuild` reproduces the reduction's build, and two reads of a
+   lifted path that hold whatever path of the system's own states is lifted), would stop the command rather than print a fault; and a
    wrong `ok` has no run-time guard at all. TLC sees a wrong `ok` only where a test or a user
    runs `--with-tlc`.
 3. **Bounds [read].** In CI, TLC runs at 3 or more instances only on the corpus (the three
@@ -928,8 +947,8 @@ document. The open problems this document confirmed, extended, or added, in the
 
 [read] The document was first written against `fb6928c7` (origin/main, 2026-11-28), later
 than the index's first pin `b83b9544`; between those two no path it cites changed in a part
-it relies on. It was then pinned to `fec53d6a`, and it now describes `5f59fae2` (the last
-paragraph of this appendix). `git diff --stat fb6928c7 fec53d6a` over the cited
+it relies on. It was then pinned to `fec53d6a`, then to `5f59fae2`, and it now describes `5ae62f2c` (the last
+two paragraphs of this appendix). `git diff --stat fb6928c7 fec53d6a` over the cited
 paths shows changes in the printer (`emit/tla/mod.rs`, `module.rs`, `names.rs`), the TLC
 readers (`tlc_output.rs`), the comparison and the runs (`verify/compare.rs`, `native.rs`,
 `jobs.rs`, `tlc.rs`, `bfs.rs`, `end.rs`, `refuted.rs`, `escalate.rs`, `property_cone.rs`),
@@ -970,8 +989,21 @@ No other cited item changed, so its earlier read carries over; this includes
 (`explore/orbit/liveness.rs::Product::lift`), #532 (`refuted.rs`, `escalate.rs`: instances per
 entity) and #535 (`engine_corpus.rs`: an escalated line with per-entity counts indexes no
 `bfs=` verdict). Each was read at `5f59fae2`; residual risk item 2 was rewritten for #529 and
-#531, and nothing else here cites what changed. #534 changes a z3 test, #537 a symmetry
-test, and #533 `.config/nextest.toml`; this document cites none of them.
+#531, and nothing else here cites what changed in the crates. #534 changes a z3 test and #537 a symmetry
+test, which this document does not cite. #533 moves
+`oracle.rs::can_reach_and_deadlocks_agree_with_a_naive_oracle` into the slow list of
+`.config/nextest.toml` (`[profile.pr] default-filter`), which the two "main only" marks of the
+oracle's comparison rest on (§1, "What the module does not state", and Residual risk); both
+were checked against it. `.config/nextest.toml` is among the paths this appendix tracks.
+
+[read] From `5f59fae2` to `5ae62f2c` (the merge of #542) the cited paths change by #539
+(af6354a4: `engine_equivalence.rs::run_tlc_on` and the replay of
+`recorded_tlc_runs_are_the_same_in_a_batch_jvm` pass `-lncheck final`, `LIVENESS_AT_THE_END`)
+and #541 (ba47c45c: `reduce/lift.rs::lift` and `reduce/partition.rs::Succ::shortest_path`, a
+class move with no S path behind it is the `NoMove` of that step, with a test in
+`core/tests/reduce.rs`); `.config/nextest.toml` does not change. Both were read at
+`5ae62f2c`. [Batch JVMs](#batch-jvms), the T1 summary, and residual risk item 2 were
+rewritten for them; at `5f59fae2` item 2 should also have named `shortest_path`'s `panic!`.
 
 ## Errata
 
@@ -1021,3 +1053,15 @@ Changes to statements of this document after it was first written, newest last.
   cites the failing run recorded in #492's description, where it said the interpreter
   failed before #470 and #481 with no record named, and refers to I1 for the out-of-subset
   list; item 3 says the `bfs=` runs are at 1 and 3 instances, and at 4 for one case.
+- **2026-11-28, fourth audit; re-pin to `5ae62f2c`** (the merge of #542). The Appendix says
+  what #539 and #541 changed after `5f59fae2`; the `-lncheck final` statements, which said
+  "after the pin", now cite #539. Residual risk item 2 stopped at `5f59fae2` while citing
+  `reduce/lift.rs::lift`, and at that commit it should also have named
+  `Succ::shortest_path`'s `panic!`; it now credits #541 and names the `expect`s a lift reaches
+  outside the lift's files. The Appendix said the document cites nothing #533 changed, but
+  the oracle's "main only" marks rest on the line #533 added to `.config/nextest.toml`. T1's
+  Effects argument assumed, without saying so, that no two params of one action that can bind
+  one slot write one variable; the Status paragraph, Effects and the Status table now state
+  it as an unchecked assumption. Effects covers `Create`, Predicates a slot index read as a
+  number, Fairness the `TRUE` of a scope that keeps no fair action, and the `WF_vars(Next)`
+  sentence says it is of `print` only. The Status paragraph names `emit/tla/names.rs`.
