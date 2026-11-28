@@ -16,6 +16,9 @@ use std::sync::Arc;
 
 use crate::lifecycle::types::EntId;
 
+#[cfg(not(kani))]
+pub(super) mod eval;
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Sort {
     Bool,

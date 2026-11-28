@@ -1,9 +1,9 @@
 # Replacing "read from the code" with certificates: inventory and plan
 
-Status: research draft against main at 6042d0af (2026-11-28). Phase 1a (C9, C10) is
-implemented and measured (marked **Done** below); nothing else here is implemented or
-measured. Every cost below is an estimate. Each phase has a measurement as its exit
-criterion (see [Measurement](#measurement)).
+Status: research draft against main at 6042d0af (2026-11-28). Phase 1a (C9, C10) and phase 2a
+(C22, C24, C25) are implemented and measured (marked **Done** below); nothing else here is
+implemented or measured. Every cost below is an estimate. Each phase has a measurement as its
+exit criterion (see [Measurement](#measurement)).
 
 ## 0. Method and vocabulary
 
@@ -345,7 +345,12 @@ s, π(b))` and the same for the trigger. This is per edge per property, so it co
 expensive. Start with the initial states and the states on each reported lasso, which is
 cheap but partial, and measure the full check.
 
-**C22, TV, every `--prove` run.** `Enc::compare` (`encode.rs:687`) takes operands
+**C22, TV, every `--prove` run. Done (2a).** (`prove/encode/compare_tv.rs`,
+`prove/smt/eval.rs`; claim B1 has the details). It runs on every proof that proves a rule, over
+the comparisons of the rules, all candidate lemmas and the guards. The literal encoding is
+`encode.rs::value_term`, shared by `Enc::value` and `Enc::compare`; a fault is
+`Unproved::Uncertified` on every rule and a `tool_error`.
+The plan as written: `Enc::compare` (`encode.rs:687`) takes operands
 `Op::Var(sym, domain)`, `Op::Num`, `Op::Lit`, `Op::Row` and builds `eq`, `not`, `and`, `or`,
 `smt::sub`, ordering and integer and Boolean literals, with a nullable Int as `v = 0` for null
 and `v - 1` for the number. A ground evaluator `smt/eval.rs` for that fragment, after the
@@ -366,7 +371,24 @@ output says so. Use z3 itself as the evaluator only in CI, since one query per e
 slow for every run. The encoding's universal rows make full instantiation the main effort
 here.
 
-**C24, W, narrow.** BFS already evaluates every rule on every stored state, and a rule it
+**C24, W, narrow. Done (2a), in tests only.** (`prove/explored.rs`; claim B16 and z3.md, "The kept lemmas
+on explored states"). The states are those of the miner's cones, which the check runs again
+one per thread after the last round, at the run's bounds and the miner's cap, each lemma on one
+cone that holds its vars. Verify's
+safety runs keep only their counts, and holding the miner's runs through the z3 rounds would
+grow the RSS. A cone that leaves a raised mark out is not read. The lemma formulas are in the
+whole system's ids and are remapped per cone (`Remap::pred`), only where the cone holds every
+var they read. CTI clauses are `Formula`s like the others and need no evaluator of their own.
+B16 is unchanged. It runs only with `RDRA_ISH_CHECK_LEMMAS=1` or in a test build of
+`rdra-ish-core`; `cli/tests/prove_cli.rs` sets the variable on every `verify`, so CI runs it
+there and in the core tests, and no user's `--prove` run does.
+
+Phase 2a's cost, on the one sample whose `// expect` header runs `--prove`
+(`samples/oidc-auth`, `verify --instance-count 1 --prove --deny-undecided`, `RDRA_JOBS=1`, no
+proof cache, release build, two runs each): instructions retired 79.4 G to 79.5 G on main,
+79.6 G to 79.7 G with 2a (+0.3%, C22 and C25); max RSS 384 to 385 MB on both. With C24 turned on
+(`RDRA_ISH_CHECK_LEMMAS=1`) the same run retires 86.8 G (+9%, the miner's cones run again)
+at the same RSS, which is why it is off on users' runs. The plan as written: BFS already evaluates every rule on every stored state, and a rule it
 refutes is not tried (`Verdict::Refuted`), so re-evaluating the proved rules adds nothing.
 What adds something is the kept *helper lemmas*: mined lemmas (`prove/mine.rs` builds them
 as `Pred`) and `.lemma()` rules. Evaluate each kept lemma with native `eval` on every state
@@ -379,7 +401,11 @@ streamed, with no RSS, under `--prove` only. It does **not** close B16 or residu
 a wrong `proved` on a memory-capped cone whose explored states all satisfy the lemmas still
 prints `ok`. C23 is the check that bears on a wrong `proved`.
 
-**C25, TV, every `--prove` run.** `cli/src/prove.rs::int_range` already builds the model
+**C25, TV, every `--prove` run. Done (2a).** (`prove/uniform.rs::same_up_to_bound`, called
+from `cli/src/prove.rs::int_range`; claim B2). Every build `int_range` makes without an error
+is compared as it is made and then dropped, so the ends of the printed range are compared on
+the guess path and on the bisection path alike. A mismatch is a `tool_error`; the range is not
+shrunk. The plan as written: `cli/src/prove.rs::int_range` already builds the model
 at the candidate ends of the range (`guess`, `u8::MAX`, `u8::MAX - 1`), but it keeps only
 the diagnostics. Keep the two end systems, and compare each with the run's
 `TransitionSystem` with a structural comparator, `same_up_to_bound(a, b)`, written from

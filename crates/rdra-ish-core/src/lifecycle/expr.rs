@@ -105,7 +105,7 @@ impl<'a> Env<'a> {
     }
 }
 
-enum Operand<'d> {
+pub(crate) enum Operand<'d> {
     Value(Value, Option<&'d Domain>),
     Number(i64),
     /// The slot index of a bound entity.
@@ -321,7 +321,7 @@ impl TransitionSystem {
 /// A rule's `==` / `!=` between two columns is not one `Cmp`: the builder adds a present
 /// guard on each nullable operand (`columns_cmp` in `build/preds`), so two null columns are
 /// not equal there, as the language reference (§ Null) and SQL read them (#355).
-fn compare(lhs: &Operand, op: CmpOp, rhs: &Operand) -> bool {
+pub(crate) fn compare(lhs: &Operand, op: CmpOp, rhs: &Operand) -> bool {
     // An owner against a slot index: an unlinked optional owner names no slot.
     if let (Operand::Slot(i), Operand::Value(v, Some(d)))
     | (Operand::Value(v, Some(d)), Operand::Slot(i)) = (lhs, rhs)
