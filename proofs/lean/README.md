@@ -120,15 +120,24 @@ The proofs assume the following hypotheses and do not derive them:
   also asks that the edge's action stands for the step's action with its binding. A `T_a`
   step is matched by a sequence of rises from `x(t, s)` to `x(t', s)`; `Lemma6Staged` asks
   for one rise per stage of `stages`. `x(t, s) ∈ Reach(X)` is not assumed: `x_reach`
-  derives it.
+  derives it. Every build certifies the side of `Lemma6Staged` that `X` holds
+  (`reduce/hypotheses.rs::rise_faults`, `::layout_faults`). Each rise of a block's
+  representative sets the raw inputs or flips one bit slot, and `stages` lists it as exactly
+  one stage; by (B3) so does every rise of the run of `X`. The engines read the input bytes with the raw width and length `X` lays out. That a `T_a` step
+  of `C` has rises through every stage is not certified: a missing stage is a `recanon` miss
+  in `moves_of_into`, which panics in every build.
 - **The rise table** (`RiseTable`, for `a8_staged`). Every rise of a reachable
-  representative is entered under its block and the input bytes it ends at.
+  representative is entered under its block and the input bytes it ends at. Every build
+  certifies it on each run of `X` (`rise_faults`). The table holds exactly the rises of each
+  block's first state, the code's representative, under the input bytes they end at and with
+  the block they enter.
 - **The nested case** (`InnerMap`, `Tower`, for `a8_nested`). Each level's inner run is
   related to the level above by an inner map, which `a8_innerMap` derives from that level's
-  own A8 hypotheses. That the inner split puts `obs` and the input bytes on its `T` side and
-  keeps the rises (the seeds `reduced_in` gets in `Classes::of`) enters as the choice of
-  observation and visibility of the map, and the reindexing of `S × I` as `T' × S'` as an
-  `InnerMap.ofIso`.
+  own A8 hypotheses. The seeds `reduced_in` gets in `Classes::of` are `obs` and the rises.
+  So the inner split keeps every rise in its `T_a`, and puts each `obs` variable and input of
+  `X` on its `T` side or in its own `obs`. Every build certifies both
+  (`reduce/hypotheses.rs::inner_faults`). This enters as the choice of observation and
+  visibility of the map, and the reindexing of `S × I` as `T' × S'` as an `InnerMap.ofIso`.
 - **Definition 4's shape of `X`** (`Extended`). A silent edge keeps the input bytes, and a
   rise keeps `S`.
 - **(B1)–(B3)** (`Stable`), on the reachable states of `X`, with
@@ -159,8 +168,12 @@ The proofs assume the following hypotheses and do not derive them:
     complete" asks; when `obs = ∅` the code does not explore `X`, and `LX` is only a
     hypothesis of the proof.
   - `hloop`: every block whose silent edges between different states contain a cycle from
-    a reachable state can loop (`SilentCycle`, Definition 5, case 1). The code's
-    `divergence` and, for `obs = ∅`, `s_cycles` must make it true; cones.md argues both.
+    a reachable state can loop (`SilentCycle`, Definition 5, case 1). Every build certifies
+    it on each explored run of `X` (`reduce/hypotheses.rs::loop_faults`), whether
+    `divergence` set the marks or `s_cycles` left every class unmarked. The check peels the
+    silent edges inside the unmarked classes. When `obs = ∅` a release build does not explore
+    `X`, so there `s_cycles` is checked only in tests, on a plain run of `X`
+    (`partition.rs::unobserved_loops`).
 - **The fairness model** (`Behaviour.lean`). A fair instance is a set of `T_a` labels (fair
   actions are `T_a` actions, Lemma 5 (e), assumed by giving instances on `Ta` only). A step
   takes an instance only when it changes the state (assumption τ of native.md). Behaviours
@@ -181,14 +194,21 @@ The proofs assume the following hypotheses and do not derive them:
 - **A8, the rest of the theorem.** The proofs leave out these parts:
   - The rises carry no `stands`. Consequences 2 to 4 read only the `T_a` labels of `C` and
     `R`, and `R`'s `T` move reads a rise only through the input bytes it ends at.
-  - What `stages` returns. `Lemma6Staged` takes the stage list as a parameter; that the
-    rises of `X` follow `Reduction::stages` is part of the Lemma 6 gap.
+  - What `stages` returns. `Lemma6Staged` takes the stage list as a parameter. The run-time
+    certificate shows that each rise of `X` is one stage of `Reduction::stages`. That a
+    `T_a` step of `C` is matched by rises through the stages it lists is part of the Lemma 6
+    gap.
   - The outer representative in the nested case. The code takes it among the inner run's
     states, so its `S` bytes are an inner representative's, which need not be a reachable
     state of `X`; `a8_nested` takes a reachable member of the block (`exists_rep`). `R`
-    reads the representative only through `obs` and its rises, which (B1) and (B3) fix on
-    the block, but that the inner representative's are those of a reachable member is not
-    derived.
+    reads the representative only through `obs`, its input bytes and its rises. The inner
+    split's certificate puts each of these on the inner `T` side or in the inner `obs`, and
+    Lemma 5 (b) of the inner split keeps the rises' guards and effects there. The inner
+    partition's (B1) then fixes all of them on the inner class, and both are certified at run
+    time. That some reachable member of `X` has the representative's inner `T` part is A8 for
+    the inner cone. No theorem assembles these steps. Checking the representative against a
+    concrete reachable member would need that member, which comes only from lifting a path
+    to each representative through the inner reduction, or from a plain run of `X`.
   - The outer reduced cone's moves in the nested case. `a8_nested` builds `R` with the class
     moves and rises of `X` under the pulled-back partition. The code reads them on the inner
     run. `InnerMap.path_fwd`, `path_back`, `rise_fwd` and `rise_back` carry the moves between

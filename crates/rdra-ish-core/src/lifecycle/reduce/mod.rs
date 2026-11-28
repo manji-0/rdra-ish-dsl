@@ -37,6 +37,7 @@ use super::TransitionSystem;
 mod cache;
 mod extended;
 mod fold;
+mod hypotheses;
 mod lemma5;
 #[cfg(test)]
 pub(crate) mod lemma6;
@@ -50,6 +51,8 @@ mod table;
 pub use cache::QuotientCache;
 use extended::Extended;
 pub use fold::{Fold, FoldKey};
+#[cfg(test)]
+pub(crate) use hypotheses::tests::{Checked, CHECKED};
 pub use partition::Divergence;
 use partition::{NoQuotient, Quotient};
 use split::Split;
@@ -78,10 +81,20 @@ enum Unreduced {
     OverBudgetWithInputs,
     /// Nothing reduces.
     Nothing,
-    /// The split failed the check every build makes on it (`split_faults`, Lemma 5), or the
-    /// extended sub-lifecycle failed its own (`StubCheck`), so no quotient of it is trusted: a
-    /// tool bug, and the cone is decided unreduced.
+    /// The split failed the check every build makes on it (`split_faults`, Lemma 5), the
+    /// extended sub-lifecycle failed its own (`StubCheck`), or its quotient failed one of the
+    /// checks of `hypotheses.rs` (the rise table and the stages, the loop marks, the inner
+    /// split), so no quotient of it is trusted: a tool bug, and the cone is decided unreduced.
     Untrusted,
+}
+
+/// The raw inputs' bytes at the head of a reduction's input bytes: the widths of the vars of
+/// `spans` outside S.
+fn raw_width(spans: &[(usize, usize, bool)]) -> usize {
+    (spans.iter())
+        .filter(|(_, _, in_s)| !in_s)
+        .map(|(_, w, _)| w)
+        .sum()
 }
 
 /// A step of a path: the action, its params, and the state it enters.
@@ -425,25 +438,12 @@ impl Reduction {
     /// T action writes the raw inputs, a flip one bit slot), so a T step that changes several
     /// moves the class by one rise per stage, in this order in both engines.
     pub fn stages(&self, before: &[u8], after: &[u8]) -> Vec<Vec<u8>> {
-        let raw: usize = self
-            .spans
-            .iter()
-            .filter(|(_, _, in_s)| !in_s)
-            .map(|(_, w, _)| w)
-            .sum();
-        let mut stages = Vec::new();
-        let mut cur = before.to_vec();
-        if cur[..raw] != after[..raw] {
-            cur[..raw].copy_from_slice(&after[..raw]);
-            stages.push(cur.clone());
-        }
-        for k in raw..after.len() {
-            if cur[k] != after[k] {
-                cur[k] = after[k];
-                stages.push(cur.clone());
-            }
-        }
-        stages
+        hypotheses::stages(self.raw_width(), before, after)
+    }
+
+    /// The raw inputs' bytes at the head of the input bytes, before the bits.
+    fn raw_width(&self) -> usize {
+        raw_width(&self.spans)
     }
 
     /// The class a T step moves `class` to when it changes the inputs from `before` to
@@ -826,6 +826,7 @@ impl TransitionSystem {
             Ok(quotient) => quotient,
             Err(NoQuotient::Nothing) => return Err(Unreduced::Nothing),
             Err(NoQuotient::TooLarge) => return Err(over_budget()),
+            Err(NoQuotient::Untrusted) => return Err(Unreduced::Untrusted),
         };
         let n = classes.states;
         let (reps, class_of, init) = (
@@ -857,6 +858,16 @@ impl TransitionSystem {
             .map(|group| self.slots(group[0].key_entity(self)))
             .sum();
         let tail = first[width..first.len() - bits_width].into();
+        // `Lemma6Staged`: the engines' stages split the input bytes where the rises of the
+        // extended sub-lifecycle do.
+        let raw = raw_width(&spans);
+        if let Some(fault) = hypotheses::layout_faults(&ext, raw, raw + bits_width).first() {
+            crate::shadow_assert!(false, "shadow: Reduction::stages: {fault}");
+            eprintln!(
+                "warning: the input bytes of a reduced cone failed their check ({fault}); deciding the cone unreduced (a tool bug)"
+            );
+            return Err(Unreduced::Untrusted);
+        }
         let mut skip = vec![false; self.actions.len()];
         for a in &split.s_actions {
             skip[a.index()] = true;
