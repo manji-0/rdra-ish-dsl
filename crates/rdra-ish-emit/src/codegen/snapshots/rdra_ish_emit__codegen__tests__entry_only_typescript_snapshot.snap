@@ -18,7 +18,7 @@ expression: "generated_from(ENTRY_ONLY_SRC, \"entry_only.rdra\", Lang::TypeScrip
 //
 // Obligations: none.
 //
-// Use cases with no function yet (the code that finishes this output writes them):
+// Use cases with no function (the code that finishes this output writes them):
 // - Ship: a counted event (triggers(..).counted(k))
 // - Place: a counted event (triggers(..).counted(k))
 
@@ -288,7 +288,7 @@ export function orderRuleViolations(row: Order): readonly string[] {
  * an error and changes nothing when the use case does not run. Async: a TypeScript store is.
  */
 export type ShipUseCase = {
-  /** Runs the action Ship of Ship whole, by the ids of its rows: the generator printed no function for it (#335), so the service writes it and keeps the obligations. */
+  /** Runs the action Ship of Ship whole, by the ids of its rows: the generator prints no function for it, so the service writes it and keeps the obligations. */
   readonly runShip: (order: OrderId) => Promise<Result<void, ShipError>>;
 };
 
@@ -299,7 +299,7 @@ export type ShipUseCase = {
  * an error and changes nothing when the use case does not run. Async: a TypeScript store is.
  */
 export type PlaceUseCase = {
-  /** Runs the action Place of Place whole, by the ids of its rows: the generator printed no function for it (#335), so the service writes it and keeps the obligations. */
+  /** Runs the action Place of Place whole, by the ids of its rows: the generator prints no function for it, so the service writes it and keeps the obligations. */
   readonly runPlace: (order: OrderId) => Promise<Result<void, PlaceError>>;
 };
 

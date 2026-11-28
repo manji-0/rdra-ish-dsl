@@ -258,6 +258,9 @@ pub struct DomainModel {
     /// The conformance port: its contracts are printed whenever it is set, and the harness
     /// when [`PortDecl::harness`] says so.
     pub port: Option<PortDecl>,
+    /// Why there is no port, and so no contract, when `check` passed and it could not be
+    /// built.
+    pub no_port: Option<String>,
 }
 
 // ── Transition functions ─────────────────────────────────────────────────────
@@ -857,7 +860,7 @@ pub struct UseCaseDecl {
 pub enum UseCaseKind {
     /// Every action has functions.
     Functions,
-    /// Some action has no function yet (the vocabulary is not printed, #335).
+    /// Some action has no function (it uses vocabulary the generator does not print).
     Unprinted,
     /// It writes nothing: no action, no function, no entry point (decision 13 of
     /// docs/design/code-check.md).

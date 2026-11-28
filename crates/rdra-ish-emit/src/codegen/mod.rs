@@ -218,8 +218,7 @@ pub struct ProbeBinding {
 }
 
 /// The probe of `domain` in `lang`: one line per contract stating the service implements it,
-/// and the conformance test when the binding has one. `None` for a language with no probe
-/// printer yet, or a model with no contracts.
+/// and the conformance test when the binding has one. `None` for a model with no contracts.
 pub fn probe_for(lang: Lang, domain: &DomainModel, binding: &ProbeBinding) -> Option<probe::Probe> {
     match lang {
         Lang::Rust => rust_port::probe(domain, binding),
@@ -352,12 +351,23 @@ fn obligation_lines(domain: &DomainModel) -> Vec<String> {
     if !domain.skipped.is_empty() {
         lines.push(String::new());
         lines.push(
-            "Use cases with no function yet (the code that finishes this output writes them):"
+            "Use cases with no function (the code that finishes this output writes them):"
                 .to_string(),
         );
         for s in &domain.skipped {
             lines.push(format!("- {}: {}", s.action, s.reason));
         }
+    }
+    if let Some(why) = &domain.no_port {
+        lines.push(String::new());
+        lines.push(format!("No contracts: {why}."));
+        lines.push(
+            "The functions, rule checks and dispatchers are below; there is no contract, entry"
+                .to_string(),
+        );
+        lines.push(
+            "point, caller or conformance port, and --conformance fails on this model.".to_string(),
+        );
     }
     lines
 }
@@ -702,7 +712,8 @@ pub fn build_for(
                 conformance::claim_unimplemented(&domain, &mut names)?;
             }
             Err(e) if port => return Err(e),
-            Err(_) => {}
+            Err(CodegenError::Conformance(why)) => domain.no_port = Some(why),
+            Err(e) => domain.no_port = Some(e.to_string()),
         }
         for uc in &mut domain.usecases {
             uc.actions = built

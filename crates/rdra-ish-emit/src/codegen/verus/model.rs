@@ -432,7 +432,12 @@ pub(super) fn print(ctx: &Ctx, atoms: &Atoms) -> Result<String, Vec<String>> {
                         .then(|| format!("s.{}[p{k}]", e.snake));
                     m = format!(
                         "{m}.insert(p{k}, {})",
-                        ctx.row_after(a, k as u8, pre.as_deref(), &id)
+                        ctx.row_after(
+                            a,
+                            u8::try_from(k).expect("a param index is a `u8`, as `Effect`'s are"),
+                            pre.as_deref(),
+                            &id
+                        )
                     );
                 }
             }

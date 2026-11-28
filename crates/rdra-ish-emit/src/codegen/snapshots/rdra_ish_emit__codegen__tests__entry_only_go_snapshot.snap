@@ -18,7 +18,7 @@ expression: "generated_from(ENTRY_ONLY_SRC, \"entry_only.rdra\", Lang::Go)"
 //
 // Obligations: none.
 //
-// Use cases with no function yet (the code that finishes this output writes them):
+// Use cases with no function (the code that finishes this output writes them):
 // - Ship: a counted event (triggers(..).counted(k))
 // - Place: a counted event (triggers(..).counted(k))
 
@@ -486,16 +486,16 @@ func isDateTimeText(s string) bool {
 // ShipUseCase is the use case Ship: Ship.
 // Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *ShipError where the use case does not run, and changes nothing then.
 type ShipUseCase interface {
-	// RunShip runs the action Ship of Ship whole, by the ids of its rows: the generator printed no
-	// function for it (#335), so the service writes it and keeps the obligations.
+	// RunShip runs the action Ship of Ship whole, by the ids of its rows: the generator prints no
+	// function for it, so the service writes it and keeps the obligations.
 	RunShip(order OrderId) error
 }
 
 // PlaceUseCase is the use case Place: Place.
 // Each action is two calls: Prepare* loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching Commit* stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's <Row>Expected names. Either returns an error, a *PlaceError where the use case does not run, and changes nothing then.
 type PlaceUseCase interface {
-	// RunPlace runs the action Place of Place whole, by the ids of its rows: the generator printed no
-	// function for it (#335), so the service writes it and keeps the obligations.
+	// RunPlace runs the action Place of Place whole, by the ids of its rows: the generator prints no
+	// function for it, so the service writes it and keeps the obligations.
 	RunPlace(order OrderId) error
 }
 

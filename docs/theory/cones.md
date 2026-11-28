@@ -721,7 +721,7 @@ instances, about 3,100 moves each, none of which binds a key past slot 0;
 `::case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0` runs both on the case fold at 2
 and 3 instances, where about 1,700 of 2,800 moves bind slot 1 or 2. A bit planted false at slot 1
 fails the first, and one planted true at a present row 1 fails the second.
-`::a_triggered_param_on_a_stub_binds_in_the_extended_sub_lifecycle` runs both halves on a fold
+`::a_triggered_param_on_a_stub_binds_in_the_extended_sub_lifecycle` (main only) runs both halves on a fold
 with a `Triggered` parameter beside its key on a stub, at 1 and 2 instances, and checks that the
 reduced cone finds the cone's violation, decides what the cone decides
 (`assert_reduction_exact`), and that every reduced state's path lifts to a real path of the

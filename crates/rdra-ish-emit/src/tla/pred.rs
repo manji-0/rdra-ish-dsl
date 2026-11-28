@@ -13,7 +13,7 @@ pub(super) struct Ctx<'a> {
     /// Read the post-state (after-asserts).
     pub primed: bool,
     /// Binders already bound outside the predicate (`b0..`).
-    pub depth: u8,
+    pub depth: usize,
 }
 
 pub(super) fn at(a: At) -> String {

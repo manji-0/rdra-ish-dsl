@@ -86,8 +86,8 @@ writes `"commonjs"`: `build` then fails with `CodeCommonJs`, or `run` with a
   authenticated is the service's job. In Go, refuse a call when `CallerValid(by)` is false.
 - A use case split into transactions has one function per step, linked by run marks the
   service stores. An event a use case raises is a value the triggered use case takes.
-- A use case whose vocabulary is not printed yet gets no function; the header says why, and
-  the service writes it.
+- A use case outside the vocabulary the generator prints gets no function; the header says
+  why, and the service writes it through its entry point (`run_<action>`).
 
 ## A use case in the service
 

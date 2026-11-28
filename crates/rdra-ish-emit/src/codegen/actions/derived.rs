@@ -41,7 +41,10 @@ pub(super) fn derived_value(
     let expr = match &column.derived_expr {
         Some(DerivedExpr::Logical(expr)) => expr,
         Some(DerivedExpr::Arith(_)) => {
-            return Err("an arithmetic @derived expression is not printed yet".to_string())
+            return Err(
+                "its @derived expression is arithmetic, which the generator does not compute"
+                    .to_string(),
+            )
         }
         None => return Err("the column is not derived".to_string()),
     };

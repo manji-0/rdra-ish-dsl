@@ -183,7 +183,7 @@ fn write_verus(dir: &Path, model: &SemanticModel, domain: Option<&DomainModel>) 
                 eprintln!("  {r}");
             }
             bail!(
-                "--verus does not cover this model yet ({} reason(s) above); the ordinary output is unaffected",
+                "--verus does not cover this model ({} reason(s) above); the ordinary output is unaffected",
                 reasons.len()
             );
         }

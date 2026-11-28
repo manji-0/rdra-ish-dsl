@@ -149,7 +149,7 @@ fn a_model_outside_the_subset_is_refused_with_its_reasons() {
         assert!(!o.status.success(), "{model}: --verus accepted it");
         assert!(err.contains(reason), "{model}: no `{reason}` in\n{err}");
         assert!(
-            err.contains("--verus does not cover this model yet"),
+            err.contains("--verus does not cover this model ("),
             "{model}: {err}"
         );
         assert!(!out.join("verus").exists(), "{model}: wrote a crate");
