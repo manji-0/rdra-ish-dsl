@@ -74,8 +74,8 @@ rdra-ish codegen samples/ec-site --lang ts -o domain.ts
 | `states` | The reachable states of each entity and the state rules they break | [State derivation](./docs/state-derivation.md) |
 | `verify` | Every invariant, `after` assertion and temporal property, decided by a native checker with no JVM; `--with-tlc` cross-checks it with TLC, and `--prove` (experimental) proves state rules for any number of rows with z3 | [Formal verification](./docs/formal-verification.md) |
 | `verify --symmetry always` | Explores a cone up to instance symmetry, so larger instance counts fit in memory (experimental) | [Instance symmetry](./docs/cli-reference.md#instance-symmetry) |
-| `codegen` | Domain code in the Kamae style for TypeScript, Rust and Go: states, rows, transition functions, contracts and a conformance harness. The TypeScript types are covered by the compatibility contract; the rest is experimental | [`codegen`](./docs/cli-reference.md#codegen), [design](./docs/design/algebraic-codegen.md#generated-code-style) |
-| `check --code` | Checks that the service code is what the model generates, compiles against the contracts, and passes the conformance test (experimental) | [`check --code`](./docs/cli-reference.md#check---code) |
+| `codegen` | Domain code in the Kamae style for TypeScript, Rust and Go: states, rows, transition functions, contracts and a conformance harness. The TypeScript types are covered by the compatibility contract; the rest is experimental | [Code Generation](./docs/codegen.md), [`codegen`](./docs/cli-reference.md#codegen), [design](./docs/design/algebraic-codegen.md#generated-code-style) |
+| `check --code` | Checks that the service code is what the model generates, compiles against the contracts, and passes the conformance test (experimental) | [`check --code`](./docs/cli-reference.md#check---code), [Code Generation](./docs/codegen.md#what-the-output-guarantees) |
 | `rdra-ish-lsp` | Language server: diagnostics, completion, hover, definitions, references, rename, formatting, code lenses and semantic colors, and `check`'s lifecycle findings from a background run | [VS Code extension](./editors/vscode/) |
 | Agent skills | Skills for writing, reviewing, diagramming and verifying a model, and for implementing a service against its generated contracts | [`skills/README.md`](./skills/README.md) |
 
@@ -121,6 +121,7 @@ which goes where; [`prd.md`](./samples/clinic-ops/prd.md) and
 - [Incremental Modeling Flow](./docs/incremental-modeling.md): start here
 - [Language Reference](./docs/language-reference.md) and [CLI Reference](./docs/cli-reference.md)
 - [State Derivation](./docs/state-derivation.md) and [Formal Verification](./docs/formal-verification.md)
+- [Code Generation](./docs/codegen.md): what `codegen` writes and what `check --code` checks
 - [Compatibility](./docs/compatibility.md): what each release keeps stable
 - [Diagram Sample Review Guide](./docs/diagram-sample-review.md)
 - [Changelog](./CHANGELOG.md)
