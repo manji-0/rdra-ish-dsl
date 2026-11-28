@@ -21,7 +21,11 @@ use crate::lifecycle::trace::ReplayError;
 use crate::lifecycle::types::{ActId, Ltl, Pred};
 
 use super::graph::Adjacency;
+use super::symmetry::dropped;
 use super::{ComponentRun, Edge, PropertyVerdict};
+
+mod certify;
+pub use certify::{SearchClause, SearchFault};
 
 /// Why a lasso the search built did not certify itself: a bug in the tool, never a finding
 /// about the model.
@@ -36,6 +40,12 @@ pub enum LassoFault {
     /// A loop of a run up to instance symmetry, repeated, did not come back to its first
     /// concrete state within the copies tried (`OrbitRun::decide_liveness`).
     Unclosed,
+    /// A check's exact cone found a counterexample it does not vouch for
+    /// (`Trace::vouched`): its free triggers, and its entities past the bound.
+    Unvouched(String),
+    /// A binding's search found no counterexample, and its witness fails the certificate of
+    /// that (`liveness/certify.rs`), so the `ok` it would give is not printed.
+    Search(SearchFault),
 }
 
 const NONE: u32 = u32::MAX;
@@ -105,6 +115,8 @@ pub enum ReducedVerdict {
     Violated(Box<crate::lifecycle::diag::StateDiag>),
     /// A counterexample of the reduced graph that does not lift to one of the unreduced cone.
     Spurious(Spurious),
+    /// The search's witness of no counterexample fails its certificate: a tool bug.
+    Fault(LassoFault),
 }
 
 /// Why a counterexample of the reduced graph is not one of the unreduced cone.
@@ -130,7 +142,8 @@ impl ComponentRun {
         i: usize,
         fairness: Fairness,
     ) -> Result<PropertyVerdict, LassoFault> {
-        let Some((fair, avoid, start)) = self.liveness_search(i, StopRule::Fair(fairness)) else {
+        let found = self.liveness_search(i, StopRule::Fair(fairness));
+        let Some((fair, avoid, start)) = found.map_err(LassoFault::Search)? else {
             return Ok(match self.complete {
                 true => PropertyVerdict::Holds,
                 false => PropertyVerdict::Undecided,
@@ -170,8 +183,11 @@ impl ComponentRun {
             .iter()
             .map(|s| r.class(ts, &s).is_some_and(|c| r.can_loop(c)))
             .collect();
-        let Some((fair, avoid, start)) = self.liveness_search(i, StopRule::Looping(&looping))
-        else {
+        let found = match self.liveness_search(i, StopRule::Looping(&looping)) {
+            Ok(found) => found,
+            Err(fault) => return ReducedVerdict::Fault(LassoFault::Search(fault)),
+        };
+        let Some((fair, avoid, start)) = found else {
             return match self.complete {
                 true => ReducedVerdict::Holds,
                 false => ReducedVerdict::Undecided,
@@ -221,8 +237,16 @@ impl ComponentRun {
     }
 
     /// The search of the binding whose failing triggered state BFS found first, the first
-    /// binding on a tie, with that state; `None` when every binding holds.
-    fn liveness_search(&self, i: usize, rule: StopRule) -> Option<(FairSteps, Avoid, u32)> {
+    /// binding on a tie, with that state; `None` when every binding holds. Until a binding
+    /// finds a start, each binding's witness is held to its certificate (`search_faults`), in
+    /// every build: a fault is `Err`, and a debug or `shadow` build stops at it unless a test
+    /// planted it (`dropped("fair_components")`).
+    #[allow(clippy::type_complexity)]
+    fn liveness_search(
+        &self,
+        i: usize,
+        rule: StopRule,
+    ) -> Result<Option<(FairSteps, Avoid, u32)>, SearchFault> {
         let ts = &self.system;
         let p = &ts.properties()[i];
         let (cause, goal) = match &p.formula {
@@ -240,12 +264,22 @@ impl ComponentRun {
                     && ts.triggers(p, &b, st)
                     && cause.is_none_or(|x| ts.holds_bound(x, st, &b))
             });
+            if found.is_none() && best.is_none() {
+                let faults = self.search_faults(p, cause, goal, &b, &fair, rule, &avoid);
+                if let Some(fault) = faults.into_iter().next() {
+                    crate::shadow_assert!(
+                        dropped("fair_components"),
+                        "shadow: liveness_search({}): {fault}",
+                        p.name
+                    );
+                    return Err(fault);
+                }
+            }
             if let Some(s) = found.filter(|s| best.as_ref().is_none_or(|(at, _)| s < at)) {
                 best = Some((s, avoid));
             }
         }
-        let (start, avoid) = best?;
-        Some((fair, avoid, start))
+        Ok(best.map(|(start, avoid)| (fair, avoid, start)))
     }
 
     /// The fair instances of `properties()[i]` and where each is enabled.
@@ -341,6 +375,7 @@ impl ComponentRun {
                 let range = c * w..(c + 1) * w;
                 size[c] >= 2
                     && !open[c]
+                    && !dropped("fair_components")
                     && always[range.clone()]
                         .iter()
                         .zip(&taken[range])

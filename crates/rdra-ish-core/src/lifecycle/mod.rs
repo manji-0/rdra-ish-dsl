@@ -30,6 +30,7 @@ mod targets;
 mod trace;
 mod types;
 mod view;
+mod vouch;
 
 #[cfg(test)]
 mod tests;
@@ -44,8 +45,8 @@ pub use explore::perf_evals_line;
 pub use explore::{
     store_bytes, Adjacency, AnEdge, Caps, Checks, ComponentRun, Edge, EdgeIter, Edges, Ends,
     Estimate, Graph, Held, LabelledEdge, LabelledEdges, LassoFault, Layers, LeftOut, Listed,
-    OrbitRun, PropertyVerdict, ReducedVerdict, RunEnd, Shape, Spurious, States, StoredRun,
-    Symmetry, SymmetryRule,
+    OrbitRun, PropertyVerdict, ReducedVerdict, RunEnd, SearchClause, SearchFault, Shape, Spurious,
+    States, StoredRun, Symmetry, SymmetryRule,
 };
 pub use expr::{State, StateSlice};
 pub use findings::{

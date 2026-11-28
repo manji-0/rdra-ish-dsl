@@ -31,7 +31,7 @@ impl TransitionSystem {
                 steps.iter().map(|s| vec![s.clone()]).collect(),
             ));
         };
-        let ext = Extended::rebuild(self, r);
+        let ext = Extended::rebuild_checked(self, r).ok_or(ReplayError::Rebuilt)?;
         let mut sub = ext.system.clone();
         sub.reduction = r.inner.clone();
         // S up to `H` when the quotient was (#212 phase 2): a plain run of it stopped at the
@@ -216,6 +216,8 @@ impl TransitionSystem {
             }
             out.push(group);
         }
+        // The lifted start is an initial state of the unreduced cone, in every build.
+        crate::lifecycle::vouch::lifted_start(self, &mut out_start)?;
         Ok((out_start, out))
     }
 }

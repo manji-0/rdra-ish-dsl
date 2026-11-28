@@ -220,6 +220,7 @@ fn native_property_after(p: &PropertyJob, caps: Caps, plain: Plain) -> (Native, 
         Some(ReducedVerdict::Holds) => Some((Outcome::Ok, None)),
         Some(ReducedVerdict::Violated(d)) => Some((Outcome::Counterexample, Some(d))),
         Some(ReducedVerdict::Undecided | ReducedVerdict::Spurious(_)) | None => None,
+        Some(ReducedVerdict::Fault(fault)) => return (out.faulty(&fault), vacuous),
     };
     if let Some((second, found)) = reduced_wf {
         out.crowded = crowded_run;
@@ -433,6 +434,7 @@ fn wf_reduced_stats(
         ReducedVerdict::Undecided => "undecided".to_string(),
         ReducedVerdict::Violated(_) => "counterexample".to_string(),
         ReducedVerdict::Spurious(why) => format!("spurious-{why:?}"),
+        ReducedVerdict::Fault(_) => "tool-error".to_string(),
     };
     let d = reduced
         .reduction()
@@ -479,11 +481,15 @@ impl Native {
         self
     }
 
-    /// A counterexample that failed its own check.
+    /// A counterexample that failed its own check, or a search whose witness of no
+    /// counterexample failed its certificate.
     fn faulty(mut self, fault: &LassoFault) -> Native {
-        self.fault = Some(format!(
-            "the counterexample fails its own check ({fault:?})"
-        ));
+        self.fault = Some(match fault {
+            LassoFault::Search(why) => {
+                format!("the search's witness of no counterexample fails its certificate ({why})")
+            }
+            _ => format!("the counterexample fails its own check ({fault:?})"),
+        });
         self.decision = Decision::Decided(Outcome::ToolError);
         self.found = None;
         self

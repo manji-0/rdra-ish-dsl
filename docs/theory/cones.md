@@ -346,7 +346,9 @@ that its own mark guards read marks in `W` together with what they read. Let the
 the `Triggered` parameter and the mark guards of `a`, and Lemma 3's cases (i) and (ii) go
 through for that step. No step of `ρ` runs an action that reads a mark outside `W`. ∎ That `free_triggers` lists every step whose
 action reads a mark outside the cone (`trace.rs`) is the one fact the corollary takes from the
-code.
+code. Every build checks it on each counterexample (`vouch.rs::free_trigger_faults`): the
+marks each step's action reads are read again off its guards (`pred_reads`), without
+`mark_reads`, and a trace whose two lists differ lists both, so it stays a candidate.
 
 **Left-out marks: candidates and refinement.** A cone leaves `μ` out when some writer of `μ`
 is not taken; then `restrict_to` drops the handler's guard on `μ` and its `Triggered`
@@ -366,8 +368,11 @@ counts, as counterexample-guided refinement does (Clarke et al. 2000):
   mark is left out and, with `slots`, no slot is freed). A round without a counterexample
   decides the check: it holds when the run ended, and is undecided when a cap stopped it.
   The loop ends because each round keeps more actions or reads more variables, and the exact
-  cone bounds both. That the exact cone's counterexample is vouched for is a `debug_assert!`
-  only; it follows from `exact_target_cone`, whose own `debug_assert!`s state the same.
+  cone bounds both. That the exact cone's counterexample is vouched for follows from
+  `exact_target_cone`, and every build checks both: the exact cone reads every mark and,
+  with `slots`, counts every slot, or the whole system stands for it; and a counterexample of
+  the exact cone that is not vouched for is `Recheck::Fault`, a tool error for its check
+  (`vouch.rs::certified_exact`, `::unvouched_fault`).
 - `verify` (`cli/src/verify/bfs.rs::recheck_cones`, called before the prover reads the safety
   verdicts) and `check` (`targets.rs`, the verdict of an invariant or `after` target) recheck,
   without `slots`, each violation whose trace has a free trigger; only the vouched violations
@@ -462,7 +467,7 @@ So `count_up` always adds the effect. `count_down` also adds a `Transition` on `
 mark has `κ ∈ Rd(a)`, and no counter can be left out, even without the `is_counted` disjunct
 of (C2). Both halves are proved.
 
-*Evidence.* P-full (by reading `count_up`, `count_down`, and `plain_reads`); D: `core/tests/reduce.rs::a_counted_mark_keeps_its_raiser_and_handler_out_of_the_sub_lifecycle`, which checks the reduction's split of an entity's cone (the counter, its raiser and its handler stay in `T`), not the cone: that a cone holding `κ` holds every raiser and the handler, and that a mark guard on `κ` is exact, rest on the reading above.
+*Evidence.* P-full (by reading `count_up`, `count_down`, and `plain_reads`); R: every split a reduction uses is checked to keep each counted mark in `T` and out of the inputs, and every action that writes one, its raisers and its handler, in `T_a` (`reduce/lemma5.rs::split_faults`, `Clause::Counter`), or the cone is decided unreduced; D: `core/tests/reduce.rs::a_counted_mark_keeps_its_raiser_and_handler_out_of_the_sub_lifecycle`, which checks the reduction's split of an entity's cone (the counter, its raiser and its handler stay in `T`), not the cone: that a cone holding `κ` holds every raiser and the handler, and that a mark guard on `κ` is exact, rest on the reading above.
 
 **Proposition A27 (covered cones).** `ok (checked in Cone_X)` (D23) is printed for a safety cone
 `C_s = T|W_s` when `cli/src/verify/tlc.rs::Covered::covers` holds against a cone `C_ℓ = T|W_ℓ` that
@@ -817,7 +822,11 @@ as `proofs/lean/RdraIsh/Restrict.lean` models them:
 
 It takes these facts of every action `a`, the sixteen fields of `Restrict.lean::Lemma6Hyp`. The
 last column says how the code meets each one: R and M as in the claims inventory, and "read"
-for a reading of the code that this section gives and nothing checks.
+for a reading of the code that this section gives and nothing checks. The R of `reduce/lemma6hyp.rs::lemma6_faults` is for `FoldKey::Param`
+folds and single bits; for node folds and groups of folds sharing a bit, the fold fields are
+the readings below. That check reads the actions' syntax afresh (what a guard or an effect
+names, the `T` parameters, which parameters and guards `restrict_to` keeps), not `fold_of`'s
+or `restrict_to`'s bookkeeping, and it reads `X`'s own guards and initial states.
 
 | Field | Fact | How the code meets it |
 |---|---|---|
@@ -826,16 +835,16 @@ for a reading of the code that this section gives and nothing checks.
 | `reads` | Lemma 5 (c), with a fold's reads those of `Fold::reads` | R: `split_faults` checks (c) with `Fold::reads` |
 | `shape` | `a`'s guard is its role conjuncts followed by its other conjuncts `og` | M: proved for the slot model (`SymActModel.lean::shape`); R: every build checks that each role binds what `Rows.cand` says (`ParamRole::binds_exists`, `build/syntax.rs`); that `candidate_slots` applies it before the guards is read |
 | `new_writes` | a `New` parameter's entity's existence is in `Wr(a)` | M: proved for the slot model under `Built` (`SymActModel.lean::new_writes`); R: every build checks that each `New` parameter of the built system has its `Create` (`build/syntax.rs`), and a restriction keeps a `New` parameter only with its entity's existence, so with its `Create` |
-| `kept_rd` | a conjunct `X` keeps reads only `S_v ∪ inputs` | read: `restrict_to` keeps a guard only when it reads `S_v ∪ inputs` (P2) |
-| `cover` | every conjunct in `og` of an `S_a` action is kept or folded | R in part: a guard `fold_of` does not fold is read raw (`raw_reads`), and `split_faults` checks that every `T_v` variable an `S_a` action reads raw is an input, so the guard reads `S_v ∪ inputs`. Read: it names no `T` parameter but the key (`fold_of`), which `StubCheck` checks `restrict_to` keeps, and no other dropped parameter (the tables of "Parameters"), so `restrict_to` keeps it |
-| `rise_eff` | a `T_a` action's value on an input depends only on `S_v ∪ inputs` | read: step (c) below |
+| `kept_rd` | a conjunct `X` keeps reads only `S_v ∪ inputs` | R: every guard of every action of `X` but a fold's bit guard reads only `X`'s first variables, `S_v ∪ inputs` (`reduce/lemma6hyp.rs::lemma6_faults`); `restrict_to` keeps a guard only when it reads `S_v ∪ inputs` (P2) |
+| `cover` | every conjunct in `og` of an `S_a` action is kept or folded | R: every guard of an `S_a` action outside its fold reads only `S_v ∪ inputs` and names only parameters `restrict_to` keeps (`keepsP`), so the restriction's rule keeps it, and every action of `X` has as many parameters and guards as that rule keeps (`reduce/lemma6hyp.rs::lemma6_faults`); `split_faults` checks the reads too, through `raw_reads`. The tie to `X` is a count: a guard `X` reads in place of another can only add steps, which the replay of every counterexample rejects (N16) |
+| `rise_eff` | a `T_a` action's value on an input depends only on `S_v ∪ inputs` | R: a transition's source, a tick's clock and a copy's reads, for every effect or copy onto an input, lie in `S_v ∪ inputs` (`reduce/lemma6hyp.rs::lemma6_faults`); step (c) below says why the other effects read nothing |
 | `fold_sa` | a fold is of an `S_a` action | R: `split_faults` |
-| `folded_og` | a fold's folded guards are guards of its action | read: `fold_of` collects them from the action's guards |
+| `folded_og` | a fold's folded guards are guards of its action | R: each is an index into its action's guards (`reduce/lemma6hyp.rs::lemma6_faults`) |
 | `exact` | the bit at slot `c` holds at `t` iff some binding with the key at `c` puts each `T` parameter whose role needs a present row on one and makes every folded guard true; stated for every slot number, where the code has bits for the key entity's slots alone | read: step (a) below; M: `Twin::FoldHolds` checks `holds_fast` against its reference |
-| `folded_names` | the folded guards depend only on the slots of the `T` parameters and the key | read: `fold_of`'s `s_keys` (step (a), point 3) |
-| `other_names` | no other guard depends on a free `T` parameter's slot | read: `fold_of` gives up on any other guard that names a `T` parameter, unless it is the link `v[k] = Index(p)`, and then `p` is the key |
-| `eff_names` | no effect depends on a free `T` parameter's slot | read: `fold_of`'s `touched_t`: the one `T` parameter an effect may reference is the key |
-| `eff_s` | a folded action's effect on `Wr(a)` depends only on `S_v ∪ inputs` | read: its effects write `S_v` (Lemma 5 (a)) from a literal, a slot, the variable's own value or a listed choice, the forms of step (c) |
+| `folded_names` | the folded guards depend only on the slots of the `T` parameters and the key | R: a folded guard names only the action's `T` parameters, recomputed from `S_v`, and the key, and no folded guard reads a successor (`reduce/lemma6hyp.rs::lemma6_faults`, `Lemma6Syntax.lean::FoldSpec` `folded`, `no_next`) |
+| `other_names` | no other guard depends on a free `T` parameter's slot | R: no other guard of a folded action names a `T` parameter but the key (`reduce/lemma6hyp.rs::lemma6_faults`); `fold_of` gives up on any other guard that names a `T` parameter, unless it is the link `v[k] = Index(p)`, and then `p` is the key |
+| `eff_names` | no effect depends on a free `T` parameter's slot | R: no effect of a folded action names a `T` parameter but the key (`reduce/lemma6hyp.rs::lemma6_faults`, after `effPs`) |
+| `eff_s` | a folded action's effect on `Wr(a)` depends only on `S_v ∪ inputs` | R: a transition's source, a tick's clock and a copy's reads lie in `S_v ∪ inputs` (`reduce/lemma6hyp.rs::lemma6_faults`); its other effects write a literal, a slot or a listed choice, the forms of step (c) |
 | `bind` | `bind_stub_params` runs | R: `extended.rs::StubCheck` checks the built `X` against it |
 
 D for all of them at once: `reduce/lemma6.rs::check` and `lemma6_steps_hold` check the lemma
@@ -929,7 +938,10 @@ and a rise keeps `S` (`extended`). Items 1 to 4 are the hypotheses `Lemma6Fwd`, 
 *The parts of the code the proof does not model.* Each has its own argument, except the nested
 case.
 
-- *Initial states.* `X` is `restrict_to(S_v ∪ inputs)` of `C` with the bit variables added.
+- *Initial states.* Every build checks that `X`'s initial states are exactly the projections
+  of `C`'s onto `S_v ∪ inputs`, each bit at the disjunction of its group's `Fold::holds` at
+  that state of `C`, the stubs left out (`reduce/lemma6hyp.rs::lemma6_faults`). Why the code builds them so:
+  `X` is `restrict_to(S_v ∪ inputs)` of `C` with the bit variables added.
   `restrict_to` keeps each kept variable's declaration with its start and base, and `C`'s
   initial states are a product over components, so their projection onto `S_v ∪ inputs` is
   `X`'s initial states without the bits (Lemma 2's proof). `split_with` keeps a fold only when
@@ -1413,7 +1425,12 @@ reduction uses it, with `reference::stable`: (B1) every block lies inside one bl
 labels the partition starts from; (B2) one sweep of `stuttering_blocks` with every block a
 splitter splits nothing; (B3) every state of a block enters by a rise the same set of blocks as
 the block's first state. A partition that fails is reported as a tool bug on stderr and replaced
-by the sweeps' partition. So (B1)–(B3) hold of every partition a reduction uses.
+by the sweeps' partition, which must pass `stable` too and a second reading of (B2),
+`reference::marking_splits_nothing`: for each splitter it marks the states by the two rules of
+`Sweep.lean::Marked` alone, without `stuttering_blocks`, and checks that the marked set is closed
+under them and holds all or none of each block, which gives (B2) by `Sweep.lean::b2_of_marking`.
+A fallback that fails decides the cone unreduced. So (B1)–(B3) hold of every partition a
+reduction uses.
 
 **Proposition (the certificate gives (B1)–(B3)).** Let the run be complete: its states are the
 reachable states of a flat `X`, numbered, its silent edges and rises are exactly `X`'s between
@@ -1437,14 +1454,16 @@ A `Stable` partition passes the check when the labels are exactly the values of 
 input bytes (`Sweep.lean::cert_of_stable`).
 `Sweep.lean::check_sound` proves a Boolean checker over the run's lists sound for the same
 check. Read from the code and not proved: that the depth-first marking of `stuttering_blocks`
-computes the marked set, that the run is `X`'s reachable graph, and that the sweeps'
-fallback partition meets the check when they stop (its last sweep and its last pass over the
-rises split nothing).
+computes the marked set, for the worklist's partition (the fallback is certified by
+`marking_splits_nothing` too, and a debug or `shadow` build holds every certified partition to
+it), and that the run is `X`'s reachable graph.
 Coarseness is not certified and is not needed: a finer stable partition is still a
 bisimulation. Evidence: `reduce/partition.rs::the_stability_certificate_rejects_a_partition_that_is_not_stable`
 (a partition that mixes labels, one where a block's states reach different blocks silently, one
 where they rise into different blocks, and a silent cycle without an exit beside a state that
-leaves) and the random-graph test below, which also certifies every worklist partition it builds.
+leaves), `::the_marking_rejects_a_partition_a_sweep_splits` (the same for the second reading),
+`::a_fallback_partition_that_fails_its_certificate_leaves_the_cone_unreduced`, and the
+random-graph test below, which also certifies every worklist partition it builds.
 
 **A9 to A14 and A16, A17.**
 
@@ -1522,8 +1541,9 @@ the tests count one cone's cells and keep a cone below the budget, and none make
   path behind it is `NoMove` too: `reduce/partition.rs::Succ::shortest_path` returns `None` (test
   `core/tests/reduce.rs::a_class_move_with_no_s_path_is_a_replay_error`, which forges a move
   back to the class just left). The lifted start state is built from the run's initial state
-  and an initial `S` state of its class, and is not itself checked against the unreduced cone's
-  initial states. What still panics on the lift's way, `lift_stop`'s `expect`s among it, is
+  and an initial `S` state of its class, and `lift` checks it against the unreduced cone's
+  initial states in every build (`vouch.rs::lifted_start`); one that is not one is
+  `ReplayError::NotInitial`. What still panics on the lift's way, `lift_stop`'s `expect`s among it, is
   listed with the reason each holds in the
   [claims inventory](./claims.md#panics-left-on-a-lifts-way).
 - **A17** (the cache): the cached quotient is keyed by the extended system, the caps, and the group;
@@ -2437,10 +2457,11 @@ Evidence: none beyond the reading of `escalate` and the guide.
 - **Partition and Lemma 6.** A8, A15, and every reduced cone's verdict rest on (B1)–(B3), which
   every build certifies on the partition it uses (that the check gives (B1)–(B3) is proved in
   Lean over a model of it, `proofs/lean/RdraIsh/Sweep.lean::stable_of_cert`, given that the
-  run is `X`'s reachable graph and that `stuttering_blocks` marks what the model marks); and
-  on Lemma 6, proved step by step and in Lean from the sixteen fields of `Lemma6Hyp`, of which
-  `kept_rd`, `rise_eff`, `folded_og`, `exact`, `folded_names`, `other_names`, `eff_names`,
-  `eff_s` and half of `cover` are read from the code and checked by no run, and the part of
+  run is `X`'s reachable graph and that `stuttering_blocks` marks what the model marks, which a
+  second marking checks on the fallback partition); and on Lemma 6, proved step by step and in
+  Lean from the sixteen fields of `Lemma6Hyp`, of which `exact` is read from the code and
+  checked by no run, the syntactic fields are checked in every build for `FoldKey::Param` folds
+  (`reduce/lemma6hyp.rs::lemma6_faults`) and read for node folds and bit groups, and the part of
   `local_`, `shape` and `new_writes` that ties the slot model to the code's actions is read too.
   The nested case of Lemma 6 and Theorem A8 is sketched. Its fold half is checked against the cone's step relation on the
   domain samples and the built models only; its parameter matrix is checked cell by cell on
@@ -2460,9 +2481,9 @@ Evidence: none beyond the reading of `escalate` and the guide.
   module TLC reads independently of the reduction.
 - **Hypotheses checked per trace and per cone.** A check's cone may leave a mark out: its `ok`
   is sound by Theorem A2, and its counterexample counts only once vouched for (Corollary A28′),
-  after the refinement of `recheck_on` where needed. That `free_triggers` lists every step that
-  runs an action reading a mark outside the cone is a reading, not tested on its own, and that
-  the exact cone's counterexample is vouched for is a `debug_assert!` only. A finding a cone
+  after the refinement of `recheck_on` where needed. Every build checks that `free_triggers`
+  lists every step that runs an action reading a mark outside the cone, against the steps'
+  guards, and that the exact cone's counterexample is vouched for (`vouch.rs`). A finding a cone
   fails to report has no trace, so a per-trace check never sees it; entity cones are exact for
   marks per cone instead.
 - **Symmetry hypothesis (G6).** `Rule::AbsentOwner` enforces it for a guard's pre-state read

@@ -25,7 +25,7 @@ const DOMAIN_SAMPLES: &[&str] = &[
 /// A gate with an unobserved latch, a key behind it, and a card behind the key; a job starts
 /// only at an open gate. The job's cone reduces the gate, whose own cone reduces the key, in
 /// which the card is folded away.
-const GATE: &str = r#"
+pub(super) const GATE: &str = r#"
 entity Card "札" { id: Int @pk  status: Enum(blank, issued) @default(blank) }
 entity Key "鍵" { id: Int @pk  status: Enum(locked, unlocked) @default(locked) }
 usecase Issue "札を出す"
@@ -2630,6 +2630,51 @@ fn no_extended_sub_lifecycle_leaves_a_param_on_a_stub() {
     assert!(
         built > 0 && rebound > 0,
         "{built} built, {rebound} params rebound"
+    );
+}
+
+/// The extended sub-lifecycle `reduced_with` builds passes the check of Lemma 6's syntactic
+/// hypotheses (`reduce/lemma6hyp.rs`) on the samples, the domain samples, and the engine corpus
+/// cases that build a model: for every target and property cone, with and without the inputs
+/// of S. The counts show the check read `Param` folds, folds with a free `T` param, rises'
+/// effects on an input, and initial states. Only the top level is walked here; a nested one,
+/// built in `Classes::of`, goes through the same check in every run, which a debug or `shadow`
+/// build turns into a panic.
+#[test]
+fn every_extended_sub_lifecycle_meets_lemma_6s_syntactic_hypotheses() {
+    let (mut built, mut actions, mut folds, mut free, mut rises, mut initial) = (0, 0, 0, 0, 0, 0);
+    for (name, model) in &walked_models() {
+        for bounds in [Bounds::STATES, Bounds::VERIFY] {
+            let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+            for (cone, seed) in cones_with_seeds(&ts) {
+                let (sys, local) = ts.cone_system(&cone, [seed]);
+                for inputs in [true, false] {
+                    let Some((seen, faults)) = sys.lemma6_check(&local, inputs) else {
+                        continue;
+                    };
+                    assert!(
+                        faults.is_empty(),
+                        "{name}: a cone of {:?}: {faults:?}",
+                        cone.vars
+                    );
+                    built += 1;
+                    actions += seen.actions;
+                    folds += seen.param_folds;
+                    free += seen.free;
+                    rises += seen.rise_effects;
+                    initial += seen.initial;
+                }
+            }
+        }
+    }
+    eprintln!(
+        "{built} built: {actions} actions, {folds} param folds ({free} with a free T param), \
+         {rises} rise effects, {initial} initial states"
+    );
+    assert!(
+        built > 0 && actions > 0 && folds > 0 && free > 0 && rises > 0 && initial > 0,
+        "{built} built: {actions} actions, {folds} param folds ({free} free), {rises} rises, \
+         {initial} initial states"
     );
 }
 

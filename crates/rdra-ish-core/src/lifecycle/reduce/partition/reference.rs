@@ -4,7 +4,9 @@
 //! compute to it, and the random graphs of `the_worklist_partition_is_the_partition_of_
 //! repeated_sweeps`. A `shadow` build holds the quotients of up to `SHADOW_CAP` states.
 //! Every build certifies the worklist's partition (`stable`) and falls back to the sweeps
-//! when the certificate fails (claims A8, A9 of docs/theory/claims.md).
+//! when the certificate fails, and certifies the sweeps' partition the same way, with a
+//! marking of its own besides (`marking_splits_nothing`); a fallback that fails too leaves the
+//! cone unreduced (claims A8, A9 of docs/theory/claims.md).
 
 use crate::lifecycle::narrow::id32;
 use std::collections::{BTreeSet, HashMap};
@@ -82,6 +84,87 @@ pub(in crate::lifecycle::reduce) fn stable(
     })
 }
 
+/// Whether one sweep with every block of `blocks` as a splitter splits nothing, decided
+/// without `stuttering_blocks` (`Sweep.lean`, `b2_of_marking`). For each splitter it marks the
+/// states `Marked` holds by its two rules alone, so the set lies inside `Marked`: a state
+/// outside the splitter with a silent edge into it, and a silent predecessor in its own block
+/// of a marked state, self-loops left out. It then checks that the set is closed under the two
+/// rules (`closedB`, on the edges either rule can apply to: those into the splitter and those
+/// into a marked state) and holds every state of a block or none. `stable` reads the same fact
+/// off `stuttering_blocks`; this is the second reading, for a partition whose first one is not
+/// trusted.
+pub(in crate::lifecycle::reduce) fn marking_splits_nothing(
+    n: usize,
+    silent: &[(u32, u32)],
+    blocks: &[u32],
+) -> bool {
+    if blocks.len() != n
+        || silent
+            .iter()
+            .any(|&(a, b)| a as usize >= n || b as usize >= n)
+    {
+        return false;
+    }
+    let nb = blocks.iter().max().map_or(0, |b| *b as usize + 1);
+    let mut members: Vec<Vec<u32>> = vec![Vec::new(); nb];
+    for (i, b) in blocks.iter().enumerate() {
+        members[*b as usize].push(id32(i));
+    }
+    let back: Vec<(u32, u32)> = (silent.iter())
+        .filter(|(a, b)| a != b)
+        .map(|&(a, b)| (b, a))
+        .collect();
+    let pred = Adj::new(n, &back);
+    let blk = |x: u32| blocks[x as usize];
+    let mut marked = vec![false; n];
+    let mut count = vec![0usize; nb];
+    let mut list: Vec<u32> = Vec::new();
+    for sp in (0..nb).map(id32) {
+        list.clear();
+        for &t in &members[sp as usize] {
+            for &p in pred.of(t) {
+                if blk(p) != sp && !marked[p as usize] {
+                    marked[p as usize] = true;
+                    list.push(p);
+                }
+            }
+        }
+        let mut i = 0;
+        while let Some(&x) = list.get(i) {
+            i += 1;
+            for &p in pred.of(x) {
+                if blk(p) == blk(x) && !marked[p as usize] {
+                    marked[p as usize] = true;
+                    list.push(p);
+                }
+            }
+        }
+        let front = (members[sp as usize].iter()).all(|&t| {
+            pred.of(t)
+                .iter()
+                .all(|&p| blk(p) == sp || marked[p as usize])
+        });
+        let back = (list.iter()).all(|&x| {
+            pred.of(x)
+                .iter()
+                .all(|&p| blk(p) != blk(x) || marked[p as usize])
+        });
+        for &x in &list {
+            count[blk(x) as usize] += 1;
+        }
+        let whole =
+            (list.iter()).all(|&x| count[blk(x) as usize] == members[blk(x) as usize].len());
+        for &x in &list {
+            count[blk(x) as usize] = 0;
+            marked[x as usize] = false;
+        }
+        if !(front && back && whole) {
+            return false;
+        }
+    }
+    true
+}
+
 /// Holds `blocks`, what `quotient_blocks` returned for these arguments, to the sweeps, and
 /// panics naming the call when the two partitions differ beyond the numbering of blocks.
 #[cfg(any(test, feature = "shadow"))]
@@ -98,6 +181,11 @@ pub(super) fn check(
         return;
     }
     let want = quotient_blocks(n, silent, rises, initial);
+    assert!(
+        marking_splits_nothing(n, silent, blocks),
+        "shadow: quotient_blocks({n} states): a sweep of its {} blocks splits one, by a marking of its own",
+        distinct(blocks)
+    );
     assert!(
         same_partition(blocks, &want),
         "shadow: quotient_blocks({n} states, {} silent edges, {} rises): the worklist's {} blocks are not the reference's {}",

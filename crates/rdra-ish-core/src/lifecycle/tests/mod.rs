@@ -43,6 +43,7 @@ mod tx_groups;
 mod unique_sets;
 mod unjoined_writes;
 mod vacuous;
+mod vouch;
 mod witness;
 
 use super::{

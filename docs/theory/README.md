@@ -171,8 +171,22 @@ Every run, in every build:
   (`cone_check.rs`, A1);
 - panics on an edge number past `u32` instead of wrapping it (`core/explore/edges.rs::edge_number`,
   and the orbit self-edge index of `core/explore/bfs.rs::Bfs::take`, N1);
+- checks the split of a reduced cone against Lemma 5 and the counted rule
+  (`reduce/lemma5.rs::split_faults`, A8, A12, A3) and the extended sub-lifecycle against
+  the syntactic fields of `Lemma6Hyp` and its initial states
+  (`reduce/lemma6hyp.rs::lemma6_faults`, A8, A11), and decides the cone unreduced on a
+  fault;
 - certifies the stability of the reduction's partition and falls back to the sweeps'
-  partition when the certificate fails (`partition/reference.rs::stable`, A8);
+  partition when the certificate fails, which it certifies the same way and by a marking of
+  its own, or decides the cone unreduced (`partition/reference.rs::stable`,
+  `::marking_splits_nothing`, A8, A9);
+- lifts a reduced trace only through an extended sub-lifecycle that rebuilds as it was
+  built (`Extended::rebuild_checked`, N16);
+- holds every liveness search that finds no counterexample for a binding to N9's criterion
+  on the recorded graph (its components, fair flags, stops and backward walk, with `N`
+  re-derived from the goal), and stops as a tool error when the witness fails, so no `ok`
+  or `not decided` prints (`explore/liveness/certify.rs::ComponentRun::search_faults`, N9,
+  N10); the run up to instance symmetry is not checked;
 - refuses to prove anything from an unsatisfiable premise (`prove/mod.rs::premise`, B2);
 - uses a cached certificate only after it re-checks (B15);
 - with TLC, replays every TLC trace through BFS's step relation (T2).
@@ -208,7 +222,11 @@ documents arrive at them from their own side.
    hand-written expectations, such as the engine corpus's `expect` lines, see such a fault,
    and only on the models they name (T7).
 2. **No run-time check of an `ok` or a `proved` as such.** A counterexample is checked
-   before it prints (N16); an `ok` and a `proved` are not. The causes of a wrong one that
+   before it prints (N16); a `proved` and a safety `ok` are not. A liveness `ok` of a plain
+   run is: every run holds the search's witness to N9's criterion on the recorded graph. That
+   check shares the run's states and edges, the goal, trigger and cause predicates, and the
+   fair instances with the search, so a fault in those still passes it, and a liveness `ok`
+   up to instance symmetry is not checked. The causes of a wrong one that
    are known are refused or checked in every run (see
    [What every run checks](#what-every-run-checks)). A fault of another kind that gives a
    wrong `ok` or `proved` passes unnoticed in the run. The evidence against it is offline:
@@ -244,23 +262,25 @@ not a bound on what exists.
 
 - **A1.** A release build does not check that a step changes only the variables `Wr(a)`
   names; debug and `shadow` builds do. No Kani harness proves it.
-- **A2.** That `Trace::free_triggers` lists every step that runs an action reading a mark
-  outside the cone is a reading of the code, with no test of its own; that the exact cone's
-  counterexample is vouched for is a `debug_assert!` only.
+- **A2.** The check of a counterexample's free triggers shares `pred_reads`, the look-up of
+  a step's action by name and the use case's name with the list it checks. That every caller
+  that reads `Trace::vouched` annotates the trace first is a reading of the code. No walked
+  sample or corpus model has a check whose cone counterexample runs a use case without its
+  event.
 - **A5.** Parts 1 and 3 rest on A8 and A15: on a nested reduction or one run up to `H` on
   their sketched part, and on a flat one on the facts of `Lemma6Hyp` read from the code (A8).
 - **A6.** Rests on A8: its nested case and the run up to `H` are sketched, and its flat case rests on the facts of
   `Lemma6Hyp` read from the code.
-- **A8.** Lemma 6 is proved from the sixteen fields of `Lemma6Hyp`, and eight of them
-  (`kept_rd`, `folded_og`, `folded_names`, `other_names`, `eff_names`, `exact`, `rise_eff`,
-  `eff_s`), with the half of `cover` that says what an unfolded guard names, are read from
-  the code with no run-time check; that the code's actions
+- **A8.** Lemma 6 is proved from the sixteen fields of `Lemma6Hyp`, and one of them,
+  `exact`, is read from the code with no run-time check; for node folds and groups of folds
+  sharing a bit, the syntactic fields are read too, and the check's tie of `cover` to `X`
+  counts guards rather than matching each one. That the code's actions
   are the slot syntax over which `local_`, `shape` and `new_writes` are proved is checked
   in every build for `WF` and `Built`, while that `candidate_slots` filters by role before
   any guard, and takes the lowest absent slot for `New`, and that `each_successor` executes
   the syntax as the Lean semantics does, are read.
-  The Lean model has one bit per fold, no node fold, the cone's parameter positions and `X`'s
-  initial states as projections; cones.md argues those parts on paper. The nested case (the
+  The Lean model has one bit per fold, no node fold, and the cone's parameter positions;
+  cones.md argues those parts on paper. The nested case (the
   induction over the depth, the outer representative and class moves read on the inner run)
   and a run of `S` up to `H` are sketched. Lemma 6 is checked step by step only on the cones the tests explore unreduced,
   with code the check shares. TLC checks the reduction step by step on the corpus's reduced
@@ -283,8 +303,9 @@ not a bound on what exists.
   unobserved class as the partition by input bytes are sketched.
 - **A16.** No test reaches most of the lift's look-up faults (a class with no initial S state,
   an S path up to `H` that starts elsewhere, a rise or a target with no block, an S action
-  that is not the cone's, `Length`). The lifted start is not checked against the unreduced
-  cone's initial states. The panics left on a lift's way stop the run.
+  that is not the cone's, `Length`). The test of the lifted start restates the initial-state
+  definition. A lasso whose lift fails it is spurious, and the property is decided on the
+  unreduced cone with no tool error in a release build. The panics left on a lift's way stop the run.
 - **A18.** No Kani harness proves the canonical form invariant under the group; it rests on an
   exhaustive unit test and the `Canonical` twin. The `g6.rs` test has no `always` or
   `unchanged`. The build checks `WF` and the builder's two facts on the whole system, and a
@@ -319,15 +340,15 @@ not a bound on what exists.
 
 **Proofs with z3**
 
-- **B1.** `Enc::compare` re-implements `expr.rs::compare` and is tied to it by reading and
-  differential tests only; under `core/prove/` only `Enc::one_of` has a Kani harness, and no
-  code has a twin.
+- **B1.** Every proof checks `Enc::compare` against `expr.rs::compare` at the run's bounds
+  only; the rest of the encoding is tied to the native step by reading and differential tests,
+  under `core/prove/` only `Enc::one_of` has a Kani harness, and no code has a twin.
   `proof_equivalence` skips 130 comparisons on the samples. The header of
   `z3_guarded_null_beside_present` says BFS breaks its rule at `--int-range-max 6`, which no
   test runs.
-- **B2.** Nothing checks at run time that a bound in a proof's printed `--int-range-max` range
-  builds the same system; Lemma U is a reading of the code, checked by the reference
-  interpreter on its subset.
+- **B2.** A proof compares with its own system only the builds its printed `--int-range-max`
+  range was found by, the two ends among them; between them Lemma U is a reading of the code,
+  checked by the reference interpreter on its subset.
 - **B6.** Step pruning has no test; that a step changes only `Wr(a)` is checked in debug and
   `shadow` builds only.
 - **B7.** No test checks that an unstateable rule is `out of scope`, that a guard is dropped or
@@ -339,7 +360,8 @@ not a bound on what exists.
 - **B14.** Independence from the solver count is empirical.
 - **B16.** The checks z3 gives up on by itself are counted, not asserted. A wrong `proved`
   turns a cone stopped at the memory limit into a wrong `ok`, and no run-time check sees it
-  (residual risk 2).
+  (residual risk 2). The check of the kept lemmas runs in tests only, not on users' runs, and
+  reads only the states the miner's cones reach.
 - **B18.** No test asserts that `proved` covers state rules only.
 
 **The native verifier**
@@ -351,10 +373,12 @@ not a bound on what exists.
 - **N8.** TLC cannot state `can_reach`. The naive oracle shares the step relation and the
   evaluator, and does not cover entity cones up to symmetry. That the reported state is the
   first in BFS order rests on the proof alone.
-- **N9.** The Lean proof states the acceptance criterion, not `avoid`'s code: Tarjan's
-  components, the bit sets, the choice of binding and start, and N10's cut are read from the
+- **N9.** The Lean proof states the acceptance criterion, not `avoid`'s code, and the
+  run-time certificate's argument is on paper; what the certificate shares with the search
+  (the run's graph, the predicates, `fair_steps`, `expanded`) and the choice of binding and
+  start are read from the code.
+- **N10.** No Lean theorem covers a stopped graph: the value of `expanded` is read from the
   code.
-- **N10.** No Lean theorem covers a stopped graph: the cut at `expanded` is read from the code.
 - **N11.** The lasso checks share code with the search they certify (`moves` and
   `Property::fair_instance`; `holds_bound` and `triggers`), so a fault there passes both.
 - **N13.** The second half of `a_path_that_does_not_replay_is_a_fault` never runs.
@@ -362,8 +386,9 @@ not a bound on what exists.
   reading (T6).
 - **N16.** No test drives `trace_violations` with a stored path that fails to replay. The
   internal invariants of [Panics left on a lift's way](./claims.md#panics-left-on-a-lifts-way)
-  are unchecked; among them, that `Extended::rebuild` reproduces `Extended::of` is not
-  checked, and that every restriction that keeps `Tick` keeps `now` is not argued.
+  are unchecked, but for two: a lift and a class table hold `Extended::rebuild` to a digest
+  of the build the reduction made, and every restriction asserts that it keeps `now` with a
+  `Tick`.
 - **N17.** As N4: the output's independence from `RDRA_JOBS` has the same open items.
 
 **Agreement with TLC**
@@ -374,7 +399,8 @@ not a bound on what exists.
   roots shares its variables with an invariant's cone, and so meets TLC there, is open.
 - **T6.** TLC's deadlock check is one-sided.
 - **T7.** Each corpus header checks only the model it names.
-- **T8.** A wrong `ok` is not checked at run time (residual risk 2).
+- **T8.** A wrong safety `ok`, or a liveness `ok` up to instance symmetry, is not checked at
+  run time (residual risk 2).
 - **T9.** The random-model comparison is no required check (Process, below).
 - **T11.** Batch JVMs are compared with processes only on cones of at most 5,000 states, and
   in no required check.
