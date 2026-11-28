@@ -404,7 +404,7 @@ pub fn run(
     }
     // A rule the proof left unproved and BFS passed is checked again at more instances, on
     // its own cone (#421); a counterexample there is an error.
-    let escalated = match &proof {
+    let (escalated, escalated_faults) = match &proof {
         Some(run) => escalate::escalate(
             (program, model),
             (&ts, &ts.bounds, scope),
@@ -412,7 +412,7 @@ pub fn run(
             &run.unproved,
             caps,
         ),
-        None => 0,
+        None => (0, 0),
     };
     let mut end = End {
         bfs,
@@ -424,6 +424,7 @@ pub fn run(
         proof: proof.map(|run| run.tally),
         escalated,
     };
+    end.bfs.trace_faults += escalated_faults;
 
     let mut index = match written {
         Some(written) => Some(written?),

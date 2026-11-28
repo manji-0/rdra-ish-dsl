@@ -592,7 +592,7 @@ impl BfsCone {
         let vouched = found.iter().filter(|d| vouched(d));
         let rechecked = rechecks.iter().filter_map(|(_, r)| match r {
             Recheck::Violated(d) => Some(&**d),
-            Recheck::Holds | Recheck::Undecided(_) => None,
+            Recheck::Holds | Recheck::Undecided(_) | Recheck::Fault(_) => None,
         });
         vouched.chain(rechecked)
     }
@@ -627,6 +627,7 @@ impl BfsCone {
                         Recheck::Undecided(_) => {
                             "not decided (stopped at the state cap or the memory limit)"
                         }
+                        Recheck::Fault(_) => "tool error",
                     };
                     line.push_str(&format!(
                         "\n  note: {name}: the cone's counterexample is a candidate only, since it runs a use case without its event having been raised; on the cone refined with the event's raisers: {on_exact}"
@@ -703,7 +704,10 @@ pub(super) fn recheck_cones(
         let (
             JobKind::Cone(_),
             Some(BfsCone::Ran {
-                found, rechecks, ..
+                found,
+                rechecks,
+                faults,
+                ..
             }),
         ) = (&job.kind, cone)
         else {
@@ -722,6 +726,11 @@ pub(super) fn recheck_cones(
                     r
                 }
             };
+            // An exact cone that does not vouch for its counterexample (claim A2) makes the
+            // cone a tool error, reported with the faults of its lift.
+            if let Recheck::Fault(d) = &recheck {
+                faults.push((**d).clone());
+            }
             rechecks.push((name, recheck));
         }
     }

@@ -30,6 +30,7 @@ mod targets;
 mod trace;
 mod types;
 mod view;
+mod vouch;
 
 #[cfg(test)]
 mod tests;

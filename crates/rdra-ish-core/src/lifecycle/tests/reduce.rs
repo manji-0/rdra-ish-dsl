@@ -25,7 +25,7 @@ const DOMAIN_SAMPLES: &[&str] = &[
 /// A gate with an unobserved latch, a key behind it, and a card behind the key; a job starts
 /// only at an open gate. The job's cone reduces the gate, whose own cone reduces the key, in
 /// which the card is folded away.
-const GATE: &str = r#"
+pub(super) const GATE: &str = r#"
 entity Card "札" { id: Int @pk  status: Enum(blank, issued) @default(blank) }
 entity Key "鍵" { id: Int @pk  status: Enum(locked, unlocked) @default(locked) }
 usecase Issue "札を出す"
