@@ -1866,7 +1866,8 @@ fn lemma6_steps_hold(models: &[(&str, SemanticModel)], bounds: &[Bounds]) -> Ste
 /// The cells of the parameter matrix of Lemma 6 (docs/theory/cones.md, "Parameters") that
 /// cannot occur, each for the reason the matrix gives: an S action's `New` or `Earlier` row
 /// on T writes T; an unfolded S action reads the existence of every T row it binds, so no
-/// such row is on a stub or dropped; a node fold's row is on an input or a stub; a key is
+/// such row is on a stub or dropped; a fold whose key the restriction would drop stays
+/// unfolded (`Fold::key_kept`), and a node fold's row is on an input or a stub; a key is
 /// never a `New` row; a rise writes no S, so it has no `New` or `Earlier` row
 /// on S.
 fn impossible_cell(cell: &ParamCell) -> bool {
@@ -1874,7 +1875,8 @@ fn impossible_cell(cell: &ParamCell) -> bool {
     let s_action = kind == "folded" || kind == "unfolded";
     (s_action && side != "S" && matches!(role, "New" | "Earlier"))
         || (kind == "unfolded" && matches!(side, "stub" | "dropped"))
-        || (kind == "folded" && matches!(side, "S" | "dropped") && role == "node row")
+        || (kind == "folded" && side == "dropped" && key)
+        || (kind == "folded" && side == "S" && role == "node row")
         || (role == "New" && key)
         || (kind == "rise" && side == "S" && matches!(role, "New" | "Earlier"))
 }

@@ -716,18 +716,16 @@ Four facts settle most cells.
   variable of `S_v ∪ inputs`, so `restrict_to` drops every guard that reads a variable of the
   stub. `bind_stub_params` gives a parameter on a stub whose role needs a present row the role
   `Earlier { step: 0 }`, which binds any slot with no guard. An `Earlier` parameter binds any
-  slot already, and its run guard reads the stub's mark and goes. `drop_params` drops a `New`
-  one, whose entity's existence is not in `S_v ∪ inputs`. A guard that names it goes too when
-  it reads a variable of the row's entity, which lies outside `S_v ∪ inputs`: the condition
-  and copy guards name a `New` row through `At::Next` slots of its variables
-  (`build/preds/guards.rs`, `build/sets.rs`), and a delete's restrict guard names a child it
-  moves through that child's owner (`build/preds/entity_rules.rs`). The one builder guard that
-  can name a `New` row by `Term::Index` alone is an `unlinks` guard on a parent the step
-  creates (`build/links.rs::link_effects`); on a stub that would trip `renumber_by`'s `expect`
-  (a panic, not a lost step), and no test model has one.
-- **(P4) A row of a dropped entity goes.** `restrict_to_mapped` drops a parameter on a dropped
-  entity (in `havoced` for every role but `New`, by `drop_params` for `New`) with every guard
-  that names it, and every effect that writes no variable of `S_v ∪ inputs`.
+  slot already, and its run guard reads the stub's mark and goes. A `New` one is dropped, as
+  on a dropped entity (P4), since its entity's existence is not in `S_v ∪ inputs`.
+- **(P4) A row of a dropped entity goes.** `restrict_to_mapped` drops every parameter
+  `restrict.rs::keeps_param` rejects (one on an entity it neither keeps nor stubs, and a `New`
+  one whose entity's existence it does not hold), and every effect that writes no variable of
+  `S_v ∪ inputs`. With `havoc` off, as `Extended::build` calls it, every dropped parameter is
+  in `havoced`, a `New` one included, so every guard that names it goes too, also one that
+  names a created row by `Term::Index` alone (corpus `cone_rise_names_a_dropped_new_row`); an
+  `after` step that names a dropped parameter goes with it. Only a rise has a dropped `New`
+  parameter, since an `S_a` action creates rows of `S_v` alone.
 
 (P2) to (P4) only drop constraints, so `X` admits every binding of `C` and perhaps more. A cell
 must show that what was dropped does not change the successor, and for a folded action that the
@@ -751,7 +749,7 @@ bound on candidate slots so that every folded guard holds; by step (a) that is t
 | stub | key: `Existing`, `Parent`, `Triggered` | as for an input key; `bind_stub_params` leaves it, since its role no longer needs a present row | as for an input key: the key's presence in `C` is a condition of the bit (`Fold::t_params` marks it), which reads it at `t`, not at the stub | `Parent`, `Existing`: `::stub_and_dropped_rows_bind_where_the_cone_binds_them` (`Grant`, `UseNoted`); `Triggered`: `::the_reduction_models_bind_where_their_cones_bind` (`ORDER_SHIP`) |
 | stub | not the key: `Existing`, `Parent`, `Triggered` | bound to any slot (P3) | the bit stands for the parameter's presence and its guards, and no effect names it | `Triggered`: `::the_reduction_models_bind_where_their_cones_bind` (`TRIGGERED_ON_A_STUB`); `Existing`, `Parent`: none |
 | dropped | not the key: `Existing`, `Parent`, `Triggered` | dropped with its guards, all folded (P4) | as for a stub | `::stub_and_dropped_rows_bind_where_the_cone_binds_them`: `Existing`, `Parent` (`GrantNoted`, `Grant` with the voucher unread), `Triggered` (`UseRung`) |
-| dropped | key | occurs: see the fold-key fix | a linked or assigned key is compared with, or assigned to, a variable of an `S` row whose domain names its entity, and `restrict_to` keeps the parent of an owner variable of `S_v ∪ inputs` as an input or a stub (only owner variables have a `Domain::Instance`, `build/vars.rs`). The acting-row key of `fold_of` (the first written parameter) has no such link: when the cone drops a created row's owner assignment and the step's write of a `T` row, that `T` row can be the key on a dropped entity, and `fold_param`'s `renumber` expects it kept | — |
+| dropped | key | cannot occur in a reduction that is used | a linked or assigned key is compared with, or assigned to, a variable of an `S` row whose domain names its entity, and `restrict_to` keeps the parent of an owner variable of `S_v ∪ inputs` as an input or a stub (only owner variables have a `Domain::Instance`, `build/vars.rs`). The acting-row key of `fold_of` (the first written parameter) has no such link, and can be a `T` row no variable of `S_v` or the inputs names. `split_with` leaves such an action unfolded (`Fold::key_kept`, through `restrict.rs::keeps_param`) and recomputes the inputs, so the action reads `T` raw: the key's existence becomes an input and the parameter is an unfolded action's `Existing` row on an input, a row of the unfolded table. Should a fold's key still be dropped, `fold_param` and `fold_linked` leave `X` as it is and the build records `Fault::KeyDropped`, so the cone is decided unreduced (Definition 4) | corpus `cone_fold_key_dropped`; `core/tests/reduce.rs::a_fold_whose_key_the_restriction_drops_leaves_its_action_unfolded` |
 | dropped, `S` | node row | cannot occur | the node quantifies over a `T` entity (`as_node`), and its link compares a variable of `S_v` with the bound row (`strip_links`), an owner variable whose parent `restrict_to` keeps as an input or a stub, as for a linked key; `fold_linked` maps the entity with `Remap::e`, which expects it kept | — |
 | stub, input | node row | `fold_linked` adds a parameter on the node's entity with the role `Earlier { step: 0 }`, and puts `outside ∧ link = q ∧ bit[q]` where the node stood | the link fixes `q` at the row the `S` row names, and by step (a) the bit there is the node's body there | stub: `::stub_and_dropped_rows_bind_where_the_cone_binds_them` (`UseOpen`); input: `::input_rows_bind_where_the_cone_binds_them` (`Check`) |
 | input, stub, dropped | `New`, `Earlier` | cannot occur | a `New` row comes with its `Create` (`build/actions.rs`), and an `Earlier` row with the assignment of its run mark (`run_marks`), which `run_mark_vars` gives every entity of a step before the last; either writes `T`, and `split_at` puts an action that writes `T` in `T_a` | — |
@@ -763,7 +761,7 @@ bound on candidate slots so that every folded guard holds; by step (a) that is t
 | `S` | any | kept with its role | (P1) | `::the_reduction_models_bind_where_their_cones_bind`, all five roles |
 | input | `Existing`, `Parent`, `Triggered` | kept with its role; its guards are raw reads, so in `S_v ∪ inputs`, and kept | (P2), with no guard dropped | `Existing`, `Parent`: `::input_rows_bind_where_the_cone_binds_them` (`GrantNoted`, `Grant`); `Triggered`: `::stub_and_dropped_rows_bind_where_the_cone_binds_them` (`RingNote`, in another target's cone) |
 | input | `New`, `Earlier` | cannot occur | as for a folded action | — |
-| stub, dropped | any | cannot occur | `raw_reads` holds the existence of every `Existing` and `Parent` row and the reads of every guard; a `Triggered` row's `GuardWhy::Raised` guard reads its mark, whose `existences` hold the entity's existence; `split_with` makes them inputs. A `shadow` build asserts it for a stub (`bind_stub_params`) | — |
+| stub, dropped | any | cannot occur | `raw_reads` holds the existence of every `Existing` and `Parent` row and the reads of every guard; a `Triggered` row's `GuardWhy::Raised` guard reads its mark, whose `existences` hold the entity's existence; `split_with` makes them inputs. Every build checks it for a stub (`extended.rs::StubCheck`) | — |
 
 *Rise.* `X` evaluates the rise at `x(t, s)`, which holds `s`; step (c) shows what it writes.
 
@@ -1554,8 +1552,7 @@ Evidence: none beyond the reading of `escalate` and the guide.
   `stuttering_blocks` is (B2), argued by inspection; and on Lemma 6, argued over a reading of
   the code and not proved. Its fold half is checked against the cone's step relation on the
   domain samples and the built models only; its parameter matrix is checked cell by cell on
-  built models, with three reachable cells that no model fills and one, a fold keyed by a row
-  of a dropped entity, that panics; and its parameters on a stub
+  built models, with three reachable cells that no model fills; and its parameters on a stub
   also on two corpus cases. Among those verdicts are the printed `ok` of a property's `Plain` run (A5.1) and of a
   property on a cone that frees slots or leaves a mark out (A6).
 - **Differential evidence compares implementations, not specifications.** The shadow twins
