@@ -3,6 +3,8 @@
 <!-- derived-from ../../docs/theory/cones.md#the-reduction-by-an-independent-sub-lifecycle -->
 <!-- derived-from ../../docs/theory/cones.md#instance-symmetry -->
 <!-- derived-from ../../docs/theory/cones.md#wf_varsnext-on-a-reduced-cone -->
+<!-- derived-from ../../docs/theory/semantics.md#temporal-properties -->
+<!-- derived-from ../../docs/theory/semantics.md#verdicts -->
 
 This directory holds a Lean 4 project. It proves parts of Theorems A8, A15, A18, A20 and A21 of
 [cones.md](../../docs/theory/cones.md) from their hypotheses. Every theorem is stated over
@@ -68,7 +70,29 @@ toolchain to Mathlib's releases. The group laws are fields of `Sym`, so
 | `silentCycle_of_divergence` | `Fairness.lean` | A15, case (i) | A behaviour of `C` that keeps its image at `(t, c)` and still changes state infinitely often gives a cycle of silent edges of `X` between different states of `c`. |
 | `a15_image`, `a15_behaviour`, `a15` | `Fairness.lean` | A15 | Under A8's hypotheses (Lemma 6 both ways), finitely many reachable states of `X` and `R`, and `hloop` (every block with such a silent cycle can loop): if no lasso of `R` that satisfies `Fair_P` and stays forever only where no move leaves or the class can loop violates the property, `C` satisfies it under `Fair_P ∧ WF_vars(Next)`. `a15_image` is the map of a counterexample of `C` to one of `R`. |
 | `ExampleFair.silent_cycle`, `ExampleFair.eventually_flag` | `FairnessExample.lean` | none | A cone whose one block holds a silent cycle (a toggle) and whose fair `T_a` action sets a flag: every hypothesis of `a15` is discharged and the run's verdict proved, so `eventually flag` holds under `WfNext` although `C` can toggle forever. |
-| `Example.flag_after_s`, `ExampleSym.sorted_quotient` | `Example.lean` | none | Concrete systems that discharge every hypothesis of `a8_holds_iff` and of `quotient_holds_iff`, so the hypotheses are jointly satisfiable. The A8 instance is small: its partition is the identity, it has no rises and its input bytes are constant, so (B2), (B3) and the rise half of Lemma 6 hold trivially there. No block of two states and no rise is exercised. |
+| `Example.flag_after_s`, `ExampleSym.sorted_quotient` | `Example.lean` | none | Concrete systems that discharge every hypothesis of `a8_holds_iff` and of `quotient_holds_iff`, so the hypotheses are jointly satisfiable. The A8 instance is small: its partition is the identity, it has no rises and its input bytes are constant. `ExampleRise` is the A8 instance that exercises (B2), (B3) and the rises. |
+| `BranchSim.stutterSim`, `BranchBisim.dbsb` | `Branching.lean` | A8, the labels | A divergence-blind branching bisimulation (a visible step is matched by silent steps through states related to the source, then one step with the same label; only a silent step may stutter) is a divergence-blind stuttering bisimulation once the labels are forgotten. |
+| `edges_of_branchSim`, `edges_iff_of_branchBisim` | `Branching.lean` | A8, consequence 2 | Under such a bisimulation that keeps the observation and relates the initial states both ways, the two sides have the same reachable edges by source observation, visible label and target observation (`Edges`). |
+| `path_of_stutterSim`, `canLeave_of_stutterSim`, `stuck_iff_of_dbsb`, `canLeave_all_iff_of_dbsb` | `Branching.lean` | A8, consequence 3 | For an irreflexive change relation `ch`, a reachable state from which no path takes an edge that changes the observation by `ch` (`Stuck`, D25's *stuck*) exists on one side iff on the other, and "no reachable state is stuck" has the same verdict on both. |
+| `Lemma6By.toLemma6`, `Lemma6.toBy` | `ReductionLabels.lean` | A8, Lemma 6 "Parameters" | `Lemma6By stands` is Lemma 6 with the relation "the silent edge's action stands for the cone's `S_a` action, with its binding" on both halves; with `stands` always true it is `Lemma6`. |
+| `class_move_lifts` | `ReductionLabels.lean` | A8 point 3, A16's statement | From a state related to `(t, c)`, a class move of `R` into `c'` lifts to a path of `C` through states related to `(t, c)` and one more step into a state related to `(t, c')`, every step an `S_a` step whose action a silent edge of `X` between the two projections stands for. |
+| `branch_forward`, `branch_backward`, `t_step_back`, `a8_branching` | `ReductionLabels.lean` | A8, with labels | `~` is a divergence-blind branching bisimulation between `C` and `R` in which a `T_a` step shows its label (an action with its binding) and an `S_a` step or class move is silent, and it preserves `T_v` and `obs`. A `T_a` step of `R` is the same `T_a` step of `C` from every related state, with no silent prefix. |
+| `a8_reachable_obs_iff` | `ReductionLabels.lean` | A8, consequence 1 | `C` and `R` reach the same valuations of `T_v ∪ obs` (witnesses, vacuity). |
+| `a8_edges_iff`, `a8_runs_iff`, `a8_after_iff` | `ReductionLabels.lean` | A8, consequence 2 | `C` and `R` have the same reachable `T_a` edges by label and by the values of `T_v ∪ obs` before and after: a label runs on one iff on the other (`NeverRuns`, arms taken), and an `after` relation between the values before and after holds of every edge of a label on one iff on the other. |
+| `a8_stuck_iff`, `a8_deadlock_free_iff` | `ReductionLabels.lean` | A8, consequence 3 | For an irreflexive change relation on `T_v ∪ obs`, `C` has a reachable stuck state with given values iff `R` has one; a silent cycle with no way out is stuck on both. |
+| `a8_plain_sound`, `a8_plain_complete`, `a8_plain_iff` | `Plain.lean` | A8, consequence 4 | A liveness property `□(trig ⇒ ◇goal)` at one binding (D21: `eventually`, `leads_to`) over `T_v ∪ obs`, whose fair instances are sets of `T_a` labels, holds on `C` under `Fair_P` iff it holds on `R` under `Fair_P`. One way maps a fair violating behaviour of `C` to its image; the other lifts a fair violating behaviour of `R` to one of `C`, segment by segment. |
+| `seg_exists` | `Plain.lean` | A8, consequence 4 | Behind each step of a behaviour of `R` from the image of a reachable state of `C` there is a finite segment of `C` from that state, inside the image, ending at a state whose image is the step's target, whose last step takes every fair instance the step of `R` takes. |
+| `RiseThrough.riseStar`, `Lemma6Staged.toLemma6` | `Stages.lean` | A8 point 5, `Reduction::stages` | Lemma 6 with one rise per stage of `stages`, as the code states it, implies Lemma 6 with any sequence of rises. |
+| `recanon_of_through`, `staged_step_iff`, `branchBisim_congr`, `a8_staged`, `a8_staged_holds_iff` | `Stages.lean` | A8 point 5, `Reduction::recanon` | Folding a rise table, filled from each reachable representative's rises (`RiseTable`), over the stages of a chain from a reachable state ends at the block of the chain's end. So `reducedStaged`, the reduced cone whose `T` move is the code's `recanon`, has the steps of `reduced` at every related state, and A8 holds for it. |
+| `InnerMap.reach`, `InnerMap.reach_back`, `InnerMap.id`, `InnerMap.trans`, `InnerMap.ofIso` | `Nested.lean` | A8, nested | An inner map from `X` to the inner reduced run maps reachable states onto reachable states, silent edges to silent edges or stutters, rises to the same rises, and lifts back both ways. The identity is one (depth zero), maps compose (one more level), and an isomorphism that keeps visibility and observation is one (`X`'s states `S × I` read as an inner cone's `T' × S'`). |
+| `a8_innerMap` | `Nested.lean` | A8, nested | The reduction of an inner cone whose rises are among its `T_a` actions is an inner map from it to its reduced cone, with the observation `T_v ∪ obs` of the inner cone. |
+| `stableV_pullback`, `Tower.stable` | `Nested.lean` | A8, nested | A partition that satisfies (B1)–(B3) on the inner run pulls back along an inner map to one that satisfies them on `X`. A `Tower` is indexed by its partition, the innermost one read through every level, and by induction on the depth that partition is stable on `X`. |
+| `stable_of_stableV`, `stableV_of_stable`, `a8_nested`, `a8_nested_holds_iff` | `Nested.lean` | A8, nested | For the partition of a tower and any representative that is a reachable state of each block (`exists_rep` gives one), A8 with labels and its invariant form hold for `C` and the reduced cone built on that partition. |
+| `tower_of_inner` | `Nested.lean` | A8, nested | One level assembled: an `X` isomorphic to an inner cone that satisfies A8's hypotheses, whose rises are among its `T_a` actions and whose `T_v ∪ obs` determine `X`'s `obs` and input bytes, with a partition stable on the inner reduced cone, is a tower of depth two whose partition is that partition read through the inner reduction and the isomorphism. |
+| `liveHolds_congr`, `a8_staged_edges_iff`, `a8_staged_stuck_iff`, `a8_staged_plain_iff` | `Plain.lean` | A8, consequences 2 to 4 with `recanon` | Consequences 2, 3 and 4 hold for `reducedStaged` too: two systems with the same initial states and the same steps at every state related to a state of `C` have the same verdicts under `Fair_P`. |
+| `ExampleRise.merged_block`, `rise_changes_input`, `exit_through_block` | `ExampleRise.lean` | none | The instance's partition merges two reachable states `a`, `b` of `X` joined by a silent edge; a reachable `T_a` step changes the input byte and is matched by a rise; the silent exit from `a` crosses its own block through `b`, since `a` has no silent edge into the block of `c`. |
+| `ExampleRise.bisim`, `c_after_flag`, `edges`, `stuck`, `flag_leads_to_c`, `bisim_staged`, `nested_flat` | `ExampleRise.lean` | none | Every hypothesis of `a8_branching`, `a8_holds_iff`, `a8_edges_iff`, `a8_stuck_iff`, `a8_plain_iff`, `a8_staged` (with a rise table and stages) and `a8_nested` (depth zero) is discharged on that instance, with an `S_a` action that reads the input. |
+| `ExampleRise.inner_map` | `ExampleRise.lean` | none | `a8_innerMap` applies to the same cone, its `T_a` step taken as a rise, and the inner map it gives sends two different reachable states to one: `InnerMap` holds of a map that merges states. No instance of a tower of depth one or more is built. |
 
 ## What the hypotheses are
 
@@ -76,11 +100,21 @@ The proofs assume the following hypotheses and do not derive them:
 
 - **Lemma 5 (a)(b)** (`Split`). An `S_a` step keeps `T`. A `T_a` step keeps `S` and reads
   `S` only through `obs`.
-- **Lemma 6** (`Lemma6Fwd`, `Lemma6`). Every initial state projects to an initial state of
-  `X`. From a reachable `(t, s)`, an `S_a` step of `C` is a silent edge of `X` from
-  `x(t, s) = (s, inp t)`, and the converse holds. A `T_a` step is matched by a sequence of
-  rises from `x(t, s)` to `x(t', s)`. `x(t, s) ∈ Reach(X)` is not assumed: `x_reach`
+- **Lemma 6** (`Lemma6Fwd`, `Lemma6`, `Lemma6By`, `Lemma6Staged`). Every initial state
+  projects to an initial state of `X`. From a reachable `(t, s)`, an `S_a` step of `C` is a
+  silent edge of `X` from `x(t, s) = (s, inp t)`, and the converse holds; `Lemma6By stands`
+  also asks that the edge's action stands for the step's action with its binding. A `T_a`
+  step is matched by a sequence of rises from `x(t, s)` to `x(t', s)`; `Lemma6Staged` asks
+  for one rise per stage of `stages`. `x(t, s) ∈ Reach(X)` is not assumed: `x_reach`
   derives it.
+- **The rise table** (`RiseTable`, for `a8_staged`). Every rise of a reachable
+  representative is entered under its block and the input bytes it ends at.
+- **The nested case** (`InnerMap`, `Tower`, for `a8_nested`). Each level's inner run is
+  related to the level above by an inner map, which `a8_innerMap` derives from that level's
+  own A8 hypotheses. That the inner split puts `obs` and the input bytes on its `T` side and
+  keeps the rises (the seeds `reduced_in` gets in `Classes::of`) enters as the choice of
+  observation and visibility of the map, and the reindexing of `S × I` as `T' × S'` as an
+  `InnerMap.ofIso`.
 - **Definition 4's shape of `X`** (`Extended`). A silent edge keeps the input bytes, and a
   rise keeps `S`.
 - **(B1)–(B3)** (`Stable`), on the reachable states of `X`, with
@@ -118,14 +152,28 @@ The proofs assume the following hypotheses and do not derive them:
     is the path form of (B2). cones.md argues the step between the two, and Lean does not
     check it.
 - **A8, the rest of the theorem.** The proofs leave out these parts:
-  - The `T_a` action labels and the parameter bindings. The bisimulation is over unlabelled
-    steps, so consequences 2 to 4 and the `Plain` fairness of point 4 are not stated.
-  - The nested case. `X` is explored without an inner reduction.
-  - `Reduction::stages`. A `T_a` step is matched by any finite sequence of rises, not by
-    one rise per stage. `R`'s `T` move goes to the block of the rise chain that ends at the
-    new input bytes, which (B1), (B3) and `rise_keeps_s` make unique.
+  - The rises carry no `stands`. Consequences 2 to 4 read only the `T_a` labels of `C` and
+    `R`, and `R`'s `T` move reads a rise only through the input bytes it ends at.
+  - What `stages` returns. `Lemma6Staged` takes the stage list as a parameter; that the
+    rises of `X` follow `Reduction::stages` is part of the Lemma 6 gap.
+  - The outer representative in the nested case. The code takes it among the inner run's
+    states, so its `S` bytes are an inner representative's, which need not be a reachable
+    state of `X`; `a8_nested` takes a reachable member of the block (`exists_rep`). `R`
+    reads the representative only through `obs` and its rises, which (B1) and (B3) fix on
+    the block, but that the inner representative's are those of a reachable member is not
+    derived.
+  - The outer reduced cone's moves in the nested case. `a8_nested` builds `R` with the class
+    moves and rises of `X` under the pulled-back partition. The code reads them on the inner
+    run. `InnerMap.path_fwd`, `path_back`, `rise_fwd` and `rise_back` carry the moves between
+    the two, but no theorem states that the two `R`s have the same steps.
+  - Consequences 2 to 4 in the nested case are not restated. The `R` of `a8_nested` is
+    `reduced` on a partition that `stable_of_stableV` makes `Stable`, so `a8_edges_iff`,
+    `a8_stuck_iff` and `a8_plain_iff` apply to it as they stand.
+  - Consequence 4 is stated for `□(trig ⇒ ◇goal)` at one binding, the form of D21's
+    `eventually` and `leads_to`, over behaviours. That the native search over lassos
+    decides it is N9. `always` is an invariant (consequence 1).
   - Lemma 5 (c)–(e) and the folds. Their effect is inside the step relations that Lemma 6
-    relates.
+    relates; Lemma 5 (e) enters as fair instances given on `T_a` labels.
 - **A15, the rest of the theorem.**
   - The run's search. `a15` reads the run's verdict as "no lasso of `R` with the fairness
     and stops above violates the property". That the search over strongly connected
