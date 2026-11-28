@@ -6,3 +6,6 @@ import RdraIsh.Symmetry
 import RdraIsh.Behaviour
 import RdraIsh.Fairness
 import RdraIsh.FairnessExample
+import RdraIsh.Actions
+import RdraIsh.Split
+import RdraIsh.SplitExample
