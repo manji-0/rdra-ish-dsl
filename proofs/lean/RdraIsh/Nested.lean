@@ -264,24 +264,24 @@ theorem stableV_pullback {X : LTS P α} {rX : α → Option Ra} {Y : LTS Q β}
     obtain ⟨a', y', ha', hra', rfl⟩ := h.rise_back hy hq hrq
     exact ⟨a', ρ', y', ha', hra', hq'⟩
 
-/-- **Explored under nested reductions to some depth**: either a partition stable on `X`
-itself (depth zero, the flat case), or an inner map onto a system that is itself so
-explored. -/
-inductive Tower : {P : Type} → {α : Type} → LTS P α → (α → Option Ra) → (P → K) → Prop
-  | flat {P α : Type} {X : LTS P α} {rX : α → Option Ra} {oP : P → K} {Blk : Type}
-      (B : P → Blk) : StableV X rX oP B → Tower X rX oP
-  | inner {P Q α β : Type} {X : LTS P α} {rX : α → Option Ra} {oP : P → K}
-      {Y : LTS Q β} {rY : β → Option Ra} {oQ : Q → K} (κ : P → Q) :
-      InnerMap X rX Y rY κ oP oQ → Tower Y rY oQ → Tower X rX oP
+/-- **`X` explored under nested reductions to some depth, with the partition `B`**: either
+`B` is stable on `X` itself (depth zero, the flat case), or `X` has an inner map `κ` onto a
+system explored so with a partition `B'`, and `B` is `B'` read through `κ`. The index `B` is
+the partition the outer reduction uses: the innermost one, read through every level. -/
+inductive Tower : {P : Type} → {α : Type} → {Blk : Type} → LTS P α → (α → Option Ra) →
+    (P → K) → (P → Blk) → Prop
+  | flat {P α Blk : Type} {X : LTS P α} {rX : α → Option Ra} {oP : P → K}
+      (B : P → Blk) : StableV X rX oP B → Tower X rX oP B
+  | inner {P Q α β Blk : Type} {X : LTS P α} {rX : α → Option Ra} {oP : P → K}
+      {Y : LTS Q β} {rY : β → Option Ra} {oQ : Q → K} (κ : P → Q) {B : Q → Blk} :
+      InnerMap X rX Y rY κ oP oQ → Tower Y rY oQ B → Tower X rX oP (fun x => B (κ x))
 
-/-- By induction on the depth, the innermost partition pulls back to one stable on `X`. -/
-theorem Tower.stable {X : LTS P α} {rX : α → Option Ra} {oP : P → K}
-    (h : Tower X rX oP) : ∃ (Blk : Type) (B : P → Blk), StableV X rX oP B := by
+/-- By induction on the depth: the partition of a tower is stable on `X`. -/
+theorem Tower.stable {X : LTS P α} {rX : α → Option Ra} {oP : P → K} {B : P → Blk}
+    (h : Tower X rX oP B) : StableV X rX oP B := by
   induction h with
-  | flat B hB => exact ⟨_, B, hB⟩
-  | inner κ hκ _ ih =>
-    obtain ⟨Blk, B, hB⟩ := ih
-    exact ⟨Blk, fun x => B (κ x), stableV_pullback hκ hB⟩
+  | flat B hB => exact hB
+  | inner κ hκ _ ih => exact stableV_pullback hκ ih
 
 /-! ## The inner reduction is an inner map -/
 
@@ -454,28 +454,58 @@ theorem stableV_of_stable {B : S × I → Blk} {rep : Blk → S × I} (h : Stabl
       exact ⟨.inr r', r', y', hy', rfl, hb'⟩
 
 /-- **Theorem A8 with a nested `X`**: if `X`, with its silent edges and rises and the
-observation `(obs, inputs)`, is explored under a tower of reductions with a stable partition
-on the innermost run, then some partition `B` of `X` and some representative make the
-relation of A8 a divergence-blind branching bisimulation between `C` and the reduced cone
-that preserves `T_v` and `obs`. The partition is the innermost one pulled back through every
-level. -/
-theorem a8_nested (h5 : Split C obs) (h6 : Lemma6 C X inp) (hE : Extended X)
-    (hT : Tower X riseView (fun x => (obs x.1, x.2))) (d : S × I) :
-    ∃ (Blk : Type) (B : S × I → Blk) (rep : Blk → S × I),
-      BranchBisim C (reduced C X inp B rep) tLabel tLabel (rel C inp B) ∧
-        PreservesObs (rel C inp B) (obsC obs) (obsR obs rep) := by
-  obtain ⟨Blk, B, hB⟩ := hT.stable
-  obtain ⟨rep, hrep⟩ := exists_rep (X := X) (B := B) d
-  exact ⟨Blk, B, rep, a8_branching h5 h6 hE (stable_of_stableV hB hrep)⟩
+observation `(obs, inputs)`, is explored under a tower of reductions whose partition is `B`
+(the innermost partition read through every level), then for any representative that is a
+reachable state of the block of each reachable state (`exists_rep` gives one), the relation
+of A8 is a divergence-blind branching bisimulation between `C` and the reduced cone built on
+`B`, and it preserves `T_v` and `obs`. -/
+theorem a8_nested {B : S × I → Blk} {rep : Blk → S × I} (h5 : Split C obs)
+    (h6 : Lemma6 C X inp) (hE : Extended X)
+    (hT : Tower X riseView (fun x => (obs x.1, x.2)) B)
+    (hrep : ∀ {x}, X.Reach x → X.Reach (rep (B x)) ∧ B (rep (B x)) = B x) :
+    BranchBisim C (reduced C X inp B rep) tLabel tLabel (rel C inp B) ∧
+      PreservesObs (rel C inp B) (obsC obs) (obsR obs rep) :=
+  a8_branching h5 h6 hE (stable_of_stableV hT.stable hrep)
 
 /-- The nested case for invariants. -/
-theorem a8_nested_holds_iff (h5 : Split C obs) (h6 : Lemma6 C X inp) (hE : Extended X)
-    (hT : Tower X riseView (fun x => (obs x.1, x.2))) (d : S × I) :
-    ∃ (Blk : Type) (B : S × I → Blk) (rep : Blk → S × I), ∀ P : T × O → Prop,
-      C.Holds (fun p => P (obsC obs p)) ↔
-        (reduced C X inp B rep).Holds (fun q => P (obsR obs rep q)) := by
-  obtain ⟨Blk, B, rep, hR, hobs⟩ := a8_nested h5 h6 hE hT d
-  exact ⟨Blk, B, rep, fun P => holds_iff_of_dbsb hR.dbsb hobs init_forward init_backward P⟩
+theorem a8_nested_holds_iff {B : S × I → Blk} {rep : Blk → S × I} (h5 : Split C obs)
+    (h6 : Lemma6 C X inp) (hE : Extended X)
+    (hT : Tower X riseView (fun x => (obs x.1, x.2)) B)
+    (hrep : ∀ {x}, X.Reach x → X.Reach (rep (B x)) ∧ B (rep (B x)) = B x)
+    (P : T × O → Prop) :
+    C.Holds (fun p => P (obsC obs p)) ↔
+      (reduced C X inp B rep).Holds (fun q => P (obsR obs rep q)) := by
+  obtain ⟨hR, hobs⟩ := a8_nested h5 h6 hE hT hrep
+  exact holds_iff_of_dbsb hR.dbsb hobs init_forward init_backward P
+
+/-- **One level of nesting, assembled**: `X` is, up to an isomorphism `e` that keeps its
+silent edges and rises, an inner cone `C'` whose rises are among its `T_a` actions (`ρv`) and
+whose `T_v ∪ obs` determine `X`'s `obs` and input bytes through `g`. If `C'` satisfies A8's
+hypotheses with its own extended system `X'` and partition `B'`, and `Bo` is a partition of
+the inner reduced cone stable on it, then `X` is explored under a tower of depth two (the
+isomorphism, then the inner reduction) whose partition is `Bo` read through both. -/
+theorem tower_of_inner {T' S' I' O' Blk' Ta' Sa' XSa' Ra' Bk : Type}
+    {C' : LTS (T' × S') (Ta' ⊕ Sa')} {X' : LTS (S' × I') (XSa' ⊕ Ra')} {obs' : S' → O'}
+    {inp' : T' → I'} {B' : S' × I' → Blk'} {rep' : Blk' → S' × I'}
+    (h5 : Split C' obs') (h6 : Lemma6 C' X' inp') (hE : Extended X')
+    (hX : Stable X' obs' B' rep') (ρv : Ta' → Option Ra)
+    (e : S × I → T' × S') (e' : T' × S' → S × I) (fa : XSa ⊕ Ra → Ta' ⊕ Sa')
+    (ga : Ta' ⊕ Sa' → XSa ⊕ Ra) (he : ∀ x, e' (e x) = x) (he' : ∀ q, e (e' q) = q)
+    (hfa : ∀ a, (tLabel (fa a)).bind ρv = riseView a)
+    (hga : ∀ b, riseView (ga b) = (tLabel b).bind ρv)
+    (hinit : ∀ {x}, X.init x → C'.init (e x)) (hinit' : ∀ {q}, C'.init q → X.init (e' q))
+    (hstep : ∀ {x a x'}, X.step x a x' → C'.step (e x) (fa a) (e x'))
+    (hstep' : ∀ {q b q'}, C'.step q b q' → X.step (e' q) (ga b) (e' q'))
+    (g : T' × O' → O × I) (hg : ∀ x, g (obsC obs' (e x)) = (obs x.1, x.2))
+    (Bo : T' × Blk' → Bk)
+    (hBo : StableV (reduced C' X' inp' B' rep') (fun l => (tLabel l).bind ρv)
+      (fun q => g (obsR obs' rep' q)) Bo) :
+    Tower X riseView (fun x => (obs x.1, x.2)) (fun x => Bo (innerKey inp' B' (e x))) := by
+  have hiso : InnerMap X riseView C' (fun l => (tLabel l).bind ρv) e
+      (fun x => (obs x.1, x.2)) (fun q => g (obsC obs' q)) :=
+    InnerMap.ofIso e e' fa ga he he' hfa hga hinit hinit' hstep hstep' hg
+  exact .inner e hiso (.inner (innerKey inp' B') ((a8_innerMap h5 h6 hE hX ρv).comap g)
+    (.flat Bo hBo))
 
 end Outer
 

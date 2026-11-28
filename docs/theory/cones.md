@@ -850,8 +850,9 @@ bisimulation that keeps every `T_a` label, with its binding), `a8_edges_iff` (co
 `a8_stuck_iff` (consequence 3), `Plain.lean::a8_plain_iff` (consequence 4, for
 `□(trig ⇒ ◇goal)` under `Fair_P` over infinite behaviours), `Stages.lean::a8_staged` (point
 5 with `recanon` over the stages), and `Nested.lean::a8_nested` (a nested `X`, by induction
-on depth). It does not derive Lemma 6 from the code, and in the nested case its outer
-representative is a reachable state of `X`, where the code's is an inner representative.
+on depth). It does not derive Lemma 6 from the code. In the nested case its outer
+representative is a reachable state of `X` and its outer class moves and rises are read on
+`X`, where the code takes an inner representative and reads them on the inner run.
 D: `core/tests/reduce.rs::reduced_cones_decide_what_the_cones_decide`,
 `::reduced_domain_cones_decide_what_the_cones_decide`, `::a_violation_behind_the_sub_lifecycle_lifts_to_a_longer_real_trace`;
 `scripts/reduction-diff.py`; `cli/tests/engine_equivalence.rs` on reduced cones.

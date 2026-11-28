@@ -254,9 +254,24 @@ theorem bisim_staged :
   a8_staged split lemma6_staged extended stable rise_table
 
 /-- The flat case as a tower of depth zero. -/
-theorem nested_flat : ∃ (Blk : Type) (B' : St × Bool → Blk) (rep' : Blk → St × Bool),
-    BranchBisim C (reduced C X inp B' rep') tLabel tLabel (rel C inp B') ∧
-      PreservesObs (rel C inp B') (obsC obs) (obsR obs rep') :=
-  a8_nested split lemma6.toLemma6 extended (.flat B (stableV_of_stable stable)) (.a, false)
+theorem nested_flat :
+    BranchBisim C (reduced C X inp B rep) tLabel tLabel (rel C inp B) ∧
+      PreservesObs (rel C inp B) (obsC obs) (obsR obs rep) :=
+  a8_nested split lemma6.toLemma6 extended (.flat B (stableV_of_stable stable))
+    fun hx => ⟨stable.rep_reach hx, stable.rep_block hx⟩
+
+/-- This cone's own reduction is an inner map (its `T_a` step taken as a rise), and it merges
+two reachable states: `(true, a)` and `(true, b)` have one image. So `InnerMap` holds of a map
+that is not injective on reachable states. -/
+theorem inner_map :
+    InnerMap C (fun l => (tLabel l).bind some) (reduced C X inp B rep)
+      (fun l => (tLabel l).bind some) (innerKey inp B) (obsC obs) (obsR obs rep) ∧
+    C.Reach (true, .a) ∧ C.Reach (true, .b) ∧ (true, St.a) ≠ (true, St.b) ∧
+      innerKey inp B (true, .a) = innerKey inp B (true, .b) := by
+  have ha : C.Reach (true, .a) :=
+    Reach.step (Reach.init rfl) (show C.step (false, .a) (.inl ()) (true, .a) from ⟨rfl, rfl⟩)
+  refine ⟨a8_innerMap split lemma6.toLemma6 extended stable some, ha,
+    Reach.step ha (show C.step (true, .a) (.inr false) (true, .b) from ⟨rfl, rfl⟩),
+    by simp, rfl⟩
 
 end RdraIsh.ExampleRise

@@ -1,5 +1,6 @@
 import RdraIsh.Fairness
 import RdraIsh.ReductionLabels
+import RdraIsh.Stages
 
 /-!
 # Theorem A8, consequence 4: `Cone_P` under `Plain`
@@ -377,5 +378,89 @@ theorem a8_plain_iff (h5 : Split C obs) (h6 : Lemma6 C X inp) (hE : Extended X)
         (fun q => trig (obsR obs rep q)) (fun q => goal (obsR obs rep q)) :=
   ⟨a8_plain_complete h5 h6 hE hX inst trig goal,
    a8_plain_sound h5 h6.toLemma6Fwd hE hX inst trig goal⟩
+
+/-! ## Consequences 2 to 4 on the staged reduced cone -/
+
+/-- Two systems with the same initial states, and the same steps at every state where `good`
+holds, have the same verdicts under `Fair_P` when `good` holds on the reachable states of
+both. -/
+theorem liveHolds_congr {σ α Φ : Type} {M N : LTS σ α} (good : σ → Prop)
+    (hinit : ∀ s, M.init s ↔ N.init s) (hstep : ∀ s a t, good s → (M.step s a t ↔ N.step s a t))
+    (hgM : ∀ s, M.Reach s → good s) (hgN : ∀ s, N.Reach s → good s)
+    (inst : Φ → α → Prop) (trig goal : σ → Prop) :
+    M.LiveHolds (fun ρ => M.FairP inst ρ) trig goal ↔
+      N.LiveHolds (fun ρ => N.FairP inst ρ) trig goal := by
+  have tr : ∀ {M N : LTS σ α}, (∀ s, M.init s ↔ N.init s) →
+      (∀ s a t, good s → (M.step s a t ↔ N.step s a t)) → (∀ s, M.Reach s → good s) →
+      ∀ ρ, M.Behaviour ρ → M.FairP inst ρ → N.Behaviour ρ ∧ N.FairP inst ρ := by
+    intro M N hinit hstep hgM ρ hb hf
+    have hg : ∀ n, good (ρ n) := fun n => hgM _ (hb.reach n)
+    have htk : ∀ f n, M.Takes inst f (ρ n) (ρ (n + 1)) ↔ N.Takes inst f (ρ n) (ρ (n + 1)) :=
+      fun f n => ⟨fun ⟨hne, a, ha, hs⟩ => ⟨hne, a, ha, (hstep _ _ _ (hg n)).1 hs⟩,
+        fun ⟨hne, a, ha, hs⟩ => ⟨hne, a, ha, (hstep _ _ _ (hg n)).2 hs⟩⟩
+    refine ⟨⟨(hinit _).1 hb.1, fun n => ?_⟩, fun f ⟨N₀, hN⟩ N' => ?_⟩
+    · rcases hb.2 n with he | ⟨a, ha⟩
+      · exact .inl he
+      · exact .inr ⟨a, (hstep _ _ _ (hg n)).1 ha⟩
+    · have hen : EvAlways (fun n => M.Enabled inst f (ρ n)) := by
+        refine ⟨N₀, fun m hm => ?_⟩
+        obtain ⟨t, hne, a, ha, hs⟩ := hN m hm
+        exact ⟨t, hne, a, ha, (hstep _ _ _ (hg m)).2 hs⟩
+      obtain ⟨m, hm, ht⟩ := hf f hen N'
+      exact ⟨m, hm, (htk f m).1 ht⟩
+  constructor
+  · intro hM ρ hb hf hv
+    obtain ⟨hb', hf'⟩ := tr (fun s => (hinit s).symm) (fun s a t h => (hstep s a t h).symm) hgN
+      ρ hb hf
+    exact hM ρ hb' hf' hv
+  · intro hN ρ hb hf hv
+    obtain ⟨hb', hf'⟩ := tr hinit hstep hgM ρ hb hf
+    exact hN ρ hb' hf' hv
+
+section Staged
+
+variable {rt : Blk → I → Option Blk} {stages : I → I → List I}
+
+/-- Consequence 2 on the staged reduced cone. -/
+theorem a8_staged_edges_iff (h5 : Split C obs) (h6 : Lemma6Staged C X inp stages)
+    (hE : Extended X) (hX : Stable X obs B rep) (ht : RiseTable X B rep rt) (a : Ta)
+    (o o' : T × O) :
+    Edges C tLabel (obsC obs) a o o' ↔
+      Edges (reducedStaged C X inp B rep rt stages) tLabel (obsR obs rep) a o o' :=
+  let h := a8_staged h5 h6 hE hX ht
+  edges_iff_of_branchBisim h.1 h.2 staged_init_forward staged_init_backward a o o'
+
+/-- Consequence 3 on the staged reduced cone. -/
+theorem a8_staged_stuck_iff (h5 : Split C obs) (h6 : Lemma6Staged C X inp stages)
+    (hE : Extended X) (hX : Stable X obs B rep) (ht : RiseTable X B rep rt)
+    {ch : T × O → T × O → Prop} (hirr : ∀ o, ¬ ch o o) (o : T × O) :
+    Stuck C (obsC obs) ch o ↔ Stuck (reducedStaged C X inp B rep rt stages) (obsR obs rep) ch o :=
+  let h := a8_staged h5 h6 hE hX ht
+  stuck_iff_of_dbsb hirr h.1.dbsb h.2 staged_init_forward staged_init_backward o
+
+/-- Consequence 4 on the staged reduced cone. -/
+theorem a8_staged_plain_iff (h5 : Split C obs) (h6 : Lemma6Staged C X inp stages)
+    (hE : Extended X) (hX : Stable X obs B rep) (ht : RiseTable X B rep rt)
+    (inst : Φ → Ta → Prop) (trig goal : T × O → Prop) :
+    C.LiveHolds (fun σ => C.FairP (onT inst) σ)
+        (fun p => trig (obsC obs p)) (fun p => goal (obsC obs p)) ↔
+      (reducedStaged C X inp B rep rt stages).LiveHolds
+        (fun ρ => (reducedStaged C X inp B rep rt stages).FairP (onT inst) ρ)
+        (fun q => trig (obsR obs rep q)) (fun q => goal (obsR obs rep q)) := by
+  have h6' := h6.toLemma6
+  refine (a8_plain_iff h5 h6' hE hX inst trig goal).trans
+    (liveHolds_congr (M := reduced C X inp B rep) (N := reducedStaged C X inp B rep rt stages)
+      (fun q => ∃ p, rel C inp B p q) (fun _ => Iff.rfl)
+      (fun q l q' ⟨p, hr⟩ => (staged_step_iff h5 h6 hE hX ht l hr).symm) ?_ ?_ _ _ _)
+  · intro q hq
+    obtain ⟨p, _, hr⟩ := reach_of_stutterSim (branch_backward h5 h6' hE hX).stutterSim
+      init_backward q hq
+    exact ⟨p, hr⟩
+  · intro q hq
+    obtain ⟨p, _, hr⟩ := reach_of_stutterSim (a8_staged h5 h6 hE hX ht).1.2.stutterSim
+      staged_init_backward q hq
+    exact ⟨p, hr⟩
+
+end Staged
 
 end RdraIsh
