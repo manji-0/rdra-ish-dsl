@@ -1,0 +1,110 @@
+root	rule	verdict	detail	wall_s
+samples/ec-site	Unique_Payment_Order	proved	(for any number of rows, in the whole model)	0.16
+samples/clinic-ops	「訂正した返戻は、再請求の前に返戻理由を消す」	proved	Forbidden_ClaimStatement_0 (for any number of rows, in the whole model)	40.02
+samples/clinic-ops	「医師事務作業補助者が入力したオーダは、医師が確定してから検体を採取する」	proved	Forbidden_ClinicalOrder_1 (for any number of rows, in the whole model)	40.02
+samples/clinic-ops	「受付済の予約には受付時刻が記録されている」	proved	Inv_Appointment_0 (for any number of rows, in the whole model)	40.02
+samples/clinic-ops	「完了した予約には完了時刻が記録されている」	proved	Inv_Appointment_1 (for any number of rows, in the whole model)	40.02
+samples/clinic-ops	「署名済の診療記録には署名時刻が記録されている」	proved	Inv_Encounter_2 (for any number of rows, in the whole model)	40.02
+samples/clinic-ops	「結果が出たオーダには結果日時が記録されている」	proved	Inv_ClinicalOrder_3 (for any number of rows, in the whole model)	40.02
+samples/clinic-ops	「発行済の処方箋には送信日時が記録されている」	proved	Inv_Prescription_4 (for any number of rows, in the whole model)	40.02
+samples/clinic-ops	「支払済のレセプトには支払日時が記録されている」	proved	Inv_ClaimStatement_5 (for any number of rows, in the whole model)	40.02
+samples/clinic-ops	Unique_PatientProfile_PatientAccount	proved	(for any number of rows, in the whole model)	40.02
+samples/clinic-ops	Unique_Encounter_Appointment	proved	(for any number of rows, in the whole model)	40.02
+samples/clinic-ops	Unique_LabResult_ClinicalOrder	proved	(for any number of rows, in the whole model)	40.02
+samples/clinic-ops	Unique_AccountBalance_PatientAccount	proved	(for any number of rows, in the whole model)	40.02
+samples/clinic-ops	Unique_FollowUpMessage_CarePlan	proved	(for any number of rows, in the whole model)	40.02
+samples/patent-ops	「発明者が内容を確認していない出願書類は承認しない」	proved	Forbidden_DraftingOrder_0 (for any number of rows, in the whole model)	6.8
+samples/patent-ops	「審査請求をしていない出願は早期審査の対象にならない」	proved	Forbidden_PatentApplication_1 (for any number of rows, in the whole model)	6.8
+samples/patent-ops	「会社が特許を受ける権利を取得していない発明は出願を決めない」	proved	Forbidden_InventionDisclosure_2 (for any number of rows, in the whole model)	6.8
+samples/patent-ops	「最後の拒絶理由通知への補正は、削除・減縮・誤記の訂正・釈明に限る」	proved	Forbidden_OfficeAction_3 (for any number of rows, in the whole model)	6.8
+samples/patent-ops	「期限内の納付には割増特許料を付けない」	proved	Forbidden_Patent_4 (for any number of rows, in the whole model)	6.8
+samples/patent-ops	「追納期間内に特許料を納めた特許権は消滅しない」	proved	Inv_Patent_0 (for any number of rows, in the whole model)	6.8
+samples/patent-ops	「審査請求のない出願は審査されない」	proved	Inv_PatentApplication_1 (for any number of rows, in the whole model)	6.8
+samples/patent-ops	「特許料（第1〜3年分）を納付していない出願は設定登録されない」	proved	Inv_PatentApplication_2 (for any number of rows, in the whole model)	6.8
+samples/patent-ops	「発明者に通知していない相当の利益は支払わない」	proved	Inv_InventorReward_3 (for any number of rows, in the whole model)	6.8
+samples/patent-ops	「追納には特許料と同額の割増特許料を加える」	proved	Inv_Patent_4 (for any number of rows, in the whole model)	6.8
+samples/patent-ops	「期間内に延長した応答期間は、経過後に重ねて延長できない」	proved	Exclusive_OfficeAction_0 (for any number of rows, in the whole model)	6.8
+samples/patent-ops	Unique_PatentApplication_DraftingOrder	proved	(for any number of rows, in the whole model)	6.8
+samples/patent-ops	Unique_Patent_PatentApplication	proved	(for any number of rows, in the whole model)	6.8
+samples/food-permit-ops	「許可の取消の前に聴聞を行う」	proved	Forbidden_Disposition_0 (for any number of rows, in the whole model)	41.1
+samples/food-permit-ops	「意見陳述を省けるのは技術的基準に従うよう命じる処分だけ」	proved	Forbidden_Disposition_1 (for any number of rows, in the whole model)	41.1
+samples/food-permit-ops	「処分を決める前に公表しない」	proved	Forbidden_Disposition_2 (for any number of rows, in the whole model)	41.1
+samples/food-permit-ops	「公表対象外は処分しないと決めたものだけ」	proved	Forbidden_Disposition_3 (for any number of rows, in the whole model)	41.1
+samples/food-permit-ops	「営業停止中は営業しない」	proved	Forbidden_BusinessPermit_4 (for any number of rows, in the whole model)	41.1
+samples/food-permit-ops	「許可なく営業しない（失効・取消・廃業の後の営業は無許可営業）」	proved	Forbidden_BusinessPermit_5 (for any number of rows, in the whole model)	41.1
+samples/food-permit-ops	「不利益処分は理由を示して行う」	proved	Inv_Disposition_0 (for any number of rows, in the whole model)	41.1
+samples/food-permit-ops	「不許可には理由を同時に示す」	proved	Inv_PermitApplication_1 (for any number of rows, in the whole model)	41.1
+samples/food-permit-ops	「手数料を納めた申請だけが検査と許可に進む」	proved	Inv_PermitApplication_2 (for any number of rows, in the whole model)	41.1
+samples/food-permit-ops	「許可証の交付を受けてから営業する」	proved	Inv_BusinessPermit_3 (for any number of rows, in the whole model)	41.1
+samples/food-permit-ops	「施設基準に適合しない施設には許可しない」	proved	MultiForbidden_PermitApplication_0 [not enforced by the SQL schema: several entities] (for any number of rows, in the wh	41.1
+samples/food-permit-ops	「許可の営業の種類は申請の営業の種類と同じ」	proved	MultiForbidden_BusinessPermit_1 [not enforced by the SQL schema: several entities] (for any number of rows, in the whole	41.1
+samples/food-permit-ops	Unique_Inspection_PermitApplication	proved	(for any number of rows, in the whole model)	41.1
+samples/food-permit-ops	Unique_BusinessPermit_PermitApplication	proved	(for any number of rows, in the whole model)	41.1
+samples/insurance-claim-ops	lemma	proved	「賠償責任の事故は示談交渉の前に請求を完了しない」: MultiForbidden_Claim_8 [not enforced by the SQL schema: several entities] (for any number of 	73.19
+samples/insurance-claim-ops	「等級の変動を説明してから請求の意思を確かめる」	proved	Forbidden_Claim_0 (for any number of rows, in the whole model)	73.19
+samples/insurance-claim-ops	「請求完了から支払・通知までは支払期限を管理する」	proved	Forbidden_Claim_1 (for any number of rows, in the whole model)	73.19
+samples/insurance-claim-ops	「特別調停案は会社が受諾する」	proved	Forbidden_Complaint_2 (for any number of rows, in the whole model)	73.19
+samples/insurance-claim-ops	「賠償の事故は賠償責任を判断してから損害を確定する」	proved	Forbidden_ClaimCase_3 (for any number of rows, in the whole model)	73.19
+samples/insurance-claim-ops	「不正請求の疑いがある請求は上位の決裁者が決める」	proved	Forbidden_Claim_4 (for any number of rows, in the whole model)	73.19
+samples/insurance-claim-ops	「修理着工は事前承認の後」	proved	Forbidden_RepairEstimate_5 (for any number of rows, in the whole model)	73.19
+samples/insurance-claim-ops	「被害者の同意なく示談代行しない」	proved	Forbidden_Settlement_6 (for any number of rows, in the whole model)	73.19
+samples/insurance-claim-ops	「被保険者の同意なく示談代行しない」	proved	Forbidden_Settlement_7 (for any number of rows, in the whole model)	73.19
+samples/insurance-claim-ops	「不払いは理由を説明してから通知する」	proved	Inv_Claim_0 (for any number of rows, in the whole model)	73.19
+samples/insurance-claim-ops	「賠償の請求は示談書がそろってから完了する」	proved	MultiForbidden_Claim_0 [not enforced by the SQL schema: several entities] (for any number of rows, in the whole model)	73.19
+samples/insurance-claim-ops	「損害調査の報告の前に損害を確定しない」	proved	MultiForbidden_ClaimCase_1 [not enforced by the SQL schema: several entities] (for any number of rows, in the whole mode	73.19
+samples/insurance-claim-ops	「自賠責の損害調査は人身の事故だけ」	proved	MultiForbidden_JibaisekiSurvey_2 [not enforced by the SQL schema: several entities] (for any number of rows, in the whol	73.19
+samples/insurance-claim-ops	「支払期限を過ぎた支払には遅延利息を付ける」	proved	MultiForbidden_Payment_3 [not enforced by the SQL schema: several entities] (for any number of rows, in the whole model)	73.19
+samples/insurance-claim-ops	「修理見積は車両・対物賠償の事故だけ」	proved	MultiForbidden_RepairEstimate_4 [not enforced by the SQL schema: several entities] (for any number of rows, in the whole	73.19
+samples/insurance-claim-ops	「過失ゼロなら示談代行しない」	proved	MultiForbidden_Settlement_5 [not enforced by the SQL schema: several entities] (for any number of rows, in the whole mod	73.19
+samples/insurance-claim-ops	「示談代行は対人・対物賠償の事故だけ」	proved	MultiForbidden_Settlement_6 [not enforced by the SQL schema: several entities] (for any number of rows, in the whole mod	73.19
+samples/insurance-claim-ops	「支払後に求償権が移る」	proved	MultiForbidden_Subrogation_7 [not enforced by the SQL schema: several entities] (for any number of rows, in the whole mo	73.19
+samples/insurance-claim-ops	「支払済みの請求には支払の記録がある」	proved	Quantifier_Claim_0 [not enforced by the SQL schema: related rows] (for any number of rows, in the whole model)	73.19
+samples/insurance-claim-ops	Unique_Investigation_ClaimCase	proved	(for any number of rows, in the whole model)	73.19
+samples/insurance-claim-ops	Unique_Settlement_ClaimCase	proved	(for any number of rows, in the whole model)	73.19
+samples/insurance-claim-ops	Unique_Payment_Claim	proved	(for any number of rows, in the whole model)	73.19
+samples/insurance-claim-ops	Unique_Subrogation_Claim	proved	(for any number of rows, in the whole model)	73.19
+samples/oidc-auth --instance-count 1	「An	proved	ID Token from the authorization endpoint always answers a nonce」: Forbidden_AuthorizationRequest_0 (for any number of ro	22.44
+samples/oidc-auth --instance-count 1	「prompt=none	proved	never shows the login page」: Forbidden_Interaction_1 (for any number of rows, in the whole model)	22.44
+samples/oidc-auth --instance-count 1	「prompt=login	proved	never reuses the session without a login」: Forbidden_Interaction_2 (for any number of rows, in the whole model)	22.44
+samples/oidc-auth --instance-count 1	「A	proved	poll-mode client is neither pinged nor pushed to」: Forbidden_BackchannelRequest_3 (for any number of rows, in the whole 	22.44
+samples/oidc-auth --instance-count 1	「A	proved	ping-mode client is not pushed the tokens」: Forbidden_BackchannelRequest_4 (for any number of rows, in the whole model)	22.44
+samples/oidc-auth --instance-count 1	「A	proved	push-mode client is neither pinged nor polls」: Forbidden_BackchannelRequest_5 (for any number of rows, in the whole mode	22.44
+samples/oidc-auth --instance-count 1	「A	proved	public client gets no code without an S256 code challenge」: MultiForbidden_AuthorizationRequest_0 [not enforced by the S	22.44
+samples/oidc-auth --instance-count 1	「A	proved	request is authorized only after the End-User is authenticated」: MultiForbidden_AuthorizationRequest_1 [not enforced by 	22.44
+samples/oidc-auth --instance-count 1	「A	proved	request asking for a second factor is served only by a multi-factor session」: MultiForbidden_Interaction_2 [not enforced	22.44
+samples/oidc-auth --instance-count 1	「A	proved	replayed code leaves its grant revoked」: MultiForbidden_AuthorizationCode_3 [not enforced by the SQL schema: several ent	22.44
+samples/oidc-auth --instance-count 1	「A	proved	Logout Token is sent only for a session that ended」: MultiForbidden_LogoutNotice_4 [not enforced by the SQL schema: seve	22.44
+samples/oidc-auth --instance-count 1	「The	proved	Implicit Flow issues no refresh token」: Quantifier_Grant_0 [not enforced by the SQL schema: related rows] (for any numbe	22.44
+samples/oidc-auth --instance-count 1	「An	proved	approved device authorization names the End-User who approved it」: Quantifier_DeviceAuthorization_1 [not enforced by the	22.44
+samples/oidc-auth --instance-count 1	Unique_Interaction_AuthorizationRequest	proved	(for any number of rows, in the whole model)	22.44
+samples/oidc-auth --instance-count 1	Unique_Grant_AuthorizationRequest	proved	(for any number of rows, in the whole model)	22.44
+samples/oidc-auth --instance-count 1	Unique_AuthorizationCode_Grant	proved	(for any number of rows, in the whole model)	22.44
+samples/personal-info	Unique_PersonalInfo_UserAccount	proved	(for any number of rows, in the whole model)	0.08
+samples/personal-info	Unique_PasswordCredential_UserAccount	proved	(for any number of rows, in the whole model)	0.08
+samples/incremental-order/step-7-business-rules/src	Forbidden_Store_0	proved	(for any number of rows, in the whole model)	0.05
+samples/incremental-order/step-7-business-rules/src	Inv_Store_0	proved	(for any number of rows, in the whole model)	0.05
+samples/formal-verification/check_met.rdra	Forbidden_CartLine_0	proved	(for any number of rows and every --int-range-max from 3 to 255, in the whole model)	0.03
+samples/formal-verification/check_met.rdra	Check_CartLine_qty_0	proved	(for any number of rows and every --int-range-max from 3 to 255, in the whole model)	0.03
+samples/formal-verification/check_unmet.rdra	Check_CartLine_qty_0	refuted	(BFS counterexample at 2 instances)	0.08
+samples/formal-verification/cross_order_payment.rdra	MultiForbidden_Order_0	proved	[not enforced by the SQL schema: several entities] (for any number of rows, in the whole model)	0.05
+samples/formal-verification/cross_order_payment_split.rdra	MultiForbidden_Order_0	refuted	[not enforced by the SQL schema: several entities] (BFS counterexample at 2 instances)	0.1
+samples/formal-verification/int_stock.rdra	Forbidden_Item_0	proved	(for any number of rows and every --int-range-max from 3 to 255, in the whole model)	0.04
+samples/formal-verification/min_card_met.rdra	MinCard_OrderLine_Order	proved	[not enforced by the SQL schema: minimum cardinality] (for any number of rows, in the whole model)	0.04
+samples/formal-verification/min_card_unmet.rdra	MinCard_OrderLine_Order	refuted	[not enforced by the SQL schema: minimum cardinality] (BFS counterexample at 2 instances)	0.1
+samples/formal-verification/none_any_child.rdra	Unique_Invoice_Order	proved	(for any number of rows, in the whole model)	0.04
+samples/formal-verification/none_any_child_bypassed.rdra	Unique_Invoice_Order	refuted	(BFS counterexample at 2 instances)	0.12
+samples/formal-verification/now_coupon.rdra	Forbidden_Coupon_0	refuted	[not enforced by the SQL schema: reads now] (BFS counterexample at 2 instances)	0.09
+samples/formal-verification/one_to_one_shared.rdra	Unique_Shipment_Order	refuted	(BFS counterexample at 2 instances)	0.1
+samples/formal-verification/order.rdra	Forbidden_Order_0	proved	(for any number of rows, in the whole model)	0.04
+samples/formal-verification/order.rdra	Inv_Order_0	proved	(for any number of rows, in the whole model)	0.04
+samples/formal-verification/quantifier_none.rdra	Quantifier_Cert_0	refuted	[not enforced by the SQL schema: related rows] (BFS counterexample at 2 instances)	0.1
+samples/formal-verification/quantifier_guard.rdra	Quantifier_ClientCertificate_0	proved	[not enforced by the SQL schema: related rows] (for any number of rows, in the whole model)	0.06
+samples/formal-verification/split_run_order.rdra	MultiForbidden_Claim_0	proved	[not enforced by the SQL schema: several entities] (for any number of rows, in the whole model)	0.06
+samples/formal-verification/split_run_order.rdra	Unique_Settlement_Claim	proved	(for any number of rows, in the whole model)	0.06
+samples/formal-verification/untriggered_sets.rdra	Forbidden_Order_0	refuted	(BFS counterexample at 2 instances)	0.09
+samples/formal-verification/unwitnessed_state.rdra	Forbidden_Order_0	proved	(for any number of rows, in the whole model)	0.09
+samples/formal-verification/unique_double_booking.rdra	Unique_Booking_room_id_slot	refuted	(BFS counterexample at 2 instances)	0.08
+samples/formal-verification/unique_booking_guarded.rdra	Unique_Booking_room_id_slot	proved	(for any number of rows, in the whole model)	0.04
+samples/formal-verification/counting_rules.rdra	「a	proved	member holds at most 3 open loans」: Quantifier_Member_0 [not enforced by the SQL schema: related rows] (for any number o	0.1
+samples/formal-verification/counting_rules.rdra	MaxCard_Loan_Member	proved	[not enforced by the SQL schema: maximum cardinality] (for any number of rows, in the whole model)	0.1
+samples/formal-verification-fail/order.rdra	Inv_Order_0	refuted	(BFS counterexample at 2 instances)	0.09

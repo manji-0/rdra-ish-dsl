@@ -30,7 +30,7 @@ count, determinism, tables), [scripts/paper/defect-summary.py](../../scripts/pap
 | T1 thesis and venue | Done: the sub-lifecycle quotient leads, symmetry second; TACAS, then CAV | [contribution.md](./contribution.md#t1-the-thesis-and-the-venue) |
 | T2 contribution statement and example | Done: two corpus cases that a divergence-blind quotient and full-slot symmetry get wrong | [contribution.md](./contribution.md#the-example-that-existing-tools-get-wrong) |
 | T3 bug-finding record | Done: 74 defects, 30 wrong verdicts shown; Lean, reference interpreter, mutation, certificates and twins found none first | [evidence/defects.md](./evidence/defects.md) |
-| T4 minimal-instance data | Done: 106 of 132 known counterexamples at n=1, 24 at n=2, none needs n=3 uniformly | [eval/minimal.md](./eval/minimal.md) |
+| T4 minimal-instance data | Done: 106 of 132 expected counterexamples at n=1, 24 at n=2; escalation adds 5 counting rules that fail first at 3 or 4 | [eval/minimal.md](./eval/minimal.md), [eval/prove.md](./eval/prove.md) |
 | T5 reuse of measurements | Done: about 80 earlier figures, most to re-measure | [evidence/measurements.md](./evidence/measurements.md) |
 | T6 ablation | Done: with the reduction, four domain models finish in 4–42 s; without it, they time out at 300 s after 5–8 GB. The reduction costs on oidc-auth. | [eval/ablation.md](./eval/ablation.md) |
 | T7 scaling | Done: symmetry saves 1.6–55% of states end to end and never shrinks a domain model's largest run; the S7 per-cone factors are not reproduced end to end. | [eval/scaling.md](./eval/scaling.md) |
@@ -42,7 +42,7 @@ count, determinism, tables), [scripts/paper/defect-summary.py](../../scripts/pap
 | T13 code link | Decided: the claim is narrowed to LC plus a validated translation (certificates, replay, shared Lean syntax, differential tests); a deep embedding of the builder is future work | [calculus.md](./calculus.md#4-the-link-to-the-code-t13) |
 | T14 related-work delta | Done, with the cells that need checking before submission listed | [related-work.md](./related-work.md#risky-cells) |
 | T15 certificates for `ok` | Not started (optional). The paper states the gap (residual risk 2). A first step is `proved`: the z3 certificate cache (B15) already re-checks an inductive set. | Paper 1, threat T3 |
-| T16 z3 characterization | Not started (optional). Paper 1 makes no claim about `--prove`; the report presents it as an evaluated heuristic. | [tech-report.md](./tech-report.md) |
+| T16 z3 characterization | Done as an evaluated heuristic (no fragment or cutoff theorem): every rule BFS passes on the samples is proved (79 on the domain models); on the corpus 13 of 66 are unproved, 7 of them because more rows break the rule. Ivy/DistAI baselines not run. | [eval/prove.md](./eval/prove.md) |
 | T17 requirements-to-code chain | Not started (optional); codegen is experimental | — |
 | T18 agent feedback study | Not started (optional, kept separate) | — |
 | T19 artifact | Done: pinned toolchain (Nix flake) and scripts for every table | [artifact.md](./artifact.md) |

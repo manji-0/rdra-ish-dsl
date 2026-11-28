@@ -472,10 +472,13 @@ checked on a quotient at all (Theorem 5), which TLC's symmetry sets do not allow
 Across the 91 corpus cases and the failing sample headers, 132 expected counterexamples are
 known. 106 of them appear at one instance per entity, and 24 first appear at two. The remaining
 two need per-entity counts above the uniform bound of three (`--instances Loan=4`) or a memory cap
-that the header sets. No counterexample needs three uniform instances where two do not suffice.
-Most two-instance cases are the ones the corpus wrote to need two rows: uniqueness, foreign-key
-moves, and the asymmetry of Section 2. This supports the tool's default of two instances for
-`verify` and the use of `--prove` for statements about any number of rows. It is evidence about
+that the header sets. These are the counterexamples the headers expect at their own bounds. The
+prover's escalation (BFS at one and two more instances for each rule `--prove` leaves unproved)
+finds five more corpus rules that are `ok` at two instances and fail at three or four. All of them
+are counting rules (`at_most`, `exactly`, maximum cardinality), which need more rows than the
+count they bound ([eval/prove.md](./eval/prove.md)). So two instances find the known
+counterexamples of most rule kinds, and counting rules need `--prove` or escalation. On the five
+domain models, `--prove` proves all 79 state rules for any number of rows. This is evidence about
 these models, not a small-scope theorem ([eval/minimal.md](./eval/minimal.md)).
 
 ## 7.4 Determinism (RQ4)

@@ -22,7 +22,10 @@ Main at `9e4a123`.
 | 3 | 0 |
 | not found at 1 to 3 | 2 |
 
-- No counterexample needs three uniform instances where two do not suffice.
+- No expected counterexample needs three uniform instances where two do not suffice. This covers only
+  the counterexamples that the headers expect at their own bounds. The prover's escalation finds five
+  more corpus rules that are `ok` at 2 instances and fail at 3 or 4, all of them counting rules
+  ([prove.md](./prove.md)).
 - The two not found are expected. `safety_count_per_entity` / `Quantifier_Member_0` needs the
   header's per-entity count `--instances Loan=4`, which a uniform count of 3 does not reach.
   `cap_memory_limit` / `NoShip` is a case about the memory cap: its header sets
@@ -36,8 +39,8 @@ Main at `9e4a123`.
   longest is 9. At their least count, those at one instance average 3.1 steps (67 traces), and
   those at two instances 4.1 steps (17 traces). Deadlock and witness findings print no step count.
 
-**Reading.** On these models, two instances find every known counterexample that a uniform bound
-finds. This is evidence about a corpus written to exercise the checker, not a small-scope theorem.
+**Reading.** On these models, two instances find every expected counterexample that a uniform bound
+finds. Counting rules are the exception: [prove.md](./prove.md) shows five that need 3 or 4. This is evidence about a corpus written to exercise the checker, not a small-scope theorem.
 The corpus cases are adversarial by design, so they over-represent the two-row cases. The domain
 samples have one expected counterexample (`insurance-claim-ops`,
 `Deadlock_ClaimCase_status_assessed` at 2 instances), outside this table.
