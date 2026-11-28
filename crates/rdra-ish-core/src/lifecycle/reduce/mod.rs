@@ -37,6 +37,8 @@ use super::TransitionSystem;
 mod cache;
 mod extended;
 mod fold;
+#[cfg(test)]
+pub(crate) mod lemma6;
 mod lift;
 mod partition;
 #[cfg(feature = "shadow")]
