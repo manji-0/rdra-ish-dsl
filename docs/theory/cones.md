@@ -780,7 +780,7 @@ shares `Reduction::key` (and so `Fold::holds`), `Extended::build` and the step r
 code it checks.
 
 TLC checks the first conjunct and the `C ⇒ X` direction of the others on every reached state of
-each of the 17 reduced corpus cones
+each of the 21 reduced corpus cones
 (`cli/tests/engine_corpus.rs::tlc_refinement_holds_on_every_reduced_cone_of_the_corpus`,
 [tlc-agreement.md](./tlc-agreement.md#the-reduction-step-by-step)), with its own semantics of
 the unreduced cone: each state's key is a state of `X_n`, and each `S_a` step and rise of the

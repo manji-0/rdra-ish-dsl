@@ -56,11 +56,11 @@ impl TransitionSystem {
     /// `restrict_to`, with the map from this system's items to the restricted system's. With
     /// `havoc` off, a `Triggered` param whose mark is outside `vars` is treated like any
     /// other param (the extended sub-lifecycle of `reduced` reads the mark as an input, or
-    /// folds it into a bit). A param `keeps_param` says no to goes with the guards that name
-    /// it either way: a rise of that sub-lifecycle binds rows of T it does not hold, and may
-    /// create one, whose index a key join of a condition can name alone. In a cone, a `New`
-    /// param on an entity outside it is a freed slot (`cone_frees_slots`), whose cone reaches
-    /// a superset of the projection already.
+    /// folds it into a bit), and a `New` param on an entity whose existence is outside `vars`
+    /// goes with the guards that name it: a rise of that sub-lifecycle may create a row of T
+    /// whose index a key join of a condition names alone. A param on an entity the system
+    /// neither keeps nor stubs goes with the guards that name it either way: a rise of that
+    /// sub-lifecycle binds rows of T it does not hold.
     pub(crate) fn restrict_to_mapped(
         &self,
         vars: &VarSet,
@@ -161,15 +161,18 @@ impl TransitionSystem {
                 .filter(|(_, mark)| havoc && !vars.contains(mark))
                 .map(|(p, _)| p)
                 .collect();
-            // A param the restriction drops goes with the guards that name it, a `New` one
-            // too: a guard can name a created row by its index alone (a key join of a
-            // condition on the row the step creates) and read only vars of `vars`.
+            // A param the restriction drops goes with the guards that name it. With `havoc`
+            // off a `New` one does too: a rise of the extended sub-lifecycle can name a created
+            // row by its index alone (a key join of a condition on the row the step creates)
+            // in a guard that reads only vars of `vars`.
             havoced.extend(
                 action
                     .params
                     .iter()
                     .enumerate()
-                    .filter(|(_, p)| !self.keeps_param(vars, p))
+                    .filter(|(_, p)| {
+                        !self.keeps_param(vars, p) && (p.role != ParamRole::New || !havoc)
+                    })
                     .map(|(i, _)| id8(i)),
             );
             action.guards.retain(|g| {

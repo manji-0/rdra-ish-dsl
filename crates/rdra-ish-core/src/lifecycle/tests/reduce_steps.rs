@@ -244,6 +244,15 @@ fn the_dropped_key_cases_step_as_their_cones_step() {
     assert!(key.reductions > 0 && key.s_steps > 0, "{key:?}");
     let row = check_case("cone_rise_names_a_dropped_new_row");
     assert!(row.reductions > 0 && row.rises > 0, "{row:?}");
+    for seen in [&key, &row] {
+        assert!(
+            seen.classes == seen.reductions
+                && seen.classes_skipped == 0
+                && seen.stopped == 0
+                && seen.nested == 0,
+            "the class level runs on every reduction: {seen:?}"
+        );
+    }
 }
 
 /// A class move removed from a flat reduction's tables is caught at the class level: the
