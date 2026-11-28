@@ -424,6 +424,35 @@ theorem stable_of_stableV {B : S × I → Blk} {rep : Blk → S × I}
   rep_block hx := (hrep hx).2
   rep_reach hx := (hrep hx).1
 
+/-- The converse of `stable_of_stableV`: a flat `Stable` partition is a `StableV` one, so it is
+the base of a `Tower`. -/
+theorem stableV_of_stable {B : S × I → Blk} {rep : Blk → S × I} (h : Stable X obs B rep) :
+    StableV X riseView (fun x => (obs x.1, x.2)) B where
+  b1 hx hy hb := by
+    obtain ⟨h1, h2⟩ := h.b1 hx hy hb
+    simp only [h1, h2]
+  b2 {x y c'} hx hy hb hexit := by
+    obtain ⟨hne, z, z', hp, ⟨l, hl, hv⟩, hz'⟩ := hexit
+    cases l with
+    | inr r => cases hv
+    | inl b =>
+      have hp' : (silent X).PathWithin (fun w => B w = B x) x z :=
+        PathWithin.map (N := silent X) (fun _ _ _ hn => by
+          obtain ⟨l, hl, hv⟩ := hn
+          cases l with
+          | inl b => exact ⟨b, hl⟩
+          | inr r => cases hv) hp
+      obtain ⟨hne', w, w', hw, ⟨b', hb'⟩, hw'⟩ := h.b2 hx hy hb ⟨hne, z, z', hp', ⟨b, hl⟩, hz'⟩
+      exact ⟨hne', w, w', PathWithin.map (N := invis X riseView)
+        (fun _ _ _ hn => by obtain ⟨b, hb⟩ := hn; exact ⟨.inl b, hb, rfl⟩) hw,
+        ⟨.inl b', hb', rfl⟩, hw'⟩
+  b3 {x y a ρ x'} hx hy hb hs hr := by
+    cases a with
+    | inl b => cases hr
+    | inr r =>
+      obtain ⟨r', y', hy', hb'⟩ := h.b3 hx hy hb hs
+      exact ⟨.inr r', r', y', hy', rfl, hb'⟩
+
 /-- **Theorem A8 with a nested `X`**: if `X`, with its silent edges and rises and the
 observation `(obs, inputs)`, is explored under a tower of reductions with a stable partition
 on the innermost run, then some partition `B` of `X` and some representative make the
