@@ -512,7 +512,7 @@ checked against the model; an unknown one is an error.
 | `--without-buc <ID>` | Every use case but those the BUC reaches and no other BUC reaches. | Yes, under that assumption. |
 | `--actor <ID>` | The use cases the actor performs, and those no actor performs (started by an event or a timer, or with no `performs`). | Yes, under that assumption. |
 
-Under a scope, `verify --prove` proves the rules of the system the scope leaves, which lacks
+Under a scope, the proof of `verify` proves the rules of the system the scope leaves, which lacks
 the use cases it drops: a rule `proved` there may still break in the whole model. So every
 line that says something is proved says so: the `proof (...)` header, each `proved:` and
 `lemma:` line, and the clause the `OK:` line ends with end `in the selected scope: <flags>`
@@ -1035,12 +1035,13 @@ number, `0`, and a fraction are refused.
   when none runs, and a smaller run does not pass it. Whole-model runs go 2 at once.
   `--tlc-workers` and `--tlc-jobs` set the workers and the most runs at once; see
   [docs/design/tlc-scheduling.md](./design/tlc-scheduling.md).
-- **z3** (`verify --prove`). The proof starts once the safety cones are decided and runs
+- **z3** (`verify`, unless `--no-prove`). The proof starts once the safety cones are decided and runs
   beside the property and whole-model passes, on one z3 process per `RDRA_JOBS` (default:
   the cores, at most 8). Each process holds one core in the TLC runs' count while the proof
   runs, so under `--with-tlc` the runs that start meanwhile leave those cores free. Their
-  memory is not counted and is not bounded by `--memory`: about 0.3 to 0.5 GiB per process
-  (clinic-ops: about 1.3 GiB over four). Allow for it beside the limit, or lower `RDRA_JOBS`.
+  memory is not counted and is not bounded by `--memory`: 29 to 63 MB per process on the
+  samples at their `// expect` bounds (z3 5.1.0, `RDRA_JOBS=1`). Allow for it beside the
+  limit, lower `RDRA_JOBS`, or pass `--no-prove`.
   z3 at its own `memory_max_size` exits, which would end the proof.
 
 **A cone that reaches the limit** stops as one at `--max-states` does. `check` reports the
@@ -1087,17 +1088,17 @@ warning: 10 findings a cone stopped at the state cap or the memory limit left un
 Under `--with-tlc` the reason adds the BFS share: `BFS has 256MiB of it` at `--memory
 512MiB`.
 
-Under `verify --prove`, an invariant cone stopped at the limit before a violation is decided
+Under the proof, an invariant cone stopped at the limit before a violation is decided
 when z3 proves every rule in it for any number of rows. It reads `ok`, counts as decided, and
 still says where BFS stopped. A cone with an `after` assertion, with a rule z3 leaves
 unproved or out of scope, or stopped at `--max-states` stays `not decided`. See
 [Proofs for any number of rows](./formal-verification.md#proofs-for-any-number-of-rows).
 
 ```text
-Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (16 states, BFS stopped at the memory limit, decided by proof: --prove proved every check for any number of rows)
+Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (16 states, BFS stopped at the memory limit, decided by proof: z3 proved every check for any number of rows)
 ```
 
-(`verify samples/formal-verification/check_met.rdra --instance-count 4 --memory 1KiB --prove`.)
+(`verify samples/formal-verification/check_met.rdra --instance-count 4 --memory 1KiB`.)
 
 ---
 
@@ -1623,7 +1624,8 @@ sample's script loads into SQLite and PostgreSQL 16.
 ## `verify`
 
 Check every invariant, `after` assertion, and temporal property, each on its own cone, with
-the native checker. No JVM starts unless `--with-tlc` is given. See
+the native checker, and prove each state rule for any number of rows with z3. No JVM starts
+unless `--with-tlc` is given; no z3 starts under `--no-prove`. See
 [formal-verification.md](./formal-verification.md).
 
 ```
@@ -1632,7 +1634,7 @@ rdra-ish verify <INPUTS...> [--with-tlc [--tlc-jar <PATH>] [--tlc-jobs <N>] [--t
                 [--instance-count <N>] [--instances <ENTITY=N>]... [--int-range-max <N>]
                 [--max-states <N>] [--max-patterns <N>] [--memory <SIZE>] [--symmetry never|always]
                 [--temporal-budget <SECS>] [--deny-undecided]
-                [--prove [--deny-unproved] [--z3 <PATH>]]
+                [--no-prove | [--prove] [--deny-unproved] [--z3 <PATH>]]
                 [--buc <ID>]... [--entity <ID>]... [--without-usecase <ID>]...
                 [--without-buc <ID>]... [--actor <ID>]...
 ```
@@ -1651,9 +1653,10 @@ rdra-ish verify <INPUTS...> [--with-tlc [--tlc-jar <PATH>] [--tlc-jobs <N>] [--t
 | `--symmetry` | `symmetry` under `[verify]`, else `never` | Experimental. `always` explores cones up to instance symmetry; see [Instance symmetry](#instance-symmetry). |
 | `--temporal-budget <SECS>` | `300` | Seconds a property's whole-model run gets when its cone does not decide it. Past them (or `--max-states`, or `--memory`) the property is `not decided` unless a counterexample was found. Under `--with-tlc`, TLC's whole-model run gets the same. |
 | `--deny-undecided` | off | Exit 1 when a finding is left undecided: a property past the budget, or a check, state, deadlock, or use case a cone left at a cap. What `--buc` or `--entity` leaves open does not count. |
-| `--prove` | off | Experimental. Also try to prove each selected state rule (`forbidden`, `invariant`, `required`, `@check`, quantifiers, `Unique_*`, `MinCard_*`) for any number of rows and every Int range the model builds at, with z3. See [Proofs](#proofs). Needs z3 ([Getting z3](#getting-z3)). |
-| `--deny-unproved` | off | With `--prove`: exit 1 when a rule is unproved. A rule out of scope, or one BFS refuted (already an error), does not count. |
-| `--z3 <PATH>` | `RDRA_Z3`, else `z3` on `PATH` | The z3 binary for `--prove`. |
+| `--no-prove` | off: the proof runs | Run no proof. Without it `verify` also tries to prove each selected state rule (`forbidden`, `invariant`, `required`, `@check`, quantifiers, `Unique_*`, `MinCard_*`) for any number of rows and every Int range the model builds at, with z3; see [Proofs](#proofs). Without z3 ([Getting z3](#getting-z3)) the run prints a `note:`, skips the proof, and prints and exits as under `--no-prove`. With `--prove`, `--deny-unproved`, or `--z3`: a usage error (exit 2). |
+| `--prove` | off | Accepted for scripts; the proof runs anyway. With it a missing z3 is an error (exit 1), not a note. |
+| `--deny-unproved` | off | Exit 1 when a rule is unproved. A rule out of scope, or one BFS refuted (already an error), does not count. A missing z3 is an error (exit 1), as under `--prove`. |
+| `--z3 <PATH>` | `RDRA_Z3`, else `z3` on `PATH` | The z3 binary the proof runs. One that names no file is no z3: a note, or an error under `--prove` or `--deny-unproved`. |
 | `--tlc-jobs <N>` | `RDRA_TLC_JOBS`, else as many as the cores and memory allow | With `--with-tlc`: at most `N` TLC runs at once. The memory they share still bounds them. The verdicts do not change. Without `--with-tlc` it warns. |
 | `--tlc-workers <N>` | `RDRA_TLC_WORKERS`, else by the states BFS counted | With `--with-tlc`: every TLC run gets `-workers N`; a safety cone that does not pass still reruns on one worker. See [Memory limit](#memory-limit). Without `--with-tlc` it warns. |
 | `--plan <FILE>` | none | Experimental. With `--with-tlc` and `-o`: run the native checker as usual, write the specs, and write to `FILE` as JSON the TLC launches `--with-tlc` would start first, and start no TLC. Each launch gives its module, cfg, kind, checks, the cone it is checked in, BFS's verdict and states, and the heap, workers and arguments the scheduler would give it, with the runs that follow from what it prints. No `tlc:` or `tlc_result:` line prints. The format (`"version": 1`) may change in any release. |
@@ -1666,7 +1669,7 @@ rdra-ish verify <INPUTS...> [--with-tlc [--tlc-jar <PATH>] [--tlc-jobs <N>] [--t
 - Each invariant and `after(..).assert` is checked on its own **cone of influence**, a
   restriction of the system whose reachable states are the whole model's projected onto it (a
   superset where a cone action creates an entity the cone does not read). Cones run side by
-  side. A `.lemma()` rule gets no cone: `check` checks it, and `--prove` uses it once proved.
+  side. A `.lemma()` rule gets no cone: `check` checks it, and the proof uses it once proved.
 - Each `always`, `eventually`, and `leads_to` is checked on a cone of what it reads and of the
   use cases its `.fair` lists: one run (`Cone_<P>`) or two (`Cone_<P>_WF` adds `WF_vars(Next)`).
   When neither decides it, the whole model decides it (`RdraSpec_<P>`) after the cones, under
@@ -1830,8 +1833,11 @@ stopped with an ArrayIndexOutOfBoundsException while it read a trace back, …`.
 
 #### Getting z3
 
-`verify --prove` looks for z3 in this order: `--z3`, `RDRA_Z3`, then `z3` on `PATH`. Without
-one, the run stops with an error.
+`verify` looks for z3 in this order: `--z3`, `RDRA_Z3`, then `z3` on `PATH`. Without one it
+prints `note: z3 not found on PATH: the proof was skipped (install z3, or pass --no-prove to
+run without it)` on stderr and runs as under `--no-prove`: the same output otherwise, and the
+same exit code. Under `--prove` or `--deny-unproved` a missing z3 is an error (exit 1)
+instead.
 
 - **Nix:** `nix shell nixpkgs#z3`; `nix develop` here provides it.
 - **A package manager:** `apt install z3`, `brew install z3`, or `pip install z3-solver`.
@@ -1842,7 +1848,7 @@ version, as a package manager may install, runs the same and prints a `note:` (s
 
 ### Proofs
 
-`--prove` prints one `proved:`, `unproved:`, `out of scope:`, or `refuted:` line per selected
+The proof prints one `proved:`, `unproved:`, `out of scope:`, or `refuted:` line per selected
 rule. A rule left `unproved` that BFS passes is checked again at one and two instances more,
 on its own cone: an `escalated: <rule>: ok at 3 instances, counterexample at 4 instances (BFS
 on its cone; ok at 2)` line follows the proof's, and a counterexample there is an error that
@@ -2273,16 +2279,16 @@ Sites are `path:line:col` relative to the working directory, or to `rdra.toml`'s
 
 | Variable | Read by | Effect |
 |---|---|---|
-| `RDRA_JOBS` | `check`, `states`, `verify`, the generators | A whole number above 0: the cones explored at once, the threads that compute one cone's moves, and the z3 processes of `--prove`. Default: cones and z3 processes are the cores, at most 8; one cone's threads are a third of the cores, at least 4 and at most 12, never more than the cores. `1` runs everything one after another on one thread. Lower uses less memory; the output does not change. TLC runs are not counted. |
+| `RDRA_JOBS` | `check`, `states`, `verify`, the generators | A whole number above 0: the cones explored at once, the threads that compute one cone's moves, and the z3 processes of the proof. Default: cones and z3 processes are the cores, at most 8; one cone's threads are a third of the cores, at least 4 and at most 12, never more than the cores. `1` runs everything one after another on one thread. Lower uses less memory; the output does not change. TLC runs are not counted. |
 | `RDRA_TLC_JAR` | `verify --with-tlc` | Path to `tla2tools.jar`, used as `--tlc-jar` when the flag is absent. |
 | `RDRA_TLC_JOBS` | `verify --with-tlc` | A whole number above 0, used as `--tlc-jobs` when the flag is absent. |
 | `RDRA_TLC_WORKERS` | `verify --with-tlc` | A whole number above 0, used as `--tlc-workers` when the flag is absent. |
 | `RDRA_TLC_HEAP` | `verify --with-tlc` | The heap of every TLC JVM, such as `4g`, with no rerun. Runs queue so their heaps fit; see [Memory limit](#memory-limit). `states` instead raises a cone run's heap to 640 bytes per state BFS counted in its module, in whole GiB, within TLC's share (experimental; the heap then depends on whether BFS counted the cone before its run started). |
 | `JAVA_TOOL_OPTIONS` | `verify --with-tlc` | Appended after the options `verify` sets (`-Xmx`, `-Djava.io.tmpdir`, and `-XX:TieredStopAtLevel=1` on a state-model run of at most 10,000 BFS states, added only after TLC started once with it), so a value here wins. |
 | `RDRA_TLC_BATCH` | `verify --with-tlc` | `0` runs each TLC job as its own process instead of in the `tlc-batch` JVM the flake provides. |
-| `RDRA_Z3` | `verify --prove` | The z3 binary, used as `--z3` when the flag is absent. |
-| `XDG_CACHE_HOME` | `verify --prove` | Where the proof keeps the set it kept, for the next run to re-check first: `$XDG_CACHE_HOME/rdra-ish/proofs`, else `~/Library/Caches/rdra-ish/proofs` on macOS and `~/.cache/rdra-ish/proofs` elsewhere. See [Proofs](#proofs). |
-| `RDRA_ISH_NO_PROOF_CACHE` | `verify --prove` | Set: read and write no certificate; every proof runs from the start. The output does not change. |
+| `RDRA_Z3` | `verify` | The z3 binary, used as `--z3` when the flag is absent. |
+| `XDG_CACHE_HOME` | `verify` (the proof) | Where the proof keeps the set it kept, for the next run to re-check first: `$XDG_CACHE_HOME/rdra-ish/proofs`, else `~/Library/Caches/rdra-ish/proofs` on macOS and `~/.cache/rdra-ish/proofs` elsewhere. See [Proofs](#proofs). |
+| `RDRA_ISH_NO_PROOF_CACHE` | `verify` (the proof) | Set: read and write no certificate; every proof runs from the start. The output does not change. |
 | `RDRA_BIN` | `scripts/data-diff.sh` | The binary to run (default `target/release/rdra-ish`). |
 
 For developers. These change only diagnostics or turn an optimisation off; the verdicts stay:

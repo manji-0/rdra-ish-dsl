@@ -117,7 +117,7 @@ pub struct Budget {
     pub max_states: Option<usize>,
     /// `--deny-undecided`: an undecided finding is an error, not a warning.
     pub deny_undecided: bool,
-    /// `--prove`: z3 tries each state rule for any number of rows.
+    /// z3 tries each state rule for any number of rows; `None` under `--no-prove`.
     pub prove: Option<Prove>,
     /// `--memory`, split between BFS and the TLC runs under `--with-tlc`.
     pub memory: VerifySplit,
@@ -125,12 +125,15 @@ pub struct Budget {
     pub symmetry: Symmetry,
 }
 
-/// `verify --prove`.
+/// The proof `verify` runs unless `--no-prove`.
 pub struct Prove {
     /// `--z3`: the binary; else `RDRA_Z3`, else `z3` on PATH.
     pub z3: Option<PathBuf>,
     /// `--deny-unproved`: a rule left unproved fails the run.
     pub deny_unproved: bool,
+    /// `--prove` or `--deny-unproved`: the run asked for the proof, so a missing z3 is an
+    /// error, not a note that the proof was skipped.
+    pub required: bool,
 }
 
 /// Runs `verify` at `bounds` (`export::verify_bounds`); `with_tlc` is
@@ -265,7 +268,16 @@ pub fn run(
     let tlc = with_tlc
         .filter(|_| plan.is_none())
         .map(|w| Tlc::find(w.jar));
-    let z3 = prove.as_ref().map(|p| find_z3(p.z3.clone()));
+    // Without z3 a run that did not ask for the proof skips it with a note, and runs as
+    // `--no-prove` would; one that asked (`--prove`, `--deny-unproved`) fails with the error.
+    let (prove, z3) = match prove.map(|p| (find_z3(p.z3.clone()), p)) {
+        Some((Err(missing), p)) if !p.required => {
+            eprintln!("{}", missing.note());
+            (None, None)
+        }
+        Some((found, p)) => (Some(p), Some(found.map_err(anyhow::Error::from))),
+        None => (None, None),
+    };
     let start = match (&dir, &written, &tlc, &z3) {
         (Some(dir), Some(Ok(_)), Some(Ok(tlc)), None | Some(Ok(_))) => Some((tlc, dir)),
         _ => None,

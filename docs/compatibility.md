@@ -292,9 +292,10 @@ minor release.
   its Rust and Go output, the parts of the TypeScript output that the section excludes, and
   `--format json`. So are `check --code`, the `[code]` tables of `rdra.toml`, and the
   `Code*` findings. Any of them may change or be removed in any release.
-- **`verify --prove` and `.lemma()`.** The flag and its companions `--deny-unproved` and
-  `--z3` are experimental: the `proved:` / `unproved:` / `lemma:` lines, which rules prove,
-  and the clause the `OK:` line gains may change or go away in any release. So is the
+- **The proof of `verify` and `.lemma()`.** `verify` runs the proof unless `--no-prove`;
+  `--no-prove`, `--prove`, `--deny-unproved` and `--z3` keep their meaning. What the proof
+  prints is experimental: the `proved:` / `unproved:` / `lemma:` lines, which rules prove,
+  and the clause the `OK:` line gains may change in any release. So is the
   `.lemma()` marker: `check` checks a lemma like any rule, but `verify` runs no cone of its
   own for one, so a lemma that only fails at two instances can pass `verify`. Do not mark a
   rule the model must keep as a lemma.

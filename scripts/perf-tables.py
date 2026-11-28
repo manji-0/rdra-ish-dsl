@@ -9,8 +9,9 @@ Usage:
 A SAMPLE is a directory under samples/ with the flags of its run, as one argument:
 `patent-ops` or `"oidc-auth --instance-count 1 --deny-undecided"`. Without one, the five runs
 of #296 are measured. Each run is `RDRA_PERF=1 RDRA_JOBS=1`, one at a time; `RDRA_PERF=2`
-in the environment passes through and adds the costly columns. `--from` reads the stderr of
-runs made by hand instead.
+in the environment passes through and adds the costly columns. Each run passes `--no-prove`
+where the binary has it, so z3 takes no part. `--from` reads the stderr of runs made by hand
+instead.
 
 Prints per run the totals, the system's guard conjuncts by what #253 makes of them and the
 evaluator calls per expanded state (#300), (instructions retired where macOS `/usr/bin/time -l` reports them,
@@ -41,12 +42,19 @@ def fields(line):
     return dict(f.split("=", 1) for f in line.split()[1:] if "=" in f)
 
 
+def no_prove(binary):
+    """`["--no-prove"]` when `binary` has the flag, else `[]`: the tables measure BFS, and
+    z3's time would count in them. A build older than the flag runs no proof by default."""
+    help_text = subprocess.run([binary, "verify", "--help"], capture_output=True, text=True).stdout
+    return ["--no-prove"] if "--no-prove" in help_text else []
+
+
 def run(binary, sample):
     """Runs one sample; returns its stderr lines and its totals."""
     name, *flags = sample.split()
     env = dict(os.environ, RDRA_JOBS="1")
     env.setdefault("RDRA_PERF", "1")
-    cmd = [binary, "verify", f"samples/{name}", *flags]
+    cmd = [binary, "verify", *no_prove(binary), f"samples/{name}", *flags]
     totals = {}
     timing = None
     if platform.system() == "Darwin" and os.path.exists("/usr/bin/time"):

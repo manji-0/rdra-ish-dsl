@@ -1,5 +1,7 @@
-//! `verify --prove`: one line per state rule, proved or unproved with a counterexample to
-//! induction, printed before TLC runs, so these tests read it with or without TLC.
+//! The proof `verify` runs unless `--no-prove`: one line per state rule, proved or unproved
+//! with a counterexample to induction, printed before TLC runs, so these tests read it with
+//! or without TLC. Most pass `--prove`, which makes a missing z3 an error rather than a
+//! note that the proof was skipped.
 //!
 //! Without `z3` on PATH each test that needs it is skipped with a printed reason;
 //! `RDRA_REQUIRE_Z3=1` turns the skip into a failure.
@@ -246,7 +248,7 @@ transitions(Finalize, Doc.status, draft -> final)
 forbidden(Doc, status == final)
 "#,
     );
-    let out = verify(&[&model]);
+    let out = verify(&["--no-prove", &model]);
     let (stdout, stderr) = (
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr),
@@ -262,7 +264,7 @@ forbidden(Doc, status == final)
         "handler_without_event_properties",
         &format!("{text}property NeverFinal \"never final\"\n  always(Doc.status == draft)\nproperty DraftStays \"draft stays\"\n  stable(Doc.status == draft)\n"),
     );
-    let out = verify(&[&properties]);
+    let out = verify(&["--no-prove", &properties]);
     let (stdout, stderr) = (
         String::from_utf8_lossy(&out.stdout),
         String::from_utf8_lossy(&out.stderr),
@@ -448,20 +450,148 @@ fn a_forall_exists_lemma_joins_only_past_the_fine_ones() {
     assert!(!stdout.contains("\nlemma: while "), "{stdout}");
 }
 
+/// `verify` with no z3 on PATH, and `RDRA_Z3` only as `env` sets it.
+fn verify_without_z3(args: &[&str], env: &[(&str, &str)]) -> Output {
+    let empty = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_no_tools");
+    std::fs::create_dir_all(&empty).unwrap();
+    Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .current_dir(repo())
+        .env("PATH", &empty)
+        .env_remove("RDRA_Z3")
+        .env("RDRA_ISH_NO_PROOF_CACHE", "1")
+        .envs(env.iter().copied())
+        .arg("verify")
+        .args(args)
+        .output()
+        .expect("rdra-ish runs")
+}
+
+/// The proof runs by default: a run with no flag prints what `--prove` prints, byte for byte.
 #[test]
-fn a_missing_z3_is_a_tool_error() {
+fn the_proof_runs_by_default() {
+    if !tool("z3", "RDRA_REQUIRE_Z3") {
+        return;
+    }
+    let default = printed(verify(&[&sample("check_met")]));
+    let stdout = String::from_utf8_lossy(&default.1).into_owned();
+    assert!(
+        stdout.contains("\nproved: Forbidden_CartLine_0 (for any number of rows"),
+        "{stdout}"
+    );
+    assert!(
+        stdout.contains("; 2 of 2 rules proved for any number of rows"),
+        "{stdout}"
+    );
+    assert_eq!(default, printed(verify(&["--prove", &sample("check_met")])));
+}
+
+/// `--no-prove` starts no z3: a z3 first on PATH that records each call is never called, and
+/// the run prints no proof line and no note.
+#[cfg(unix)]
+#[test]
+fn no_prove_starts_no_z3() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR")).join("prove_cli_no_prove");
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(&dir).unwrap();
+    let called = dir.join("called");
+    let z3 = dir.join("z3");
+    std::fs::write(
+        &z3,
+        format!("#!/bin/sh\necho \"$@\" >> '{}'\nexit 3\n", called.display()),
+    )
+    .unwrap();
+    std::fs::set_permissions(&z3, std::fs::Permissions::from_mode(0o755)).unwrap();
     let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
         .current_dir(repo())
-        .env("RDRA_Z3", "/nonexistent/z3")
-        .args(["verify", "--prove", &sample("check_met")])
+        .env("PATH", &dir)
+        .env_remove("RDRA_Z3")
+        .args(["verify", "--no-prove", &sample("check_met")])
         .output()
         .expect("rdra-ish runs");
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert_eq!(out.status.code(), Some(1), "{stderr}");
-    assert!(
-        stderr.contains("z3 not found at /nonexistent/z3 (from --z3 or RDRA_Z3)"),
-        "{stderr}"
+    let (stdout, stderr) = (
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr),
     );
+    assert_eq!(out.status.code(), Some(0), "{stdout}{stderr}");
+    assert!(
+        !called.exists(),
+        "z3 ran: {:?}",
+        std::fs::read_to_string(&called)
+    );
+    assert!(!stdout.contains("proved"), "{stdout}");
+    assert!(!stderr.contains("note:"), "{stderr}");
+    assert!(
+        stdout.ends_with("OK: no errors within 2 instances per entity, Int 0..5\n"),
+        "{stdout}"
+    );
+}
+
+/// Without z3 a run that did not ask for the proof skips it with one `note:` on stderr, and
+/// is otherwise the `--no-prove` run: the same exit code, the same stdout, the same stderr
+/// past the note. A `--z3` or `RDRA_Z3` that names no file is no z3 either.
+#[test]
+fn a_missing_z3_skips_the_proof_with_a_note() {
+    let skip = "the proof was skipped (install z3, or pass --no-prove to run without it)\n";
+    for (args, env, note) in [
+        (
+            &[][..],
+            &[][..],
+            format!("note: z3 not found on PATH: {skip}"),
+        ),
+        (
+            &[][..],
+            &[("RDRA_Z3", "/nonexistent/z3")][..],
+            format!("note: z3 not found at /nonexistent/z3 (from --z3 or RDRA_Z3): {skip}"),
+        ),
+        (
+            &["--z3", "/nonexistent/z3"][..],
+            &[][..],
+            format!("note: z3 not found at /nonexistent/z3 (from --z3 or RDRA_Z3): {skip}"),
+        ),
+    ] {
+        // check_unmet fails: the note leaves its exit code and its errors as they are.
+        let model = sample("check_unmet");
+        let run = verify_without_z3(&[args, &[model.as_str()][..]].concat(), env);
+        let off = verify_without_z3(&["--no-prove", &model], &[]);
+        let stderr = String::from_utf8_lossy(&run.stderr).into_owned();
+        assert_eq!(
+            stderr.matches(&note).count(),
+            1,
+            "{args:?} {env:?}: {stderr}"
+        );
+        assert_eq!(
+            stderr.replacen(&note, "", 1),
+            String::from_utf8_lossy(&off.stderr),
+            "{args:?} {env:?}"
+        );
+        assert_eq!(run.stdout, off.stdout, "{args:?} {env:?}");
+        assert_eq!(run.status.code(), Some(1), "{args:?} {env:?}: {stderr}");
+    }
+}
+
+/// A run that asks for the proof, with `--prove` or `--deny-unproved`, fails without z3: the
+/// error names where it looked, and no note says the proof was skipped.
+#[test]
+fn a_missing_z3_fails_a_run_that_asks_for_the_proof() {
+    for flag in ["--prove", "--deny-unproved"] {
+        for (env, error) in [
+            (
+                &[][..],
+                "z3 not found on PATH (--prove and --deny-unproved need it)\n",
+            ),
+            (
+                &[("RDRA_Z3", "/nonexistent/z3")][..],
+                "z3 not found at /nonexistent/z3 (from --z3 or RDRA_Z3)",
+            ),
+        ] {
+            let out = verify_without_z3(&[flag, &sample("check_met")], env);
+            let stderr = String::from_utf8_lossy(&out.stderr);
+            assert_eq!(out.status.code(), Some(1), "{flag} {env:?}: {stderr}");
+            assert!(stderr.contains(error), "{flag} {env:?}: {stderr}");
+            assert!(!stderr.contains("note: z3"), "{flag} {env:?}: {stderr}");
+        }
+    }
 }
 
 /// A z3 whose `--version` line names a version the resource limits were not measured on
@@ -515,12 +645,22 @@ fn an_unverified_z3_version_is_a_note() {
     assert!(err.contains("z3"), "{err}");
 }
 
+/// `--no-prove` with a flag of the proof is a usage error.
 #[test]
-fn deny_unproved_needs_prove() {
-    let out = verify(&["--deny-unproved", &sample("check_met")]);
-    let stderr = String::from_utf8_lossy(&out.stderr);
-    assert_eq!(out.status.code(), Some(2), "{stderr}");
-    assert!(stderr.contains("--prove"), "{stderr}");
+fn no_prove_conflicts_with_the_proofs_flags() {
+    for flags in [
+        &["--prove"][..],
+        &["--deny-unproved"][..],
+        &["--z3", "/nonexistent/z3"][..],
+    ] {
+        let out = verify(&[flags, &["--no-prove", &sample("check_met")][..]].concat());
+        let stderr = String::from_utf8_lossy(&out.stderr);
+        assert_eq!(out.status.code(), Some(2), "{flags:?}: {stderr}");
+        assert!(
+            stderr.contains("cannot be used with '--no-prove'"),
+            "{flags:?}: {stderr}"
+        );
+    }
 }
 
 /// A proof covers every bound at which the model builds (z3.md, Definition 3), and each line
@@ -592,12 +732,9 @@ fn deny_unproved_fails_a_run_that_bfs_passes() {
         return;
     }
     // BFS passes the rule at 2 instances and again at 3 and 4, and the proof leaves it
-    // unproved (it fails only past the Int range), so only the proof fails the run.
-    let out = verify(&[
-        "--prove",
-        "--deny-unproved",
-        &corpus("z3_int_listing_whole_range"),
-    ]);
+    // unproved (it fails only past the Int range), so only the proof fails the run. The
+    // proof runs by default, so `--deny-unproved` needs no `--prove`.
+    let out = verify(&["--deny-unproved", &corpus("z3_int_listing_whole_range")]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     let stderr = String::from_utf8_lossy(&out.stderr);
     assert_eq!(out.status.code(), Some(1), "{stderr}");
@@ -1041,7 +1178,12 @@ invariant(Order).when(status == placed).none(Shipment).label("no shipment yet").
     )
     .unwrap();
     let out_dir = dir.join("specs");
-    let out = verify(&[file.to_str().unwrap(), "-o", out_dir.to_str().unwrap()]);
+    let out = verify(&[
+        "--no-prove",
+        file.to_str().unwrap(),
+        "-o",
+        out_dir.to_str().unwrap(),
+    ]);
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert_eq!(out.status.code(), Some(0), "{stdout}");
     let cones = std::fs::read_to_string(out_dir.join("cones.txt")).unwrap();
@@ -1098,7 +1240,7 @@ fn cone_line<'a>(stdout: &'a str, module: &str) -> &'a str {
         .unwrap_or_else(|| panic!("no {module} line\n{stdout}"))
 }
 
-const BY_PROOF: &str = " states, BFS stopped at the memory limit, decided by proof: --prove proved every check for any number of rows)";
+const BY_PROOF: &str = " states, BFS stopped at the memory limit, decided by proof: z3 proved every check for any number of rows)";
 
 /// Whether `line` says its cone is not decided.
 fn not_decided(line: &str) -> bool {
@@ -1125,8 +1267,8 @@ fn a_proof_decides_a_cone_that_stopped_at_the_memory_limit() {
         "{stdout}"
     );
     assert!(stdout.contains("\nresult: ok\n"), "{stdout}");
-    // Without --prove the same cone is not decided.
-    let out = verify(&[&args[..], &[&sample("check_met")]].concat());
+    // Without the proof the same cone is not decided.
+    let out = verify(&[&args[..], &["--no-prove", &sample("check_met")]].concat());
     let stdout = String::from_utf8_lossy(&out.stdout);
     assert!(
         not_decided(cone_line(&stdout, "Cone_Forbidden_CartLine_0")),
@@ -1232,8 +1374,8 @@ fn a_counterexample_past_the_bound_of_an_unproved_rule_is_an_error() {
         stdout.contains("Cone_Forbidden_Order_0 [Forbidden_Order_0]: ok ("),
         "{stdout}"
     );
-    // Without --prove nothing is escalated.
-    let out = verify(&[&corpus("z3_two_ok_three_fails")]);
+    // Without the proof nothing is escalated.
+    let out = verify(&["--no-prove", &corpus("z3_two_ok_three_fails")]);
     assert!(!String::from_utf8_lossy(&out.stdout).contains("escalated:"));
 }
 
@@ -1389,7 +1531,7 @@ fn an_escalation_the_cap_stops_decides_nothing() {
         !stderr.contains("more instances than the run's"),
         "{stderr}"
     );
-    let plain = verify(&["--max-states", "20", &case]);
+    let plain = verify(&["--no-prove", "--max-states", "20", &case]);
     assert_eq!(capped.status.code(), plain.status.code(), "{stderr}");
     // A cap that stops the cone at the run's 2 instances leaves the rule to no escalation.
     let out = verify(&["--prove", "--max-states", "5", &case]);
@@ -1398,7 +1540,7 @@ fn an_escalation_the_cap_stops_decides_nothing() {
 }
 
 /// The escalation's counterexample alone fails a run: at one instance BFS passes the rule
-/// and the proof leaves it unproved, and at two BFS breaks it. Without `--prove` the run
+/// and the proof leaves it unproved, and at two BFS breaks it. Under `--no-prove` the run
 /// passes.
 #[test]
 fn an_escalation_counterexample_alone_fails_the_run() {
@@ -1419,7 +1561,7 @@ fn an_escalation_counterexample_alone_fails_the_run() {
         stderr.contains("verification failed: 1 invariant or after-assert violation(s) at more instances than the run's\n"),
         "{stderr}"
     );
-    let out = verify(&args);
+    let out = verify(&[&["--no-prove"][..], &args].concat());
     assert_eq!(
         out.status.code(),
         Some(0),

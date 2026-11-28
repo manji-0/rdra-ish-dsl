@@ -417,18 +417,24 @@ pub(crate) enum Commands {
         /// memory limit, a temporal property past `--temporal-budget`) as an error (exit 1)
         #[arg(long)]
         deny_undecided: bool,
-        /// [experimental] Also try to prove each state rule with z3 (SMT inductive invariants)
-        /// for any number of rows and every --int-range-max from L to M, the range the model
-        /// builds at; prints proved with that claim, unproved with a counterexample to
-        /// induction, or out of scope per rule
+        /// Run no proof: without this flag verify also tries to prove each state rule with z3
+        /// (SMT inductive invariants) for any number of rows and every --int-range-max from L
+        /// to M, the range the model builds at, and prints proved with that claim, unproved
+        /// with a counterexample to induction, or out of scope per rule. Without z3 the run
+        /// prints a note and skips the proof
+        #[arg(long, conflicts_with_all = ["prove", "deny_unproved", "z3"])]
+        no_prove: bool,
+        /// Kept for scripts that pass it, as the proof runs by default; with it a missing z3
+        /// is an error (exit 1), not a note
         #[arg(long)]
         prove: bool,
-        /// With --prove, treat a rule left unproved as an error (exit 1)
-        #[arg(long, requires = "prove")]
+        /// Treat a rule the proof leaves unproved as an error (exit 1); a missing z3 is then
+        /// an error too
+        #[arg(long)]
         deny_unproved: bool,
-        /// The z3 binary --prove runs; `RDRA_Z3` sets it when the flag is absent, else `z3`
+        /// The z3 binary the proof runs; `RDRA_Z3` sets it when the flag is absent, else `z3`
         /// on PATH
-        #[arg(long, value_name = "PATH", requires = "prove")]
+        #[arg(long, value_name = "PATH")]
         z3: Option<PathBuf>,
         /// With --with-tlc, run TLC as `java -cp <path> tlc2.TLC` from `tla2tools.jar` instead
         /// of a `tlc` / `tlc2` launcher on PATH; `RDRA_TLC_JAR` sets it when the flag is absent

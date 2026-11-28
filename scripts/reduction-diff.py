@@ -590,7 +590,9 @@ def verify_both(bin_, model, instances, timeout, work, with_tlc=False):
         d = work / side
         env = {k: v for k, v in os.environ.items() if k not in ("RDRA_ISH_NO_REDUCE", "RDRA_ISH_REDUCTION_SHAPE_STATS")}
         env.update(extra)
-        cmd = [bin_, "verify", "--deny-undecided", "--instance-count", str(instances), "-o", str(d), str(model)]
+        # No proof: the two sides compare what BFS decides with and without the reduction,
+        # and the proof's escalation and decided-by-proof cones would mix z3 into it.
+        cmd = [bin_, "verify", "--no-prove", "--deny-undecided", "--instance-count", str(instances), "-o", str(d), str(model)]
         if SYMMETRY:
             cmd += ["--symmetry", SYMMETRY]
         if with_tlc:

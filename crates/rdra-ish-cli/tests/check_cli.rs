@@ -45,10 +45,18 @@ error[MultiForbidden_Order_0]: invariant MultiForbidden_Order_0 is violated: mul
 
 const BOUNDS: &str = "bounds: 1 instance per entity, Int 0..5; no state cap per cone, memory 4GiB; entities a check does not read are unbounded";
 
+/// Runs `args`; a `verify` runs with `--no-prove`, since no test here is about the proof.
 fn run(args: &[&str]) -> std::process::Output {
+    let (command, rest) = args.split_first().expect("a command");
+    let no_prove: &[&str] = match *command {
+        "verify" => &["--no-prove"],
+        _ => &[],
+    };
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
         .current_dir(repo())
-        .args(args)
+        .arg(command)
+        .args(no_prove)
+        .args(rest)
         .output()
         .expect("rdra-ish runs")
 }

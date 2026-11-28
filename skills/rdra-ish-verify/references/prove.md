@@ -1,13 +1,15 @@
-# Proofs for any number of rows (`verify --prove`)
+# Proofs for any number of rows (`verify`)
 
 <!-- derived-from ../../../docs/formal-verification.md#proofs-for-any-number-of-rows -->
 
 `verify` checks a fixed number of instances, so a rule that holds at two can break at
-three. `verify --prove` (experimental) asks z3 whether each state rule (`forbidden`,
+three. `verify` also asks z3 whether each state rule (`forbidden`,
 `invariant`, `required`, `@check`, quantifiers, `Unique_*`, `MinCard_*`, `DanglingKey_*`)
 holds for any number of rows, any non-negative Int, and any time. It needs `z3` on `PATH`,
-`--z3 <path>`, or `RDRA_Z3`. The proof never finds a counterexample; the bounded engines in
-the same run do.
+`--z3 <path>`, or `RDRA_Z3`; without z3 the run prints `note: z3 not found ...: the proof was
+skipped` and goes on without it. `--prove` or `--deny-unproved` makes a missing z3 an error,
+and `--no-prove` turns the proof off. The proof never finds a counterexample; the bounded
+engines in the same run do.
 
 ## Reading the output
 
@@ -49,7 +51,7 @@ at the memory limit is decided when z3 proves every rule in it: its line reads `
 decided by proof: ...)`.
 
 ```text
-$ rdra-ish verify --prove --instance-count 1 samples/one_to_one_shared.rdra
+$ rdra-ish verify --instance-count 1 samples/one_to_one_shared.rdra
 ...
 unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks it from a state where it, every proved rule, and every kept lemma hold (not necessarily reachable)
   Order#1 (present) status=placed -> status=shipped
@@ -128,5 +130,5 @@ invariant(Order).when(status == placed).none(Shipment).label("a placed order has
   rather than adding a second lemma.
 
 Propose at most one lemma per CTI. Run `rdra-ish check`, then `rdra-ish verify --prove`
-again. Stop when the CTI's state is reachable, or after three lemmas leave the rule
+again, so a missing z3 fails the run instead of skipping the proof. Stop when the CTI's state is reachable, or after three lemmas leave the rule
 unproved; report the rule with its last CTI.
