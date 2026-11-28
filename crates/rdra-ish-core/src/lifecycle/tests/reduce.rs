@@ -5,13 +5,14 @@
 use std::collections::BTreeSet;
 
 use crate::lifecycle::expr::StateSlice;
+use crate::lifecycle::reduce::ParamCell;
 use crate::memory::{MemoryPool, MemorySize};
 
 use super::cone::{load, SAMPLES};
 use super::*;
 use crate::lifecycle::{
-    Action, ActionOrigin, ComponentRun, Cone, EntId, Fold, FoldKey, QuotientCache, Reduction,
-    ReplayError, Seed, State, Step, Target, TargetExploration, VarSet,
+    ActId, Action, ActionOrigin, ComponentRun, Cone, EntId, Fold, FoldKey, QuotientCache,
+    Reduction, ReplayError, Seed, State, Step, Target, TargetExploration, Value, VarSet,
 };
 
 const DOMAIN_SAMPLES: &[&str] = &[
@@ -1605,6 +1606,16 @@ fn an_entity_cone_up_to_symmetry_decides_what_its_plain_run_left_open() {
 fn each_folded_cone(
     models: &[(&str, SemanticModel)],
     bounds: &[Bounds],
+    f: impl FnMut(&str, Target, &TransitionSystem, &ComponentRun, &Reduction),
+) {
+    each_reduced_cone(models, bounds, true, f);
+}
+
+/// `each_folded_cone`, with the cones whose reduction folds nothing too unless `folded_only`.
+fn each_reduced_cone(
+    models: &[(&str, SemanticModel)],
+    bounds: &[Bounds],
+    folded_only: bool,
     mut f: impl FnMut(&str, Target, &TransitionSystem, &ComponentRun, &Reduction),
 ) {
     let caps = Caps::new(usize::MAX, 200_000);
@@ -1618,7 +1629,7 @@ fn each_folded_cone(
                 let Some(red) = r.run.system.reduction() else {
                     continue;
                 };
-                if red.bits().iter().all(Vec::is_empty) {
+                if folded_only && red.bits().iter().all(Vec::is_empty) {
                     continue;
                 }
                 let cone = ts.restrict_to(&r.cone.vars, &r.cone.keep);
@@ -1655,58 +1666,70 @@ fn fold_bits_hold_where_their_actions_run(
 ) -> FoldsChecked {
     let mut seen = FoldsChecked::default();
     each_folded_cone(models, bounds, |name, target, cone, run, red| {
-        let bits: Vec<&Fold> = red.bits().iter().flatten().collect();
-        seen.folds += bits.len();
-        let silent = red.silent_steps(cone);
-        for s in run.states.iter() {
-            let steps = silent.from(red, cone, &s);
-            for m in cone.moves(&s) {
-                // Every S step of the cone is a silent step of the extended sub-lifecycle to
-                // the same state, by an action it stands for (claim A11): a true bit is not enough,
-                // the step's other params must bind there too.
-                if red.s_actions().contains(&m.act) {
-                    assert!(
-                        steps
-                            .iter()
-                            .any(|x| x.next == m.next && x.acts.iter().any(|(a, _)| *a == m.act)),
-                        "{name} {target:?}: the cone steps by {} {:?} where the extended \
-                         sub-lifecycle has no such step, in {:?}",
-                        cone.actions[m.act.index()].name,
-                        m.params,
-                        &s.0
-                    );
-                    seen.s_steps += 1;
-                }
-                for fold in bits.iter().filter(|f| f.act() == m.act) {
-                    let slot = match fold.key() {
-                        FoldKey::Param(p) => m.params[usize::from(*p)],
-                        FoldKey::Linked {
-                            link_var, s_param, ..
-                        } => {
-                            // The link names the row through its domain: an optional link
-                            // holds slot + 1, and 0 for no row; a required one the slot.
-                            let row = usize::from(m.params[usize::from(*s_param)]);
-                            let link = s.get(cone, *link_var, row);
-                            match cone.var(*link_var).domain.slot(link) {
-                                Some(slot) => slot,
-                                None => continue,
-                            }
-                        }
-                    };
-                    assert!(
-                        fold.holds(cone, &s, slot),
-                        "{name} {target:?}: the bit of {} is false at slot {slot} where the \
-                         action runs, in {:?}",
-                        cone.actions[m.act.index()].name,
-                        &s.0
-                    );
-                    seen.checked += 1;
-                    seen.past_0 += usize::from(slot > 0);
-                }
-            }
-        }
+        cone_s_steps_are_silent_steps(name, target, cone, run, red, &mut seen);
     });
     seen
+}
+
+/// The body of `fold_bits_hold_where_their_actions_run` for one cone.
+fn cone_s_steps_are_silent_steps(
+    name: &str,
+    target: Target,
+    cone: &TransitionSystem,
+    run: &ComponentRun,
+    red: &Reduction,
+    seen: &mut FoldsChecked,
+) {
+    let bits: Vec<&Fold> = red.bits().iter().flatten().collect();
+    seen.folds += bits.len();
+    let silent = red.silent_steps(cone);
+    for s in run.states.iter() {
+        let steps = silent.from(red, cone, &s);
+        for m in cone.moves(&s) {
+            // Every S step of the cone is a silent step of the extended sub-lifecycle to
+            // the same state, by an action it stands for (claim A11): a true bit is not enough,
+            // the step's other params must bind there too.
+            if red.s_actions().contains(&m.act) {
+                assert!(
+                    steps
+                        .iter()
+                        .any(|x| x.next == m.next && x.acts.iter().any(|(a, _)| *a == m.act)),
+                    "{name} {target:?}: the cone steps by {} {:?} where the extended \
+                     sub-lifecycle has no such step, in {:?}",
+                    cone.actions[m.act.index()].name,
+                    m.params,
+                    &s.0
+                );
+                seen.s_steps += 1;
+            }
+            for fold in bits.iter().filter(|f| f.act() == m.act) {
+                let slot = match fold.key() {
+                    FoldKey::Param(p) => m.params[usize::from(*p)],
+                    FoldKey::Linked {
+                        link_var, s_param, ..
+                    } => {
+                        // The link names the row through its domain: an optional link
+                        // holds slot + 1, and 0 for no row; a required one the slot.
+                        let row = usize::from(m.params[usize::from(*s_param)]);
+                        let link = s.get(cone, *link_var, row);
+                        match cone.var(*link_var).domain.slot(link) {
+                            Some(slot) => slot,
+                            None => continue,
+                        }
+                    }
+                };
+                assert!(
+                    fold.holds(cone, &s, slot),
+                    "{name} {target:?}: the bit of {} is false at slot {slot} where the \
+                     action runs, in {:?}",
+                    cone.actions[m.act.index()].name,
+                    &s.0
+                );
+                seen.checked += 1;
+                seen.past_0 += usize::from(slot > 0);
+            }
+        }
+    }
 }
 
 /// The converse, the other half of the fold half of Lemma 6 (claim A11): a bit adds no step the
@@ -1722,35 +1745,509 @@ fn folded_steps_are_steps_of_the_cone(
 ) -> FoldsChecked {
     let mut seen = FoldsChecked::default();
     each_folded_cone(models, bounds, |name, target, cone, run, red| {
-        seen.folds += red.bits().iter().flatten().count();
+        silent_steps_are_cone_steps(name, target, cone, run, red, &mut seen);
+    });
+    seen
+}
+
+/// The body of `folded_steps_are_steps_of_the_cone` for one cone.
+fn silent_steps_are_cone_steps(
+    name: &str,
+    target: Target,
+    cone: &TransitionSystem,
+    run: &ComponentRun,
+    red: &Reduction,
+    seen: &mut FoldsChecked,
+) {
+    seen.folds += red.bits().iter().flatten().count();
+    let silent = red.silent_steps(cone);
+    for s in run.states.iter() {
+        let moves: Vec<_> = cone.moves(&s).collect();
+        for step in silent.from(red, cone, &s) {
+            let realized = moves.iter().any(|m| {
+                m.next == step.next
+                    && step.acts.iter().any(|(a, kept)| {
+                        *a == m.act
+                            && (kept.iter().zip(m.params.iter()))
+                                .all(|(k, p)| k.is_none_or(|k| k == *p))
+                    })
+            });
+            assert!(
+                realized,
+                "{name} {target:?}: the extended sub-lifecycle steps by {} (bits at slots \
+                 {:?}) where the cone has no such step, in {:?}",
+                cone.actions[step.acts[0].0.index()].name,
+                step.bit_slots,
+                &s.0
+            );
+            if step.folded {
+                seen.checked += 1;
+                seen.past_0 += usize::from(step.bit_slots.iter().any(|c| *c > 0));
+            }
+        }
+    }
+}
+
+/// What `lemma6_steps_hold` checked: the cells of the parameter matrix its cones fill, and
+/// the cone's steps it matched in the extended sub-lifecycle.
+#[derive(Debug, Default)]
+struct StepsChecked {
+    cells: BTreeSet<ParamCell>,
+    /// The S half, as the two fold checks count it.
+    s: FoldsChecked,
+    /// The cone's T steps that change the input bytes, each matched stage by stage.
+    rises: usize,
+    /// Those steps with an S var of the successor moved, each found to be no rise.
+    forged: usize,
+}
+
+/// Lemma 6 of docs/theory/cones.md step by step, on every complete reduced cone of `models`
+/// under each of `bounds`, folded or not: every S step of the cone from a reachable state is
+/// a silent step of the extended sub-lifecycle `X` from the state's projection to the
+/// successor's (`cone_s_steps_are_silent_steps`), every silent step of `X` from there is a
+/// step of the cone (`silent_steps_are_cone_steps`), and every T step that changes the input
+/// bytes is a rise of `X` by the same action to the successor's raw inputs, then one flip per
+/// bit slot that changes (`SilentSteps::rises_through`). Returns the cells of the parameter
+/// matrix that the actions these checks ran on fill (`Reduction::param_cells`), for each
+/// cell's test to assert it ran.
+fn lemma6_steps_hold(models: &[(&str, SemanticModel)], bounds: &[Bounds]) -> StepsChecked {
+    let mut seen = StepsChecked::default();
+    each_reduced_cone(models, bounds, false, |name, target, cone, run, red| {
+        cone_s_steps_are_silent_steps(name, target, cone, run, red, &mut seen.s);
+        silent_steps_are_cone_steps(name, target, cone, run, red, &mut seen.s);
         let silent = red.silent_steps(cone);
+        // The actions a check above or below ran on: every S step, every T step that changes
+        // the inputs, and every step of a steady action, which `R` runs as the cone does.
+        let mut stepped: BTreeSet<ActId> = BTreeSet::new();
         for s in run.states.iter() {
-            let moves: Vec<_> = cone.moves(&s).collect();
-            for step in silent.from(red, cone, &s) {
-                let realized = moves.iter().any(|m| {
-                    m.next == step.next
-                        && step.acts.iter().any(|(a, kept)| {
-                            *a == m.act
-                                && (kept.iter().zip(m.params.iter()))
-                                    .all(|(k, p)| k.is_none_or(|k| k == *p))
-                        })
-                });
+            let before = red.input_bytes(cone, &s);
+            for m in cone.moves(&s) {
+                if red.s_actions().contains(&m.act) || red.is_steady(m.act) {
+                    stepped.insert(m.act);
+                }
+                if red.s_actions().contains(&m.act) || red.input_bytes(cone, &m.next) == before {
+                    continue;
+                }
                 assert!(
-                    realized,
-                    "{name} {target:?}: the extended sub-lifecycle steps by {} (bits at slots \
-                     {:?}) where the cone has no such step, in {:?}",
-                    cone.actions[step.acts[0].0.index()].name,
-                    step.bit_slots,
+                    silent.rises_through(red, cone, m.act, &s, &m.next),
+                    "{name} {target:?}: the cone steps by {} {:?}, which changes the inputs, \
+                     where the extended sub-lifecycle has no such rise, in {:?}",
+                    cone.actions[m.act.index()].name,
+                    m.params,
                     &s.0
                 );
-                if step.folded {
-                    seen.checked += 1;
-                    seen.past_0 += usize::from(step.bit_slots.iter().any(|c| *c > 0));
+                seen.rises += 1;
+                stepped.insert(m.act);
+                // The check reads the state it is given: no rise changes S, so the same step
+                // with an S var moved is no rise.
+                if let Some(v) = cone
+                    .var_ids()
+                    .find(|v| red.is_s_var(*v) && cone.var(*v).domain.size(cone) > 1)
+                {
+                    let mut forged = m.next.clone();
+                    let size = cone.var(v).domain.size(cone);
+                    let moved = Value(
+                        u8::try_from((usize::from(forged.get(cone, v, 0).0) + 1) % size).unwrap(),
+                    );
+                    forged.set(cone, v, 0, moved);
+                    assert!(
+                        !silent.rises_through(red, cone, m.act, &s, &forged),
+                        "{name} {target:?}: a rise to a state with S moved"
+                    );
+                    seen.forged += 1;
                 }
             }
         }
+        seen.cells.extend(red.param_cells(cone, &stepped));
     });
     seen
+}
+
+/// The cells of the parameter matrix of Lemma 6 (docs/theory/cones.md, "Parameters") that
+/// cannot occur, each for the reason the matrix gives: an S action's `New` or `Earlier` row
+/// on T writes T; an unfolded S action reads the existence of every T row it binds, so no
+/// such row is on a stub or dropped; a fold whose key the restriction would drop stays
+/// unfolded (`Fold::key_kept`), and a node fold's row is on an input or a stub; a key is
+/// never a `New` row; a rise writes no S, so it has no `New` or `Earlier` row
+/// on S.
+fn impossible_cell(cell: &ParamCell) -> bool {
+    let (kind, side, role, key) = *cell;
+    let s_action = kind == "folded" || kind == "unfolded";
+    (s_action && side != "S" && matches!(role, "New" | "Earlier"))
+        || (kind == "unfolded" && matches!(side, "stub" | "dropped"))
+        || (kind == "folded" && side == "dropped" && key)
+        || (kind == "folded" && side == "S" && role == "node row")
+        || (role == "New" && key)
+        || (kind == "rise" && side == "S" && matches!(role, "New" | "Earlier"))
+}
+
+/// `lemma6_steps_hold` on `models` at `Bounds::STATES` and `Bounds::VERIFY`, asserting that
+/// the cones fill every cell of `cells` and no cell `impossible_cell` names.
+fn assert_cells_step_as_the_cone_does(
+    models: &[(&str, SemanticModel)],
+    bounds: &[Bounds],
+    cells: &[ParamCell],
+) {
+    let seen = lemma6_steps_hold(models, bounds);
+    for cell in cells {
+        assert!(seen.cells.contains(cell), "{cell:?} not filled: {seen:?}");
+    }
+    let impossible: Vec<&ParamCell> = seen.cells.iter().filter(|c| impossible_cell(c)).collect();
+    assert!(
+        impossible.is_empty(),
+        "cells the matrix rules out: {impossible:?}"
+    );
+    assert!(
+        seen.s.s_steps > 0 && seen.rises > 0 && seen.forged == seen.rises,
+        "{seen:?}"
+    );
+}
+
+/// The order's cone, with S the vouchers, booklets and tickets: Voucher's owner keeps Order as
+/// a stub of the extended sub-lifecycle, and Shop is a T entity no var of S or the inputs
+/// names, so the restriction drops it. Sheet, Memo, Pad and Tab are raw inputs that `Use`
+/// reads, and every T use case that creates one runs only while its order is held, so it is a
+/// T action and a rise. Each use case fills cells of the parameter matrix of Lemma 6:
+///
+/// - `Grant`: a fold keyed by a `Parent` row on the stub, with a `Parent` row of S, the
+///   booklet, beside it;
+/// - `UseOpen`: a node fold over the order its link names, on the stub;
+/// - `UseNoted`: a fold keyed by an `Existing` row on the stub (it sets the order's `note`,
+///   which the cone does not hold);
+/// - `UseRung`: a fold with a `Triggered` row on Shop, dropped, beside its key;
+/// - `SheetNote`, `RingNote`, `PaidNote`, `MarkNote`, `OpenNote`: rises with an `Existing`, a
+///   `Parent`, a `Triggered`, an `Earlier` (`MarkNote`'s second step) and a `New` row on the
+///   stub;
+/// - `ShopNote`, `ShopOpenNote`, `MemoNote`, `RingNote`, `CloseNote`: rises with an
+///   `Existing`, a `New`, a `Parent`, a `Triggered` and an `Earlier` row on Shop
+///   (`CloseNote`'s second step).
+///
+/// In another of its targets' cones `RingNote` is an unfolded S action with a `Triggered` row
+/// on an input.
+const STUB_AND_DROPPED_ROWS: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(new, paid, shipped) @default(new)  hold: Bool @default(false)  mark: Enum(a, b) @default(a)  note: Bool @default(false) }
+entity Voucher "券" { id: Int @pk  status: Enum(open, used) @default(open) }
+entity Booklet "冊子" { id: Int @pk  status: Enum(open, closed) @default(open) }
+entity Ticket "札" { id: Int @pk  status: Enum(draft, issued) @default(draft) }
+entity Sheet "票" { id: Int @pk  status: Enum(made) @default(made) }
+entity Memo "メモ" { id: Int @pk  status: Enum(made) @default(made) }
+entity Pad "パッド" { id: Int @pk  status: Enum(made) @default(made) }
+entity Tab "タブ" { id: Int @pk  status: Enum(made) @default(made) }
+entity Shop "店" { id: Int @pk  status: Enum(open, closed) @default(open) }
+relate(Voucher, Order, N:1)
+relate(Voucher, Booklet, N:1)
+relate(Sheet, Order, N:1)
+relate(Memo, Shop, N:1)
+usecase Place "注文"
+usecase Pay "支払"
+usecase Ship "出荷"
+usecase Hold "保留"
+usecase Release "解除"
+usecase Bind "製本"
+usecase Grant "発券"
+usecase Use "使用"
+usecase UseOpen "開本で使用"
+usecase UseRung "呼出で使用"
+usecase UseNoted "注記して使用"
+usecase Draft "起票"
+usecase Issue "発行"
+usecase OpenShop "開店"
+usecase Ring "呼出"
+usecase SheetNote "票と印"
+usecase RingNote "呼出の票"
+usecase PaidNote "支払のメモ"
+usecase MarkNote "印とパッド"
+usecase ShopNote "店とメモ"
+usecase ShopOpenNote "開店とメモ"
+usecase MemoNote "メモ"
+usecase CloseNote "閉店とタブ"
+event EvPaid "支払済"
+event EvRing "呼出済"
+creates(Place, Order)
+transitions(Pay, Order.status, new -> paid)
+raises(Pay, EvPaid)
+transitions(Ship, Order.status, paid -> shipped)
+condition HasUsedVoucher "使用済の券"
+holds(HasUsedVoucher, Voucher.status == used)
+applies_to(HasUsedVoucher, Ship)
+sets(Hold, Order.hold == true)
+sets(Release, Order.hold == false)
+condition Held "保留中"
+holds(Held, Order.hold == true)
+creates(Bind, Booklet)
+creates(Grant, Voucher)
+transitions(Use, Voucher.status, open -> used)
+condition Ready "揃っている"
+holds(Ready, Ticket.status == issued, Sheet.status == made, Memo.status == made, Pad.status == made, Tab.status == made)
+applies_to(Ready, Use)
+condition BookOpen "冊子が開いている"
+holds(BookOpen, Booklet.status == open)
+condition OrderPaid "支払済"
+holds(OrderPaid, Order.status == paid)
+transitions(UseOpen, Voucher.status, open -> used)
+applies_to(BookOpen, UseOpen)
+applies_to(OrderPaid, UseOpen)
+transitions(UseRung, Voucher.status, open -> used)
+triggers(EvRing, UseRung)
+transitions(UseNoted, Voucher.status, open -> used)
+sets(UseNoted, Order.note == true)
+creates(Draft, Ticket)
+transitions(Issue, Ticket.status, draft -> issued)
+creates(OpenShop, Shop)
+transitions(Ring, Shop.status, open -> closed)
+raises(Ring, EvRing)
+creates(SheetNote, Sheet)
+sets(SheetNote, Order.mark == b)
+applies_to(Held, SheetNote)
+creates(RingNote, Sheet)
+triggers(EvRing, RingNote)
+creates(PaidNote, Memo)
+triggers(EvPaid, PaidNote)
+creates(MarkNote, Pad)
+sets(MarkNote, Order.mark == b)
+applies_to(Held, MarkNote)
+creates(ShopNote, Memo)
+transitions(ShopNote, Shop.status, open -> closed)
+applies_to(Held, ShopNote)
+creates(ShopOpenNote, Memo)
+creates(ShopOpenNote, Shop)
+applies_to(Held, ShopOpenNote)
+creates(MemoNote, Memo)
+applies_to(Held, MemoNote)
+creates(CloseNote, Tab)
+transitions(CloseNote, Shop.status, open -> closed)
+applies_to(Held, CloseNote)
+usecase OpenNote "受付票"
+creates(OpenNote, Order)
+creates(OpenNote, Sheet)
+forbidden(Order, status == shipped)
+"#;
+
+/// The order's cone, with S the vouchers and tickets, and every T row an S action binds on an
+/// input: `Grant` copies its desk's kind, which no fold can stand for, so the desk's existence
+/// and kind are raw inputs, and the order's existence with them. Each use case fills cells of
+/// the parameter matrix of Lemma 6:
+///
+/// - `Grant`, `GrantNoted`: unfolded S actions with a `Parent` and an `Existing` row on an
+///   input (`GrantNoted` sets the desk's `memo`, which the cone does not hold);
+/// - `Stamp`: a fold keyed by a `Triggered` row on an input, the closed desk its link names;
+/// - `StampNoted`: a fold keyed by an `Existing` row on an input;
+/// - `StampIssued`: a fold with a `Triggered` row of S, the issued ticket, and a node fold
+///   over the order its link names;
+/// - `Check`: a node fold over the desk its link names;
+/// - `SheetNote`, `ClosedNote`, `CloseNote`: rises with a `Parent`, a `Triggered` and an
+///   `Earlier` row on an input (`CloseNote`'s second step).
+///
+/// In another of its targets' cones `GrantNoted` is a rise with an `Existing` row of S.
+const INPUT_ROWS: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(new, paid, shipped) @default(new)  hold: Bool @default(false)  note: Bool @default(false) }
+entity Desk "窓口" { id: Int @pk  status: Enum(open, closed) @default(open)  kind: Enum(food, retail) @default(food)  memo: Bool @default(false) }
+entity Voucher "券" { id: Int @pk  status: Enum(open, used) @default(open)  kind: Enum(food, retail) @default(food)  stamp: Bool @default(false) }
+entity Ticket "札" { id: Int @pk  status: Enum(draft, issued) @default(draft) }
+entity Sheet "票" { id: Int @pk  status: Enum(made) @default(made) }
+entity Pad "パッド" { id: Int @pk  status: Enum(made) @default(made) }
+relate(Voucher, Order, N:1)
+relate(Voucher, Desk, N:1)
+relate(Sheet, Desk, N:1)
+usecase Place "注文"
+usecase Pay "支払"
+usecase Ship "出荷"
+usecase Hold "保留"
+usecase Release "解除"
+usecase OpenDesk "開設"
+usecase Close "閉鎖"
+usecase Grant "発券"
+usecase GrantNoted "注記して発券"
+usecase Use "使用"
+usecase Check "確認"
+usecase Stamp "押印"
+usecase StampIssued "発行で押印"
+usecase StampNoted "注記して押印"
+usecase Draft "起票"
+usecase Issue "発行"
+usecase SheetNote "票"
+usecase ClosedNote "閉鎖のパッド"
+usecase CloseNote "閉鎖とパッド"
+event EvClosed "閉鎖済"
+event EvIssued "発行済"
+creates(Place, Order)
+transitions(Pay, Order.status, new -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+condition HasUsedVoucher "使用済の券"
+holds(HasUsedVoucher, Voucher.status == used)
+applies_to(HasUsedVoucher, Ship)
+sets(Hold, Order.hold == true)
+sets(Release, Order.hold == false)
+condition Held "保留中"
+holds(Held, Order.hold == true)
+creates(OpenDesk, Desk)
+transitions(Close, Desk.status, open -> closed)
+raises(Close, EvClosed)
+applies_to(Held, Close)
+creates(Grant, Voucher)
+sets(Grant, Voucher.kind == Desk.kind)
+creates(GrantNoted, Voucher)
+sets(GrantNoted, Voucher.kind == Desk.kind)
+sets(GrantNoted, Desk.memo == true)
+transitions(Use, Voucher.status, open -> used)
+condition Ready "準備済"
+holds(Ready, Ticket.status == issued, Sheet.status == made, Pad.status == made, Voucher.kind == food, Voucher.stamp == true)
+applies_to(Ready, Use)
+sets(Check, Voucher.stamp == true)
+condition DeskOpen "窓口が開いている"
+holds(DeskOpen, Desk.status == open)
+applies_to(DeskOpen, Check)
+sets(Stamp, Voucher.stamp == true)
+triggers(EvClosed, Stamp)
+condition OrderPaid "支払済"
+holds(OrderPaid, Order.status == paid)
+sets(StampIssued, Voucher.stamp == true)
+triggers(EvIssued, StampIssued)
+applies_to(OrderPaid, StampIssued)
+sets(StampNoted, Voucher.stamp == true)
+sets(StampNoted, Order.note == true)
+creates(Draft, Ticket)
+transitions(Issue, Ticket.status, draft -> issued)
+raises(Issue, EvIssued)
+creates(SheetNote, Sheet)
+applies_to(Held, SheetNote)
+creates(ClosedNote, Pad)
+triggers(EvClosed, ClosedNote)
+creates(CloseNote, Pad)
+transitions(CloseNote, Desk.status, open -> closed)
+applies_to(Held, CloseNote)
+forbidden(Order, status == shipped)
+"#;
+
+/// Lemma 6 step by step on the cells of its parameter matrix with a row on a stub or a
+/// dropped entity (`STUB_AND_DROPPED_ROWS`): every S step of the cone is a silent step of the
+/// extended sub-lifecycle and the converse, and every T step that changes the inputs is a
+/// rise of the same action, stage by stage. Also on `INPUT_ROWS` with the voucher's kind and
+/// stamp read by no one, so that neither `Grant`'s copy nor `GrantNoted`'s is in the cone:
+/// both fold, and their desk, whose existence no S action then reads, is dropped beside the
+/// key, as a `Parent` row and as an `Existing` one. At `Bounds::STATES` only: the order's
+/// cone of `STUB_AND_DROPPED_ROWS` at `Bounds::VERIFY` passes the 200,000-state cap.
+#[test]
+fn stub_and_dropped_rows_bind_where_the_cone_binds_them() {
+    let unread = INPUT_ROWS.replace(", Voucher.kind == food, Voucher.stamp == true", "");
+    assert_ne!(unread, INPUT_ROWS);
+    let models = [
+        ("STUB_AND_DROPPED_ROWS", model_from(STUB_AND_DROPPED_ROWS)),
+        ("INPUT_ROWS, voucher unread", model_from(&unread)),
+    ];
+    assert_cells_step_as_the_cone_does(
+        &models,
+        &[Bounds::STATES],
+        &[
+            ("folded", "S", "Parent", false),
+            ("folded", "stub", "Parent", true),
+            ("folded", "stub", "Existing", true),
+            ("folded", "stub", "node row", true),
+            ("folded", "dropped", "Existing", false),
+            ("folded", "dropped", "Parent", false),
+            ("folded", "dropped", "Triggered", false),
+            ("rise", "stub", "New", false),
+            ("rise", "stub", "Existing", false),
+            ("rise", "stub", "Parent", false),
+            ("rise", "stub", "Triggered", false),
+            ("rise", "stub", "Earlier", false),
+            ("rise", "dropped", "Existing", false),
+            ("rise", "dropped", "New", false),
+            ("rise", "dropped", "Parent", false),
+            ("rise", "dropped", "Triggered", false),
+            ("rise", "dropped", "Earlier", false),
+            ("unfolded", "input", "Triggered", false),
+        ],
+    );
+}
+
+/// Lemma 6 step by step on the cells of its parameter matrix with a row on an input
+/// (`INPUT_ROWS`), as `stub_and_dropped_rows_bind_where_the_cone_binds_them` checks them, and
+/// on `STUB_AND_DROPPED_ROWS` with every voucher under a shop as well: in the voucher's own
+/// cone `Grant` folds keyed by its `Parent` shop, an input there. Last on `INPUT_ROWS` with the
+/// voucher unread, as `stub_and_dropped_rows_bind_where_the_cone_binds_them` has it, and with
+/// `Issue` waiting for an open desk: that read makes the desk's existence and status raw
+/// inputs, and `Grant` and `GrantNoted` still fold, keyed by the order, with the desk beside
+/// the key as a `Parent` row and an `Existing` one on an input.
+#[test]
+fn input_rows_bind_where_the_cone_binds_them() {
+    let open_desks = format!(
+        "{}condition AnyOpenDesk \"開いた窓口\"\nholds(AnyOpenDesk, Desk.status == open)\n\
+         applies_to(AnyOpenDesk, Issue)\n",
+        INPUT_ROWS.replace(", Voucher.kind == food, Voucher.stamp == true", "")
+    );
+    let models = [
+        ("INPUT_ROWS, desks read raw", model_from(&open_desks)),
+        ("INPUT_ROWS", model_from(INPUT_ROWS)),
+        (
+            "STUB_AND_DROPPED_ROWS under shops",
+            model_from(&format!(
+                "{STUB_AND_DROPPED_ROWS}relate(Voucher, Shop, N:1)\n"
+            )),
+        ),
+    ];
+    assert_cells_step_as_the_cone_does(
+        &models,
+        &[Bounds::STATES],
+        &[
+            ("folded", "S", "Triggered", false),
+            ("folded", "input", "Existing", true),
+            ("folded", "input", "Existing", false),
+            ("folded", "input", "Parent", true),
+            ("folded", "input", "Parent", false),
+            ("folded", "input", "Triggered", true),
+            ("folded", "input", "node row", true),
+            ("unfolded", "input", "Existing", false),
+            ("unfolded", "input", "Parent", false),
+            ("rise", "S", "Existing", false),
+            ("rise", "input", "New", false),
+            ("rise", "input", "Parent", false),
+            ("rise", "input", "Triggered", false),
+            ("rise", "input", "Earlier", false),
+        ],
+    );
+}
+
+/// Lemma 6 step by step on the models of the other reduction tests here, at one and two
+/// instances, rises included: `RISE_ON_A_STUB`'s rise with a `Parent` row on the stub,
+/// `CLAIM_CASE`'s fold with a `Triggered` row on an input beside its key and its rise with an
+/// `Existing` row on an input, `ORDER_SHIP`'s fold keyed by a `Triggered` row on the stub,
+/// `TRIGGERED_ON_A_STUB`'s fold with one beside its key, and the S rows of every role.
+#[test]
+fn the_reduction_models_bind_where_their_cones_bind() {
+    let models: Vec<(&str, SemanticModel)> = [
+        ("GATE", GATE),
+        ("IDENTITY_QUOTIENT", IDENTITY_QUOTIENT),
+        ("CLAIM_CASE", CLAIM_CASE),
+        ("ORDER_SHIP", ORDER_SHIP),
+        ("CASE_FOLD", CASE_FOLD),
+        ("TRIGGERED_ON_A_STUB", TRIGGERED_ON_A_STUB),
+        ("RISE_ON_A_STUB", RISE_ON_A_STUB),
+    ]
+    .into_iter()
+    .map(|(name, src)| (name, model_from(src)))
+    .collect();
+    assert_cells_step_as_the_cone_does(
+        &models,
+        &[Bounds::STATES, Bounds::VERIFY],
+        &[
+            ("folded", "S", "New", false),
+            ("folded", "S", "Existing", false),
+            ("folded", "S", "Existing", true),
+            ("folded", "input", "Triggered", false),
+            ("folded", "stub", "Triggered", true),
+            ("folded", "stub", "Triggered", false),
+            ("unfolded", "S", "New", false),
+            ("unfolded", "S", "Existing", false),
+            ("unfolded", "S", "Parent", false),
+            ("unfolded", "S", "Earlier", false),
+            ("unfolded", "S", "Triggered", false),
+            ("rise", "S", "Parent", false),
+            ("rise", "S", "Triggered", false),
+            ("rise", "input", "Existing", false),
+            ("rise", "stub", "Parent", false),
+        ],
+    );
 }
 
 fn domain_samples() -> Vec<(&'static str, SemanticModel)> {
@@ -2079,14 +2576,8 @@ fn a_param_left_on_a_stub_makes_the_cone_decide_unreduced() {
     }
 }
 
-/// The check never fires on the samples, the domain samples, and the engine corpus cases that
-/// build a model: for every
-/// target and property cone, with and without the inputs of S, the extended sub-lifecycle
-/// `reduced_with` builds binds no param on a stub that needs a present row. Only the top
-/// level is built here; a nested one, built in `Classes::of`, goes through the same check in
-/// every run, which a debug or `shadow` build turns into a panic.
-#[test]
-fn no_extended_sub_lifecycle_leaves_a_param_on_a_stub() {
+/// The samples, the domain samples, and the engine corpus cases that build a model.
+fn walked_models() -> Vec<(String, SemanticModel)> {
     let corpus = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../rdra-ish-cli/tests/engine_corpus"
@@ -2109,6 +2600,18 @@ fn no_extended_sub_lifecycle_leaves_a_param_on_a_stub() {
             models.push((case.to_string(), model));
         }
     }
+    models
+}
+
+/// The check never fires on the samples, the domain samples, and the engine corpus cases that
+/// build a model: for every
+/// target and property cone, with and without the inputs of S, the extended sub-lifecycle
+/// `reduced_with` builds binds no param on a stub that needs a present row. Only the top
+/// level is built here; a nested one, built in `Classes::of`, goes through the same check in
+/// every run, which a debug or `shadow` build turns into a panic.
+#[test]
+fn no_extended_sub_lifecycle_leaves_a_param_on_a_stub() {
+    let models = walked_models();
     let (mut built, mut rebound) = (0, 0);
     for (name, model) in &models {
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
@@ -2130,6 +2633,37 @@ fn no_extended_sub_lifecycle_leaves_a_param_on_a_stub() {
         built > 0 && rebound > 0,
         "{built} built, {rebound} params rebound"
     );
+}
+
+/// The split `split_with` chooses passes its check (Lemma 5 of docs/theory/cones.md,
+/// `reduce/lemma5.rs`) on the samples, the domain samples, and the engine corpus cases that
+/// build a model: for every target and property cone, with and without the inputs of S.
+/// Only the top level is walked here; a nested split, chosen in `Classes::of`, goes through
+/// the same check in every run, which a debug or `shadow` build turns into a panic.
+#[test]
+fn every_split_passes_its_check() {
+    let (mut splits, mut reducing) = (0, 0);
+    for (name, model) in &walked_models() {
+        for bounds in [Bounds::STATES, Bounds::VERIFY] {
+            let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+            for (cone, seed) in cones_with_seeds(&ts) {
+                let (sys, local) = ts.cone_system(&cone, [seed]);
+                for inputs in [true, false] {
+                    let split = sys.split_with(&local, inputs);
+                    let faults = sys.split_faults(&local, &split);
+                    let faults: Vec<String> = faults.iter().map(ToString::to_string).collect();
+                    assert!(
+                        faults.is_empty(),
+                        "{name}: a cone of {:?}: {faults:?}",
+                        cone.vars
+                    );
+                    splits += 1;
+                    reducing += usize::from(!split.s.is_empty());
+                }
+            }
+        }
+    }
+    assert!(reducing > 0, "{splits} splits, {reducing} with an S side");
 }
 
 /// The reduction is a divergence-blind stuttering bisimulation, and `Deadlock` reads "no
