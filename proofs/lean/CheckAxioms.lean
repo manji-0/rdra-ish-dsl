@@ -170,3 +170,15 @@ an axiom outside Lean's three standard ones (`propext`, `Classical.choice`, `Quo
 #print axioms RdraIsh.ExampleSymLive.one_copy_open
 #print axioms RdraIsh.ExampleSymLive.two_copies_close
 #print axioms RdraIsh.ExampleReachOnly.reach_only_counterexample
+#print axioms RdraIsh.LTS.isStop_moves_iff
+#print axioms RdraIsh.LTS.isStop_true_iff
+#print axioms RdraIsh.LTS.FairComp.cycle
+#print axioms RdraIsh.LTS.lasso_of_cycle
+#print axioms RdraIsh.LTS.lasso_of_accepts
+#print axioms RdraIsh.LTS.accepts_of_behaviour
+#print axioms RdraIsh.LTS.accepts_iff
+#print axioms RdraIsh.LTS.accepts_iff_lasso
+#print axioms RdraIsh.LTS.liveHolds_iff_not_accepts
+#print axioms RdraIsh.LTS.liveHolds_plain_iff
+#print axioms RdraIsh.LTS.liveHolds_wfNext_iff
+#print axioms RdraIsh.a15_search
