@@ -263,7 +263,8 @@ not a bound on what exists.
 **Proofs with z3**
 
 - **B1.** `Enc::compare` re-implements `expr.rs::compare` and is tied to it by reading and
-  differential tests only; no code under `core/prove/` has a Kani harness or a twin.
+  differential tests only; under `core/prove/` only `Enc::one_of` has a Kani harness, and no
+  code has a twin.
   `proof_equivalence` skips 130 comparisons on the samples. The header of
   `z3_guarded_null_beside_present` says BFS breaks its rule at `--int-range-max 6`, which no
   test runs.

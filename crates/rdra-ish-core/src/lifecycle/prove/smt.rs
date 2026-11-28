@@ -11,6 +11,7 @@
 
 use std::borrow::Cow;
 use std::fmt::{self, Display, Write};
+#[cfg(not(kani))]
 use std::sync::Arc;
 
 use crate::lifecycle::types::EntId;
@@ -37,8 +38,15 @@ impl Display for Sort {
 #[derive(Clone)]
 pub(super) struct Expr {
     sort: Sort,
-    node: Arc<Node>,
+    node: Shared,
 }
+
+/// A term's node, shared by its clones. Under Kani a node is leaked instead, since CBMC
+/// unwinds the drop of an `Arc<Node>` through every kind of node to the harness's bound.
+#[cfg(not(kani))]
+type Shared = Arc<Node>;
+#[cfg(kani)]
+type Shared = &'static Node;
 
 enum Node {
     /// A numeral, which is never negative in SMT-LIB.
@@ -73,7 +81,10 @@ impl Expr {
     fn new(sort: Sort, node: Node) -> Expr {
         Expr {
             sort,
+            #[cfg(not(kani))]
             node: Arc::new(node),
+            #[cfg(kani)]
+            node: Box::leak(Box::new(node)),
         }
     }
 
@@ -205,6 +216,49 @@ pub(super) fn let_in(binds: Vec<(Expr, Expr)>, body: Expr) -> Expr {
     }
     let sort = body.sort;
     Expr::new(sort, Node::Let(binds, body))
+}
+
+/// The meaning of the terms `encode.rs::Enc::one_of` writes, for its Kani harness: `false`, an
+/// atom, or an `or` of atoms, where an atom is `=` or `<=` of numerals and one Int symbol. Any
+/// other term panics, so the harness also proves `one_of` writes nothing else. The evaluator
+/// does not recurse past the `or`, so CBMC does not unwind it through every kind of node.
+#[cfg(kani)]
+impl Expr {
+    /// Whether a Bool term holds with the symbol `sym` at `at`.
+    pub(super) fn holds_at(&self, sym: &str, at: i64) -> bool {
+        match self.head() {
+            ("false", []) => false,
+            ("or", args) => args.iter().any(|a| a.atom_at(sym, at)),
+            _ => self.atom_at(sym, at),
+        }
+    }
+
+    fn atom_at(&self, sym: &str, at: i64) -> bool {
+        match self.head() {
+            ("=", [a, b]) => a.int_at(sym, at) == b.int_at(sym, at),
+            ("<=", [a, b]) => a.int_at(sym, at) <= b.int_at(sym, at),
+            _ => panic!("a term outside the fragment"),
+        }
+    }
+
+    /// A Bool application's symbol and arguments.
+    fn head(&self) -> (&str, &[Expr]) {
+        assert!(self.sort == Sort::Bool, "a term of the wrong sort");
+        match &*self.node {
+            Node::App(head, args) => (head.as_ref(), &args[..]),
+            _ => panic!("a term outside the fragment"),
+        }
+    }
+
+    /// The value of an Int term with the symbol `sym` at `at`.
+    fn int_at(&self, sym: &str, at: i64) -> i64 {
+        assert!(self.sort == Sort::Int, "a term of the wrong sort");
+        match &*self.node {
+            Node::Num(n) => i64::try_from(*n).expect("a numeral past i64"),
+            Node::App(head, args) if args.is_empty() && head.as_ref() == sym => at,
+            _ => panic!("a term outside the fragment"),
+        }
+    }
 }
 
 /// A function symbol: its name, argument sorts, and result sort.
