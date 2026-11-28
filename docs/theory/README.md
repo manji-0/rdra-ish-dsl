@@ -140,6 +140,8 @@ verifies:
 - **Paper arguments** that are sketches, not proofs: Lemma 6 of the reduction (A8), the
   per-construct argument for the TLA+ printer (T1), the theorems marked `P-sketch` in the
   [summary by evidence class](./claims.md#summary-by-evidence-class).
+- **Lean** (4.36.0, its kernel and the three standard axioms) for the Lean proofs that the
+  M evidence of A8, A18, A20 and A21 cites ([proofs/lean](../../proofs/lean/README.md)).
 - **Kani** and the Rust compiler. CI's verification jobs build with overflow checks (profile
   `ci-checked`), so a fixed-width integer that wraps panics there; release builds wrap
   silently.

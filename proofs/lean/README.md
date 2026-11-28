@@ -38,8 +38,9 @@ the script.
 - existentials;
 - a group action given by its laws.
 
-All four are a few lines each. Mathlib's cache is several gigabytes, and pinning it would tie
-the toolchain to Mathlib's release cadence. The group laws are fields of `Sym`, so
+All four are a few lines each. Mathlib would add its compiled cache, a download of
+thousands of files, to every CI run that misses the cache. Pinning it would also tie the
+toolchain to Mathlib's releases. The group laws are fields of `Sym`, so
 `Equiv.Perm`, `Subgroup` and `MulAction` are not needed.
 
 ## What each theorem proves
@@ -56,7 +57,7 @@ the toolchain to Mathlib's release cadence. The group laws are fields of `Sym`, 
 | `Sym.sub` | `Symmetry.lean` | A20 | A family of subgroups of `G_s` is again a symmetry when it is closed under the group operations, preserved by its own elements, and kept along steps. |
 | `quotient_covers`, `quotient_sound` | `Symmetry.lean` | A18, its last sentence | The run that stores `can(t) = π(t)(t)` for every successor `t`, with `π(t) ∈ G_t`, reaches an image of every reachable state, and only images of reachable states. |
 | `quotient_holds_iff` | `Symmetry.lean` | A21, for invariants | An invariant whose value is the same on `s` and `g(s)` for every `g ∈ G_s` gets the plain run's verdict on that quotient. Any member of the orbit serves, as A21 needs. |
-| `Example.flag_after_s`, `ExampleSym.sorted_quotient` | `Example.lean` | none | Concrete systems that discharge every hypothesis of `a8_holds_iff` and of `quotient_holds_iff`. They show that neither theorem is vacuous. |
+| `Example.flag_after_s`, `ExampleSym.sorted_quotient` | `Example.lean` | none | Concrete systems that discharge every hypothesis of `a8_holds_iff` and of `quotient_holds_iff`, so the hypotheses are jointly satisfiable. The A8 instance is small: its partition is the identity, it has no rises and its input bytes are constant, so (B2), (B3) and the rise half of Lemma 6 hold trivially there. No block of two states and no rise is exercised. |
 
 ## What the hypotheses are
 
@@ -89,7 +90,10 @@ The proofs assume the following hypotheses and do not derive them:
     open. Closing it would need a deep embedding of the transition-system builder.
   - The same holds for (G1)–(G6) and the symmetry scan.
   - (B1)–(B3) are certified at run time on each partition (claim A8, R). That certificate
-    is the link from the code to `Stable`, and Lean does not check it.
+    is the nearest link from the code to `Stable`, but it is not `Stable` itself. The code
+    checks that one sweep with every block as a splitter splits nothing, while `Stable.b2`
+    is the path form of (B2). cones.md argues the step between the two, and Lean does not
+    check it.
 - **A8, the rest of the theorem.** The proofs leave out these parts:
   - The `T_a` action labels and the parameter bindings. The bisimulation is over unlabelled
     steps, so consequences 2 to 4 and the `Plain` fairness of point 4 are not stated.
