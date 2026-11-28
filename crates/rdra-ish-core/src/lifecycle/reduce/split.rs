@@ -124,6 +124,9 @@ impl TransitionSystem {
             .chain(self.var_ids().filter(|v| self.is_counted(*v)))
             .collect();
         let mut t_actions = BTreeSet::new();
+        // A test or a `shadow` build may leave the side rule out (`dropped`), so that the
+        // split's check fails (`split_faults`).
+        let sides = !dropped("split_sides");
         loop {
             let mut grew = false;
             for i in 0..self.actions.len() {
@@ -140,7 +143,7 @@ impl TransitionSystem {
                     grew = true;
                 }
             }
-            for v in self.var_ids() {
+            for v in self.var_ids().filter(|_| sides) {
                 let Some(e) = own[v.index()] else { continue };
                 grew |= (t.contains(&v) && t.insert(e)) || (t.contains(&e) && t.insert(v));
             }
@@ -229,10 +232,8 @@ impl TransitionSystem {
             folds.retain(|f| f.key_kept(self, &all));
             inputs = inputs_of(&folds);
         }
-        assert!(
-            inputs.iter().all(|v| monotone[v.index()]),
-            "every input of S is monotone"
-        );
+        // Every input is monotone (Lemma 5d): `reduced_with` checks it with the rest of the
+        // lemma (`split_faults`).
         Split {
             t,
             s,

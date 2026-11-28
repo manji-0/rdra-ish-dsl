@@ -37,6 +37,7 @@ use super::TransitionSystem;
 mod cache;
 mod extended;
 mod fold;
+mod lemma5;
 #[cfg(test)]
 pub(crate) mod lemma6;
 mod lift;
@@ -77,8 +78,9 @@ enum Unreduced {
     OverBudgetWithInputs,
     /// Nothing reduces.
     Nothing,
-    /// The extended sub-lifecycle failed the check every build makes on it (`StubCheck`), so
-    /// no quotient of it is trusted: a tool bug, and the cone is decided unreduced.
+    /// The split failed the check every build makes on it (`split_faults`, Lemma 5), or the
+    /// extended sub-lifecycle failed its own (`StubCheck`), so no quotient of it is trusted: a
+    /// tool bug, and the cone is decided unreduced.
     Untrusted,
 }
 
@@ -783,6 +785,16 @@ impl TransitionSystem {
         clean: &mut bool,
     ) -> Result<TransitionSystem, Unreduced> {
         let split = self.split_with(seeds, inputs);
+        // Lemma 5: the split is checked against the actions' reads and writes before anything
+        // uses it. A split that fails is a tool bug; a debug or `shadow` build stops here
+        // unless a test planted the fault (`dropped`).
+        if let Some(fault) = self.split_faults(seeds, &split).first() {
+            crate::shadow_assert!(dropped("split_sides"), "shadow: split_with: {fault}");
+            eprintln!(
+                "warning: the split of a cone failed its check ({fault}); deciding the cone unreduced (a tool bug)"
+            );
+            return Err(Unreduced::Untrusted);
+        }
         // Every S var observed by T makes the quotient the identity, whatever the inputs do.
         if split.s.is_empty() || split.s.is_subset(&split.obs) {
             return Err(Unreduced::Nothing);
