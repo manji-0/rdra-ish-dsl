@@ -220,9 +220,10 @@
   instances), an invariant cone stopped at the memory limit can be decided by the proof, and
   the proof keeps its certificate under the user's cache directory. On the 43 runs of
   `scripts/verify-samples.sh` the total time goes from about 40 s to 85 s with an empty
-  cache (59 s with a warm one); each z3 process takes 29 to 63 MB. Without z3 (`--z3` or
-  `RDRA_Z3` naming no file, or no `z3` on `PATH`) the run prints `note: z3 not found ...: the
-  proof was skipped`, and otherwise prints and exits as before. `--no-prove` keeps the old
+  cache (59 s with a warm one), at `RDRA_JOBS=1`; each z3 process takes 29 to 63 MB.
+  Without z3 (`--z3` or `RDRA_Z3` naming no file, or no `z3` on `PATH`) the run prints
+  `note: z3 not found ...: the proof was skipped`, and otherwise prints and exits as before.
+  A z3 that is found but fails is an error, as under `--prove`. `--no-prove` keeps the old
   behavior: no proof and no z3 lookup. `--prove` is accepted and changes only that a missing
   z3 is an error (exit 1); `--deny-unproved` makes a missing z3 an error too, and neither it
   nor `--z3` needs `--prove` any more. `--no-prove` with `--prove`, `--deny-unproved` or

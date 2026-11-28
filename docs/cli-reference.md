@@ -1040,8 +1040,8 @@ number, `0`, and a fraction are refused.
   the cores, at most 8). Each process holds one core in the TLC runs' count while the proof
   runs, so under `--with-tlc` the runs that start meanwhile leave those cores free. Their
   memory is not counted and is not bounded by `--memory`: 29 to 63 MB per process on the
-  samples at their `// expect` bounds (z3 5.1.0). Allow for it beside the limit, lower
-  `RDRA_JOBS`, or pass `--no-prove`.
+  samples at their `// expect` bounds (z3 5.1.0, `RDRA_JOBS=1`). Allow for it beside the
+  limit, lower `RDRA_JOBS`, or pass `--no-prove`.
   z3 at its own `memory_max_size` exits, which would end the proof.
 
 **A cone that reaches the limit** stops as one at `--max-states` does. `check` reports the

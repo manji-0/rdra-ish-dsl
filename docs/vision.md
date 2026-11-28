@@ -29,8 +29,8 @@ outputs. Domain code is in scope. `codegen` prints the data types, states, and t
 functions in TypeScript, Rust, or Go for an agent to finish, and `check --code` holds the
 finished code to the model ([design](./design/algebraic-codegen.md)). Verification is
 bounded model checking by rdra-ish's own checker, and the bounds are part of every result.
-TLC (`--with-tlc`) checks the same cones as a second opinion, and `verify --prove`
-(experimental) tries to prove each state rule for any number of rows with z3. Unbounded
+TLC (`--with-tlc`) checks the same cones as a second opinion, and `verify` also tries to
+prove each state rule for any number of rows with z3 (`--no-prove` turns it off). Unbounded
 proof with TLAPS is out of scope.
 
 ## The requirements layer conforms to RDRA 3.0

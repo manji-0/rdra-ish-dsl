@@ -233,13 +233,21 @@ bounds: 2 instances per entity, Int 0..5 (TLA+ InstanceCount=2, IntRange=0..5); 
 cones: 1 for 2 invariant(s) and 1 after-assert(s)
 temporal properties: 2, each checked on its cone, and on the whole model only when the cone does not decide it (budget 300 s)
 state models (BFS on 1 entity cone): 1 state model, 5 states witnessed, 0 deadlocks, 0 use cases that never run
+proof (Z3 version 5.1.0 - 64 bit): 2 state rules, for any number of rows, in the whole model
+proved: Forbidden_Order_0 (for any number of rows, in the whole model)
+proved: Inv_Order_0 (for any number of rows, in the whole model)
+lemma: an absent Order row holds base values (for any number of rows, in the whole model)
+lemma: no Order row is ever deleted (for any number of rows, in the whole model)
+lemma: every present Order row is one of 5 reached patterns of (status, delivered_at) (for any number of rows, in the whole model)
+lemma: a present Order row's (status, delivered_at) is one of {(pending, null), (paid, null), (shipped, null), (delivered, present), (cancelled, null)} (for any number of rows, in the whole model)
+proof: 2 proved, 0 unproved, 0 out of scope
 Cone_Forbidden_Order_0 [Forbidden_Order_0, Inv_Order_0, AfterAssert_DeliverOrder_0]: ok (31 states)
 Cone_PaidLeadsToShipped [PaidLeadsToShipped]: not decided (31 states, Cone_PaidLeadsToShipped_WF: ok, needs the whole model's WF_vars(Next))
 Cone_EventuallyTerminal [EventuallyTerminal]: not decided (31 states, Cone_EventuallyTerminal_WF: ok, needs the whole model's WF_vars(Next))
 RdraSpec_PaidLeadsToShipped [PaidLeadsToShipped]: ok (31 states)
 RdraSpec_EventuallyTerminal [EventuallyTerminal]: ok (31 states)
 result: ok
-OK: no errors within 2 instances per entity, Int 0..5
+OK: no errors within 2 instances per entity, Int 0..5; 2 of 2 rules proved for any number of rows, in the whole model
 ```
 
 Neither property of `order.rdra` has `.fair`, and `DeliverOrder` writes `delivered_at`, which
@@ -476,9 +484,9 @@ names. Which cones run, what breaks the symmetry, and `RDRA_ISH_SYMMETRY_STATS` 
   deadlocks, the reduction's partition), a growing run's spare buffers, and z3 are outside it,
   and a run has been measured well past the limit. Unless `--no-prove`, each z3 process (one
   per `RDRA_JOBS`) takes more beside BFS's passes and TLC (29 to 63 MB each on the samples
-  at their `// expect` bounds, z3 5.1.0), and holds one of the cores the TLC runs are
-  scheduled on. When cones stop at the limit, set `--memory` to
-  about half the memory you can spare ([Memory limit](./cli-reference.md#memory-limit)).
+  at their `// expect` bounds, z3 5.1.0, `RDRA_JOBS=1`), and holds one of the cores the TLC
+  runs are scheduled on. When cones stop at the limit, set `--memory` to about half the
+  memory you can spare ([Memory limit](./cli-reference.md#memory-limit)).
 - **A stopped entity cone gives back its room.** `verify` reads the findings of an entity
   cone that stopped at the limit at once, then frees what it held, so the cones after it can
   run (#361). Under `--symmetry always` that cone runs again up to symmetry in the same room.
@@ -711,7 +719,7 @@ breaks one from a state where all of them hold. A certificate that passes and ho
 any other costs that round, and the proof runs from the start. A cached verdict is never trusted, and the
 output is the same either way. The proof starts once BFS has decided the safety cones and runs beside the property
 and whole-model passes; its lines print where they would after them. Each z3 process takes
-memory that `--memory` does not count, 29 to 63 MB on the samples
+memory that `--memory` does not count, 29 to 63 MB on the samples at `RDRA_JOBS=1`
 ([Memory, state caps, and threads](#memory-state-caps-and-threads)). On the 43 runs of
 `scripts/verify-samples.sh` the proof takes the total from about 40 s to 85 s with an empty
 certificate cache, and 59 s with a warm one (`RDRA_JOBS=1`); `--no-prove` saves that.
