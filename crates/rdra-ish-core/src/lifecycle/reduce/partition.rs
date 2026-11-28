@@ -27,6 +27,9 @@ pub(super) enum Classified {
     /// More classes than the tables of any cone it would reduce may print for TLC
     /// (`TLA_CELL_BUDGET`): a cone prints at least one cell per class and observed var.
     TooLarge,
+    /// The run's classes, or the reduction the run of S was made with, failed a check of
+    /// `hypotheses.rs`: a tool bug, and no cone takes the quotient.
+    Untrusted,
     Classes(Arc<Classes>),
 }
 
@@ -71,6 +74,8 @@ pub(super) enum NoQuotient {
     Nothing,
     /// `Classified::TooLarge`.
     TooLarge,
+    /// `Classified::Untrusted`.
+    Untrusted,
 }
 
 /// The classes of S, with the initial states' and the moves' classes, in the cone's ids.
@@ -194,6 +199,8 @@ impl Quotient {
     ) -> (Result<Self, NoQuotient>, bool) {
         if ext.obs_local.is_empty() {
             let classes = Arc::new(Classes::unobserved(ext));
+            #[cfg(test)]
+            unobserved_loops(ext, classes.loops[0]);
             let moves = vec![Vec::new()];
             return (Ok(Quotient { classes, moves }), true);
         }
@@ -202,6 +209,7 @@ impl Quotient {
         let classes = match classified {
             Classified::Nothing => return (Err(NoQuotient::Nothing), clean),
             Classified::TooLarge => return (Err(NoQuotient::TooLarge), clean),
+            Classified::Untrusted => return (Err(NoQuotient::Untrusted), clean),
             Classified::Classes(classes) => classes,
         };
         {
@@ -258,8 +266,32 @@ impl Classes {
     pub(super) fn of(ext: &Extended, caps: Caps, cache: &QuotientCache) -> (Classified, Ended) {
         let raw = &ext.system;
         // The inputs stay on the nested T side: the rises are kept, and only `obs` anchors.
-        let (sub, clean) =
-            raw.reduced_in(&[(ext.obs_local.clone(), ext.rise_actions())], caps, cache);
+        // A test may plant a fault: a seed that reads and keeps nothing (`dropped`).
+        let seed = match dropped("inner_seed_empty") {
+            true => (VarSet::new(), BTreeSet::new()),
+            false => (ext.obs_local.clone(), ext.rise_actions()),
+        };
+        let (sub, clean) = raw.reduced_in(&[seed], caps, cache);
+        // The nested case: (B1) of the inner partition fixes the representative's `obs` and
+        // input bytes, and the rises' guards and effects, on its inner class only when the
+        // inner split keeps them on its T side or in its own `obs`.
+        if let Some(inner) = sub.reduction() {
+            #[cfg(test)]
+            hypotheses::tests::count(|c| c.inner += 1);
+            if let Some(fault) = hypotheses::inner_faults(ext, inner).first() {
+                crate::shadow_assert!(dropped("inner_seed_empty"), "shadow: Classes::of: {fault}");
+                eprintln!(
+                    "warning: the nested reduction of a sub-lifecycle failed its check ({fault}); deciding the cone unreduced (a tool bug)"
+                );
+                #[cfg(test)]
+                hypotheses::tests::count(|c| c.faults[fault.hypothesis as usize] += 1);
+                let ended = match clean {
+                    true => Ended::Clean,
+                    false => Ended::Stopped,
+                };
+                return (Classified::Untrusted, ended);
+            }
+        }
         // A test or `shadow` build may force S up to `H` at once (`Caps::force_s_up_to_h`). A
         // run up to `H` never goes through `QuotientCache::run_of_s`, which holds plain runs
         // alone: neither this path nor the retry below reads a held run as one up to `H`, and
@@ -464,6 +496,7 @@ impl Classes {
         }
         let mut moves: Vec<Vec<ClassMove>> = vec![Vec::new(); reps.len()];
         let mut rises: BTreeMap<(u32, Box<[u8]>), u32> = BTreeMap::new();
+        let keyed_by_source = dropped("rise_table_by_source");
         let mut seen: BTreeSet<(u32, ActId, &[u8], u32)> = BTreeSet::new();
         for e in run.edges() {
             let (x, y) = (e.from as usize, e.to as usize);
@@ -472,9 +505,14 @@ impl Classes {
                 // Every state of a block rises into the same blocks; the representative's
                 // edges are enough.
                 if *reps[class[x] as usize] == run.states.at(x).0 {
-                    let inputs = sub.project(&run.states.at(y), &ext.inputs_local).0;
+                    // A test may plant a fault: the rise keyed by the inputs it leaves.
+                    let at = if keyed_by_source { x } else { y };
+                    let inputs = sub.project(&run.states.at(at), &ext.inputs_local).0;
                     let was = rises.insert((class[x], inputs), class[y]);
-                    assert!(was.is_none_or(|c| c == class[y]), "a rise is a function");
+                    assert!(
+                        keyed_by_source || was.is_none_or(|c| c == class[y]),
+                        "a rise is a function"
+                    );
                 }
                 continue;
             }
@@ -485,6 +523,39 @@ impl Classes {
                 moves[class[x] as usize].push((act, params.into(), class[y]));
             }
         }
+        // `RiseTable` and `Lemma6Staged`: the table holds the rises of the run, each one stage.
+        // A test may plant a fault: the raw inputs listed as a stage whether they move or not.
+        let raw_always = dropped("stages_raw_always");
+        let stage = |raw: usize, before: &[u8], after: &[u8]| {
+            let mut out = hypotheses::stages(raw, before, after);
+            if raw_always && before[..raw] == after[..raw] {
+                out.insert(0, before.to_vec());
+            }
+            out
+        };
+        let faults = hypotheses::rise_faults(
+            hypotheses::raw_width(ext),
+            hypotheses::input_bytes(ext, sub, run),
+            &rise_edges,
+            &class,
+            &rises,
+            stage,
+        );
+        #[cfg(test)]
+        hypotheses::tests::count(|c| c.rises += rise_edges.len());
+        if let Some(fault) = faults.first() {
+            crate::shadow_assert!(
+                keyed_by_source || raw_always,
+                "shadow: Classes::of_graph: {fault}"
+            );
+            eprintln!(
+                "warning: the rise table of a sub-lifecycle ({n} states) failed its check ({fault}); deciding the cone unreduced (a tool bug)"
+            );
+            #[cfg(test)]
+            hypotheses::tests::count(|c| c.faults[fault.hypothesis as usize] += 1);
+            return (Classified::Untrusted, ended, Vec::new());
+        }
+        drop(faults);
         // A silent orbit self-edge stands for a concrete cycle inside its class: a move into
         // another state of its own orbit, repeated, comes back.
         let orbit_loops: Vec<u32> = match orbits {
@@ -515,6 +586,29 @@ impl Classes {
                 (vec![false; classes], d)
             }
         };
+        // `hloop`: every class whose silent edges between different states hold a cycle is
+        // marked, whether `divergence` marked it or `s_cycles` said nothing can loop. What the
+        // check keeps takes the place of the state arrays read before.
+        drop((blocks, initial, rise_edges, class_of_block));
+        let faults = hypotheses::loop_faults(n, &silent, &class, &loops);
+        #[cfg(test)]
+        hypotheses::tests::count(|c| {
+            c.loop_runs += 1;
+            c.looping += usize::from(loops.iter().any(|l| *l));
+        });
+        if let Some(fault) = faults.first() {
+            crate::shadow_assert!(
+                dropped("divergence_back_edges") || dropped("s_cycles"),
+                "shadow: Classes::of_graph: {fault}"
+            );
+            eprintln!(
+                "warning: the loop marks of a sub-lifecycle ({n} states) failed their check ({fault}); deciding the cone unreduced (a tool bug)"
+            );
+            #[cfg(test)]
+            hypotheses::tests::count(|c| c.faults[fault.hypothesis as usize] += 1);
+            return (Classified::Untrusted, ended, Vec::new());
+        }
+        drop(faults);
         let classes = Classes {
             reps,
             class_of,
@@ -547,8 +641,41 @@ fn forced(caps: Caps) -> bool {
 /// often, so no path of S steps is infinite and no class can loop; an unobserved S, one
 /// class that is never explored, can loop only otherwise.
 fn s_cycles(ext: &Extended) -> bool {
+    // A test may plant a fault: nothing loops (`dropped`).
+    if dropped("s_cycles") {
+        return false;
+    }
     let monotone = ext.system.monotone_vars();
     (0..monotone.len()).any(|v| !monotone[v] && !ext.inputs_local.contains(&VarId::at(v)))
+}
+
+/// `hloop` on an unobserved S, one class that is never explored, in a test build: when
+/// `s_cycles` leaves the class unmarked (`marked`), the silent edges of a plain run of S hold
+/// no cycle between two different states. A release build explores nothing here, so the
+/// check runs only in tests. The run has caps of its own, not the caller's pool or deadline,
+/// and one past them is not checked.
+#[cfg(test)]
+fn unobserved_loops(ext: &Extended, marked: bool) {
+    if marked {
+        return;
+    }
+    let caps = Caps::new(usize::MAX, 200_000);
+    let run = ext
+        .system
+        .clone()
+        .run_checking(caps.without_views(), Checks::none());
+    if !run.complete {
+        return;
+    }
+    let (silent, _) = split_edges(&run, &ext.rise);
+    let n = run.states.len();
+    let faults = super::hypotheses::loop_faults(n, &silent, &vec![0; n], &[false]);
+    assert!(
+        faults.is_empty() || dropped("s_cycles"),
+        "shadow: Classes::unobserved: {}",
+        faults[0]
+    );
+    super::hypotheses::tests::count(|c| c.unobserved += 1);
 }
 
 /// Which classes can loop inside themselves (docs/formal-verification.md, "WF_vars(Next) on
@@ -593,6 +720,8 @@ fn divergence(
     // White 0, on the stack 1, done 2: an edge to a state on the stack closes a cycle.
     let mut colour = vec![0u8; n];
     let mut stack: Vec<(u32, u32)> = Vec::new();
+    // A test may plant a fault: a back edge marks nothing (`dropped`).
+    let back_edges = !dropped("divergence_back_edges");
     for root in 0..id32(n) {
         if colour[root as usize] != 0 {
             continue;
@@ -616,7 +745,7 @@ fn divergence(
                     colour[v as usize] = 1;
                     stack.push((v, succ.start[v as usize]));
                 }
-                1 => loops[class[v as usize] as usize] = true,
+                1 if back_edges => loops[class[v as usize] as usize] = true,
                 _ => {}
             }
         }

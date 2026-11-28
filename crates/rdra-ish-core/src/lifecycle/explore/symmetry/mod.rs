@@ -67,10 +67,15 @@ impl std::str::FromStr for Symmetry {
 /// which leaves them so and skips that check too, so that the cone is reduced by an
 /// extended sub-lifecycle that drops their steps, and `split_sides`, which leaves out of
 /// `split_at` the rule that a var and its entity's existence share a side, so that the
-/// split's check fails and the cone is decided unreduced (`reduce/lemma5.rs`). A
-/// test-only switch that plants a bug
-/// per rule, so that a witness can show the rule is needed (`witnesses`, and engine_corpus
-/// under `shadow`); a unit test sets it per thread. A release build drops nothing.
+/// split's check fails and the cone is decided unreduced (`reduce/lemma5.rs`). Five more
+/// plant a fault that a check of `reduce/hypotheses.rs` finds, so that the cone is decided
+/// unreduced: `rise_table_by_source` keys a rise by the inputs it leaves,
+/// `stages_raw_always` adds the raw inputs as a stage to every stage list the check reads,
+/// `divergence_back_edges` marks no class on a back edge, `s_cycles` says nothing loops, and
+/// `inner_seed_empty` gives the inner split a seed that reads and keeps nothing. A test-only
+/// switch that plants a bug per rule, so that a witness can show the rule is needed
+/// (`witnesses`, and engine_corpus under `shadow`); a unit test sets it per thread. A release
+/// build drops nothing.
 #[cfg_attr(not(any(test, feature = "shadow")), allow(unused_variables))]
 pub(crate) fn dropped(name: &str) -> bool {
     #[cfg(test)]
