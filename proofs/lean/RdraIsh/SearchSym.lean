@@ -384,4 +384,241 @@ theorem Conn.star (hG : FiniteGroups h) {e : σ × β} {a c : (σ × β) × Φ}
 
 end Pairs
 
+/-! ## (⇒) A fair violating lasso of `M` makes the orbit search accept -/
+
+open Classical in
+/-- The frames of the stored run over a concrete sequence, kept on a stutter: `Θ 0 = π(c 0)`,
+and a move to `c (n+1)` multiplies the frame by `π` of the image of `c (n+1)`, as the run
+stores `can` of each successor. -/
+noncomputable def skipFrame (h : Sym M G) (K : Canon h) (c : Nat → σ) : Nat → G
+  | 0 => K.π (c 0)
+  | n + 1 => if c (n + 1) = c n then skipFrame h K c n
+      else h.mul (K.π (h.act (skipFrame h K c n) (c (n + 1)))) (skipFrame h K c n)
+
+section Complete
+
+variable {L : SymLive h Φ β} {K : Canon h} {goal trig : β → σ → Prop} {stop : σ → Prop}
+  {after : β → σ → Prop}
+
+open Classical in
+theorem skipFrame_succ (c : Nat → σ) (n : Nat) : skipFrame h K c (n + 1) =
+    if c (n + 1) = c n then skipFrame h K c n
+    else h.mul (K.π (h.act (skipFrame h K c n) (c (n + 1)))) (skipFrame h K c n) := rfl
+
+theorem skipFrame_stut {c : Nat → σ} {n : Nat} (he : c (n + 1) = c n) :
+    skipFrame h K c (n + 1) = skipFrame h K c n := by
+  rw [skipFrame_succ, ite_eq_left he]
+
+theorem skipFrame_move {c : Nat → σ} {n : Nat} (hne : c (n + 1) ≠ c n) :
+    skipFrame h K c (n + 1) =
+      h.mul (K.π (h.act (skipFrame h K c n) (c (n + 1)))) (skipFrame h K c n) := by
+  rw [skipFrame_succ, ite_eq_right hne]
+
+theorem skipFrame_mem {c : Nat → σ} (hb : M.Behaviour c) :
+    ∀ n, h.mem (c n) (skipFrame h K c n)
+  | 0 => K.hπ _
+  | n + 1 => by
+    have hmt : h.mem (c (n + 1)) (skipFrame h K c n) :=
+      h.mem_step_or (hb.2 n) (skipFrame_mem hb n)
+    by_cases he : c (n + 1) = c n
+    · rw [skipFrame_stut he]; exact hmt
+    · rw [skipFrame_move he]; exact h.mul_mem ((h.mem_act hmt).1 (K.hπ _)) hmt
+
+/-- **N9 up to symmetry, (⇒).** A concrete lasso that satisfies `Fair_P`, stays forever only
+where `stop` holds, and violates the property for a binding `b₀` makes the orbit search
+accept. Its image under the frames `skipFrame` is a sequence of stored pairs that steps by
+pair edges and repeats (the frames at the lasso's base state lie in one finite group); from
+the trigger it stays in `N`. If the lasso settles at a state, the image settles at a stop
+pair. Otherwise the pairs it repeats lie in one component with a cycle, and a piece of the
+threads with no covered node would hold a thread of the lasso that is always enabled and
+never taken. -/
+theorem oAccepts_of_lasso (he : LiveEqui h L trig goal stop after) (hG : FiniteGroups h)
+    {b₀ : β} {c : Nat → σ} (hb : M.Behaviour c) (hl : Lasso c) (hf : M.FairP L.inst c)
+    (hs : StopsOnly stop c) (hv : Violates (trig b₀) (goal b₀) c) :
+    OAccepts L K goal stop trig := by
+  classical
+  let Θ := skipFrame h K c
+  have hmem : ∀ n, h.mem (c n) (Θ n) := skipFrame_mem hb
+  let Pr : Nat → σ × β := fun n => (h.act (Θ n) (c n), L.actB (Θ n) b₀)
+  have hstut : ∀ n, c (n + 1) = c n → Pr (n + 1) = Pr n := by
+    intro n he'
+    show (h.act (skipFrame h K c (n + 1)) (c (n + 1)), L.actB (skipFrame h K c (n + 1)) b₀) = _
+    rw [skipFrame_stut he', he']
+  have hmove : ∀ n, c (n + 1) ≠ c n →
+      REdge M (Pr n).1 (h.act (Θ n) (c (n + 1))) ∧
+        Pr (n + 1) = pn L K (h.act (Θ n) (c (n + 1))) (Pr n) ∧
+        Θ (n + 1) = h.mul (K.π (h.act (Θ n) (c (n + 1)))) (Θ n) := by
+    intro n hne
+    have hΘ := skipFrame_move (K := K) hne
+    have hnx : M.Next (c n) (c (n + 1)) := (hb.2 n).resolve_left hne
+    refine ⟨⟨fun e => hne (h.act_inj e), h.next_act hnx (hmem n)⟩, ?_, hΘ⟩
+    show (h.act (skipFrame h K c (n + 1)) (c (n + 1)), L.actB (skipFrame h K c (n + 1)) b₀) = _
+    rw [hΘ, h.act_mul, L.actB_mul, ← K.hcan]; rfl
+  -- The stored states are reachable in the quotient.
+  have hreach : ∀ n, (quotient M K.can).Reach (Pr n).1 := by
+    intro n
+    induction n with
+    | zero => exact Reach.init ⟨c 0, hb.1, (K.hcan _).symm⟩
+    | succ n ih =>
+      by_cases he' : c (n + 1) = c n
+      · rw [hstut n he']; exact ih
+      · obtain ⟨⟨_, a, ha⟩, h2, _⟩ := hmove n he'
+        rw [h2]; exact Reach.step ih ⟨_, ha, rfl⟩
+  -- From the trigger the states are after it, and the pairs are goal-free.
+  obtain ⟨i, hti, hgi⟩ := hv
+  have hafter : ∀ j, i ≤ j → after b₀ (c j) := by
+    intro j hj
+    obtain ⟨d, rfl⟩ : ∃ d, j = i + d := ⟨j - i, by omega⟩
+    clear hj
+    induction d with
+    | zero => exact he.trig_after b₀ _ hti
+    | succ d ih =>
+      show after b₀ (c (i + d + 1))
+      rcases hb.2 (i + d) with e | hn
+      · rw [e]; exact ih
+      · exact he.after_next b₀ _ _ ih hn
+  have hPN : ∀ j, i ≤ j → PN goal (Pr j) := fun j hj hg =>
+    hgi j hj ((he.goal_act b₀ (hmem j) (hafter j hj)).1 hg)
+  have htrig : trig (Pr i).2 (Pr i).1 := (he.trig_act b₀ (hmem i)).2 hti
+  -- The image steps by pair edges.
+  have hpath : ∀ x, i ≤ x → ∀ d, Star (PEdge L K goal) (Pr x) (Pr (x + d)) := by
+    intro x hx d
+    induction d with
+    | zero => exact .refl _
+    | succ d ih =>
+      rw [show x + (d + 1) = x + d + 1 by omega]
+      by_cases he' : c (x + d + 1) = c (x + d)
+      · rw [hstut _ he']; exact ih
+      · obtain ⟨h1, h2, _⟩ := hmove _ he'
+        refine .tail ih ⟨_, ⟨hPN _ (by omega), ?_, h1⟩, h2⟩
+        rw [← h2]; exact hPN _ (by omega)
+  have hto : ∀ x y, i ≤ x → x ≤ y → Star (PEdge L K goal) (Pr x) (Pr y) := by
+    intro x y hx hxy
+    have := hpath x hx (y - x); rwa [show x + (y - x) = y by omega] at this
+  -- The image repeats: the frames at the base state of the lasso lie in one finite group.
+  obtain ⟨k, q, hq, hc⟩ := hl
+  have hcj := periodic_mul hc
+  obtain ⟨j₁, j₂, hj, hje⟩ := repeats_in hG (c k) (fun j => Θ (k + j * q)) (fun j => by
+    have := hmem (k + j * q); rwa [hcj j k (Nat.le_refl _)] at this)
+  let a := k + j₁ * q
+  let D := (j₂ - j₁) * q
+  have hD : 0 < D := Nat.mul_pos (by omega) hq
+  have hcD : ∀ n, k ≤ n → c (n + D) = c n := fun n hn => hcj _ n hn
+  let F : Nat → G → G := fun n g =>
+    if c (n + 1) = c n then g else h.mul (K.π (h.act g (c (n + 1)))) g
+  have hΘD : ∀ n, a ≤ n → Θ (n + D) = Θ n := by
+    refine periodic_of_recurrence (F := F) (fun n => skipFrame_succ (h := h) (K := K) c n) (fun n hn => ?_) ?_
+    · funext g
+      show (if c (n + D + 1) = c (n + D) then g else _) = (if c (n + 1) = c n then g else _)
+      rw [show n + D + 1 = (n + 1) + D by omega, hcD (n + 1) (by omega), hcD n (by omega)]
+    · show Θ (k + j₁ * q + (j₂ - j₁) * q) = Θ (k + j₁ * q)
+      rw [show k + j₁ * q + (j₂ - j₁) * q = k + j₂ * q by
+        rw [Nat.add_assoc, ← Nat.add_mul]; congr 2; omega]
+      exact hje
+  let A := a + i
+  have hPD : ∀ n, A ≤ n → Pr (n + D) = Pr n := by
+    intro n hn
+    show (h.act (Θ (n + D)) (c (n + D)), L.actB (Θ (n + D)) b₀) = _
+    rw [hΘD n (by omega), hcD n (by omega)]
+  have hcA : ∀ n, A ≤ n → c (n + D) = c n := fun n hn => hcD n (by omega)
+  have hback : ∀ n, A ≤ n → Star (PEdge L K goal) (Pr n) (Pr A) := by
+    intro n hn
+    have hle : n - A ≤ (n - A) * D := Nat.le_mul_of_pos_right _ hD
+    have := hto n (A + (n - A) * D) (by omega) (by omega)
+    rwa [periodic_mul hPD (n - A) A (Nat.le_refl _)] at this
+  have hcomp : ∀ n, A ≤ n → SameP L K goal (Pr A) (Pr n) := fun n hn =>
+    ⟨hto A n (by omega) hn, hback n hn⟩
+  refine ⟨Pr i, Pr A, hreach i, htrig, hPN i (Nat.le_refl _), hto i A (Nat.le_refl _)
+    (by omega), ?_⟩
+  by_cases hconst : ∀ n, A ≤ n → c n = c A
+  · -- The lasso settles at `c A`: a stop pair.
+    refine .inl ⟨hPN A (by omega), fun x hx => ?_, ?_⟩
+    · let f := L.actF (h.inv (Θ A)) x
+      have hfx : L.actF (Θ A) f = x := L.actF_inv' _ _
+      have hen : M.Enabled L.inst f (c A) := by
+        rw [← hfx] at hx; exact (enabled_act L (hmem A)).1 hx
+      obtain ⟨n, hn, htk⟩ := hf f ⟨A, fun n hn => by
+        show M.Enabled L.inst f (c n); rw [hconst n hn]; exact hen⟩ A
+      exact htk.1 (by rw [hconst n hn, hconst (n + 1) (by omega)])
+    · show stop (h.act (Θ A) (c A))
+      rw [he.stop_act (hmem A)]; exact hs A (c A) hconst
+  · -- The lasso keeps moving: the component of `Pr A` is fair.
+    have hmv : ∃ n, A ≤ n ∧ c (n + 1) ≠ c n := by
+      refine Classical.byContradiction fun hno => hconst ?_
+      exact const_of_stutter fun n hn =>
+        Classical.byContradiction fun hne => hno ⟨n, hn, hne⟩
+    obtain ⟨n, hn, hne⟩ := hmv
+    obtain ⟨h1, h2, _⟩ := hmove n hne
+    have hedge : PEdge L K goal (Pr n) (Pr (n + 1)) :=
+      ⟨_, ⟨hPN n (by omega), by rw [← h2]; exact hPN _ (by omega), h1⟩, h2⟩
+    refine .inr ⟨hreach A, hPN A (by omega), ?_, fun a₀ ha₀ => ?_⟩
+    · by_cases h1A : Pr n = Pr A
+      · by_cases h2A : Pr (n + 1) = Pr A
+        · rw [h1A, h2A] at hedge; exact .inr hedge
+        · exact .inl ⟨_, h2A, hcomp (n + 1) (by omega)⟩
+      · exact .inl ⟨_, h1A, hcomp n hn⟩
+    · refine Classical.byContradiction fun hno => ?_
+      -- The thread of `a₀` reaches the lasso's pair `Pr A`.
+      have hlift : ∀ w, Star (PEdge L K goal) a₀.1 w → Star (PEdge L K goal) w (Pr A) →
+          ∃ y, Star (TEdge L K goal (Pr A)) a₀ (w, y) := by
+        intro w hw
+        induction hw with
+        | refl => exact fun _ => ⟨a₀.2, .refl _⟩
+        | @tail w₁ w₂ hp hstep ih =>
+          intro hw₂
+          obtain ⟨y, hy⟩ := ih (Star.head hstep hw₂)
+          obtain ⟨t, hok, rfl⟩ := hstep
+          refine ⟨L.actF (K.π t) y, .tail hy ⟨t, ⟨?_, ?_, hok⟩, rfl⟩⟩
+          · exact ha₀.extend hp ((Star.head ⟨t, hok, rfl⟩ hw₂).trans ha₀.1)
+          · exact ha₀.extend (hp.tail ⟨t, hok, rfl⟩) (hw₂.trans ha₀.1)
+      obtain ⟨y₀, hy₀⟩ := hlift (Pr A) ha₀.2 (.refl _)
+      let f := L.actF (h.inv (Θ A)) y₀
+      let X : Nat → Φ := fun m => L.actF (Θ m) f
+      have hXA : X A = y₀ := L.actF_inv' _ _
+      -- The thread of `f` along the lasso stays in that piece.
+      have hconn : ∀ d, Conn (TEdge L K goal (Pr A)) a₀ (Pr (A + d), X (A + d)) := by
+        intro d
+        induction d with
+        | zero => rw [Nat.add_zero, hXA]; exact hy₀.conn
+        | succ d ih =>
+          rw [show A + (d + 1) = A + d + 1 by omega]
+          by_cases he' : c (A + d + 1) = c (A + d)
+          · have hX : X (A + d + 1) = X (A + d) := by
+              show L.actF (skipFrame h K c (A + d + 1)) f = _
+              rw [skipFrame_stut he']
+            rw [hstut _ he', hX]; exact ih
+          · obtain ⟨h1, h2, h3⟩ := hmove _ he'
+            refine ih.trans (.fwd ⟨_, ⟨hcomp _ (by omega), by rw [← h2]; exact hcomp _ (by omega),
+              hPN _ (by omega), by rw [← h2]; exact hPN _ (by omega), h1⟩, ?_⟩ (.refl _))
+            show (Pr (A + d + 1), L.actF (Θ (A + d + 1)) f) = _
+            rw [h3, L.actF_mul, h2]; rfl
+      -- None of its nodes is covered, so it is enabled from `A` on and never taken.
+      have hen : ∀ m, A ≤ m → M.Enabled L.inst f (c m) := by
+        intro m hm
+        refine Classical.byContradiction fun hdis => hno ⟨_, hconn (m - A), .inl ?_⟩
+        rw [show A + (m - A) = m by omega]
+        exact fun hx => hdis ((enabled_act L (hmem m)).1 hx)
+      obtain ⟨m, hm, htk⟩ := hf f ⟨A, hen⟩ A
+      have hne' : c (m + 1) ≠ c m := htk.1
+      obtain ⟨h1, h2, _⟩ := hmove m hne'
+      refine hno ⟨_, hconn (m - A), .inr ⟨h.act (Θ m) (c (m + 1)), ?_, ?_⟩⟩
+      · rw [show A + (m - A) = m by omega]
+        exact ⟨hcomp m hm, by rw [← h2]; exact hcomp _ (by omega), hPN m (by omega),
+          by rw [← h2]; exact hPN _ (by omega), h1⟩
+      · rw [show A + (m - A) = m by omega]
+        exact (takes_act L (hmem m)).2 htk
+
+/-- **N9 up to symmetry, (⇒), on behaviours.** With the reachable states in a list, a
+behaviour that satisfies `Fair_P`, stays forever only where `stop` holds, and violates the
+property for some binding makes the orbit search accept. -/
+theorem oAccepts_of_behaviour (he : LiveEqui h L trig goal stop after) (hG : FiniteGroups h)
+    (LM : List σ) (hLM : ∀ s, M.Reach s → s ∈ LM) {b₀ : β} {c : Nat → σ}
+    (hb : M.Behaviour c) (hf : M.FairP L.inst c) (hs : StopsOnly stop c)
+    (hv : Violates (trig b₀) (goal b₀) c) : OAccepts L K goal stop trig := by
+  obtain ⟨c', hl, hb', hf', hs', hv'⟩ :=
+    lasso_of_behaviour M LM hLM L.inst stop (trig b₀) (goal b₀) c hb hf hs hv
+  exact oAccepts_of_lasso he hG hb' hl hf' hs' hv'
+
+end Complete
+
 end RdraIsh
