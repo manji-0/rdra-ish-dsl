@@ -7,8 +7,11 @@
 <!-- derived-from ../../docs/theory/semantics.md#verdicts -->
 
 This directory holds a Lean 4 project. It proves parts of Theorems A8, A15, A18, A20, A21 and A23 of
-[cones.md](../../docs/theory/cones.md) from their hypotheses. Every theorem is stated over
-abstract transition systems. None of them reads the Rust code.
+[cones.md](../../docs/theory/cones.md) from their hypotheses, and Lemma 5 from Definition 3.
+The theorems of A8 and the others are stated over abstract transition systems; Lemma 5 is
+stated over a model of the cone by its actions
+([Definition 3 and Lemma 5 over actions](#definition-3-and-lemma-5-over-actions)). None of
+them reads the Rust code.
 
 ## Building
 
@@ -108,7 +111,9 @@ toolchain to Mathlib's releases. The group laws are fields of `Sym`, so
 The proofs assume the following hypotheses and do not derive them:
 
 - **Lemma 5 (a)(b)** (`Split`). An `S_a` step keeps `T`. A `T_a` step keeps `S` and reads
-  `S` only through `obs`.
+  `S` only through `obs`. `Reduction.lean` takes it as a hypothesis; over the action model,
+  `split_computed` derives it from `Local`
+  ([below](#definition-3-and-lemma-5-over-actions)).
 - **Lemma 6** (`Lemma6Fwd`, `Lemma6`, `Lemma6By`, `Lemma6Staged`). Every initial state
   projects to an initial state of `X`. From a reachable `(t, s)`, an `S_a` step of `C` is a
   silent edge of `X` from `x(t, s) = (s, inp t)`, and the converse holds; `Lemma6By stands`
@@ -194,8 +199,11 @@ The proofs assume the following hypotheses and do not derive them:
   - Consequence 4 is stated for `□(trig ⇒ ◇goal)` at one binding, the form of D21's
     `eventually` and `leads_to`, over behaviours. That the native search over lassos
     decides it is N9. `always` is an invariant (consequence 1).
-  - Lemma 5 (c)–(e) and the folds. Their effect is inside the step relations that Lemma 6
-    relates; Lemma 5 (e) enters as fair instances given on `T_a` labels.
+  - The folds. Their effect is inside the step relations that Lemma 6 relates. Lemma 5
+    (c)–(e) are derived over the action model with `FoldData`
+    ([below](#definition-3-and-lemma-5-over-actions)), but what a fold bit computes is not
+    modelled; Lemma 5 (e) enters `a15` and `a8_plain_iff` as fair instances given on `T_a`
+    labels.
 - **A15, the rest of the theorem.**
   - The run's search. `a15` reads the run's verdict as "no lasso of `R` with the fairness
     and stops above violates the property". That the search over strongly connected
@@ -221,3 +229,81 @@ The proofs assume the following hypotheses and do not derive them:
 - **A18's BFS depth.** The claim that each class is reached at its least depth is not stated.
 
 The sources hold no `sorry`, no `admit` and no `axiom`, and no statement is left unproved.
+
+## Definition 3 and Lemma 5 over actions
+
+`Actions.lean`, `Split.lean` and `SplitExample.lean` go one level below the abstract systems
+above. They model the cone system by its actions and prove Lemma 5 from Definition 3. With
+them, the hypothesis `Split` of `a8_dbsb` (Lemma 5 (a)(b)) is a theorem, `split_computed`,
+whose one hypothesis is `Local` (below). Lemma 5 (c)–(e) need `FoldData` as well.
+
+The model (`Act.Model`):
+
+- a finite set of variables (`vars` lists them all), each with the existence variable of its
+  entity (`own`, the code's `own_existence`) and its `existences`;
+- states as valuations `V → Val`;
+- actions with their parameters (an entity and a `Role`: `existing`, `parent`,
+  `triggered`, `new`, `earlier`), guard conjuncts, a read set `rd`, a write set `wr` and an
+  effect;
+- a step that binds each parameter to a slot and each choice to a value (`Binding`), when
+  every guard conjunct holds.
+
+`rd` is the read set `split_with` uses (`action_reads`, mark reads included, with
+`copy_reads`), and `wr` is `action_writes`. Lemma 5 does not use the parameters and roles.
+They are there for Lemma 6.
+
+| Lean (`RdraIsh.`) | File | Claim | Statement |
+|---|---|---|---|
+| `Act.mem_closed`, `Act.mem_least` | `Split.lean` | Definition 3 | `Mem`, the inductive predicate of Definition 3's conditions for one anchor, is closed under them and lies inside every closed pair: it is the least fixpoint. |
+| `Act.closed_of_fixed`, `Act.computed_fixed`, `Act.computed_iff` | `Split.lean` | Definition 3 | One pass applies every condition at once. A pair that a pass leaves unchanged is closed. Passes from the anchor and the counters reach such a pair within one more pass than there are variables and actions, and that pair is `Mem`. |
+| `Act.mem_eq_of_sound` | `Split.lean` | Definition 3 | A closed pair whose members all follow from the conditions is `Mem`, whatever order the conditions were applied in. `split_at`'s in-place loop is one such order: each insert applies one condition, and it stops on a pass that adds nothing. |
+| `Act.lemma5_of_closed`, `Act.lemma5_computed` | `Split.lean` | Lemma 5 (a)–(e), A10 | Every closed pair, with `S_v`, `S_a`, `obs` and `inputs` as Definition 3 defines them, satisfies `Lemma5`. So does the computed split of every anchor, and with it the split `split_with` picks. |
+| `Act.no_counter_input` | `Split.lean` | A12 | Under `Lemma5`, no counter is an input when `mono` is false on counters. |
+| `Act.lemma5ab_of_closed` | `Split.lean` | Lemma 5 (a)(b) | Every closed pair, with Definition 3's `obs`, satisfies `Lemma5ab`. This needs nothing of the folds. |
+| `Act.split_of_lemma5`, `Act.split_computed` | `Split.lean` | A8, the hypothesis `Split` | Under `Local`, sets that satisfy `Lemma5ab` make the cone system over `T_v × S_v` valuations (`Act.cone`) satisfy `Split`: an `S_a` step keeps `T`, and a `T_a` step keeps `S` and reads `S` only through `obs`. `split_computed` applies it to the computed split. |
+| `Act.cone_reach_iff` | `Split.lean` | none | `Act.cone` is the action-level system with its states split: a pair is reachable in `cone` iff its valuation is reachable in `lts`. |
+| `Act.Local.idle` | `Actions.lean` | none | Under `Local`, an action that writes nothing stutters. |
+| `ExampleSplit.sets`, `ExampleSplit.split`, `ExampleSplit.lemma5`, `ExampleSplit.input_and_obs` | `SplitExample.lean` | none | A three-variable cone with a kept action, a monotone input and an observed `S` variable. It evaluates the computed split and discharges `Local` and `FoldData`, so the hypotheses are jointly satisfiable, and `Split` and `Lemma5` are derived there. It has no entities (`own` and `existences` are empty), no fold, no action that writes nothing, and no parameters. |
+
+`Lemma5` is a predicate on any sets: `T_v`, `T_a`, `obs`, `inputs` and the folded reads. It
+is the contract a run-time certificate of the sets `split_with` returns must check. Its fields
+are (a), (b) (writes and reads), (c), (d), (e) (seeds and kept actions), `obs ⊆ S_v` and
+`inputs ⊆ T_v`. `S_v` is the complement of `T_v`, and `S_a` the writers outside `T_a`. `rd` is
+the reads with the copy reads, as `split_with` takes them. A certificate that checks the code's
+`s` and `s_actions` must also check that they are these two sets. `Split` needs only the
+`Lemma5ab` part: (a), (b) and `obs ⊆ S_v`. `split_of_lemma5` takes those and `Local`, and not
+leastness. So a split that passes them meets `Split`, however it was computed. Leastness only
+keeps `T` small.
+
+### What these hypotheses are
+
+- **`Local`**, the locality of the code's `rd` and `wr`:
+  - every guard conjunct reads only variables of `rd a ∪ wr a`;
+  - a conjunct's value depends only on the variables it reads;
+  - the effect leaves every variable outside `wr a` unchanged;
+  - the effect's value on `wr a` depends only on `rd a ∪ wr a`.
+
+  The footprint is `rd ∪ wr` and not `rd` alone. The code does not count two things as reads:
+  taking a `new` slot (`action_reads`), which looks at the existence the action writes, and
+  the slots of a written variable that the binding leaves alone. This is the statement that
+  the locality of expression evaluation must give for each action.
+- **`FoldData`**, for the folds and `raw_reads`, given the split:
+  - `raw_rd`: `raw_reads` lies inside `rd`;
+  - `cover`: every `T_v` read of an `S_a` action is a raw read, an existence of a raw `T_v`
+    read, or a read its fold covers. A `Triggered` parameter's existence is the middle case:
+    `raw_reads` leaves it out, and `existences` of its mark brings it back;
+  - `ex_mono`: an existence of a monotone variable is monotone. In `monotone_vars` only
+    creates and deletes write an existence, from absent to present to deleted. With inputs
+    off, `mono` is constant `false` and the condition is empty.
+- **`mono`** is a parameter. Lemma 5 (d) reads it only through `ex_mono` and the closure.
+  The write-edge acyclicity that `monotone_vars` computes is not modelled.
+- **The labels.** `Act.cone` labels a step `.inl` when its action is in `T_a`, and `.inr`
+  otherwise. So the `.inr` side holds the `S_a` actions and the actions that write nothing
+  and are not kept, which neither set contains. Those stutter (`Local.idle`). Lemma 6 must
+  match them by a self-loop of `X`, or count them out of `S_a`'s steps.
+- **The pass.** `computed` applies the conditions simultaneously, while `split_at` updates
+  `T` in place. `mem_eq_of_sound` shows that both give `Mem`, provided every insert of the
+  loop applies one condition. That much is read from the code.
+
+The folds stay abstract, and so does what a fold bit computes. The cone that `restrict_to`
+builds is not part of this model.

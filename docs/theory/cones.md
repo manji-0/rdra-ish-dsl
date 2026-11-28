@@ -633,6 +633,27 @@ is in `T_a`.
 only monotone variables, which become inputs unless a fold takes them. (d) is checked at run time:
 `split_with` asserts `inputs.iter().all(monotone)`. ∎
 
+*Evidence.* M: `proofs/lean/RdraIsh/Split.lean` proves the lemma in Lean over an action-level
+model of `C` (`Actions.lean`: variables with their entities' existences, valuations, actions
+with `Rd`, `Wr`, guard conjuncts and an effect). Definition 3 for one anchor is the least set
+`Mem` closed under its conditions, with `split_at`'s skip of an action that writes nothing and
+is not kept. A pass of all conditions at once, repeated `|V| + |A| + 1` times, computes it
+(`computed_iff`), and any closed pair whose members the conditions derive, in whatever order,
+is that least set (`mem_eq_of_sound`). Lemma 5 (a)–(e) holds of every closed pair, with `obs`
+and `inputs` as defined above (`lemma5_of_closed`), so of the split of every anchor and of the
+one `split_with` picks. (a), (b) and (e) follow from the closure conditions and the definition
+of `obs`. (c) follows from the hypothesis `FoldData.cover`: every `T_v` read of an `S_a` action
+is a raw read (`raw_reads`), an existence of one, or a read its fold covers. (d) follows from
+the closure, `raw_reads ⊆ Rd`, and the hypothesis that an existence of a monotone variable is
+monotone (`FoldData.ex_mono`); `monotone_vars` itself is a parameter. With the locality of `Rd`
+and `Wr` (`Local`: a guard conjunct depends only on `Rd ∪ Wr`, an effect changes only `Wr`,
+and its value there depends only on `Rd ∪ Wr`), (a) and (b) give the hypothesis `Split` of
+the Lean proof of Theorem A8 (`split_of_lemma5`, `split_computed`), which needs nothing of
+the folds; the cone system over `T_v × S_v` reaches a pair iff the action-level system reaches
+its valuation (`cone_reach_iff`). The proof does not read
+the code: that `action_reads`, `copy_reads` and `action_writes` meet `Local`, and that
+`raw_reads` and the folds meet `FoldData`, are hypotheses.
+
 **Definition 4 (extended sub-lifecycle and quotient).** `X` is
 `reduce/extended.rs::Extended::build`: `restrict_to(S_v ∪ inputs)` without the havoc of `Triggered`
 parameters, with one bit variable per fold group in place of the folded guards, and a free `Rise` and
@@ -657,17 +678,18 @@ corresponds to, where `bits(t)` is `Reduction::push_bits`. `X` may also hold *st
 `T` of an owner variable in `S_v` whose existence is not in `S_v ∪ inputs` is kept by `restrict_to`
 as an entity of its existence alone, which no action of `X` writes. `x(t, s)` gives each stub the
 value of `X`'s first initial state (`Reduction::key` appends that tail), so a stub reads nothing of
-`t`. A stub is absent in every state of `X`, so a kept parameter on a stub whose role needs a
-present row (`Existing`, `Parent`, `Triggered`) would never bind. `Extended::build` therefore
-binds every such parameter to any slot (`reduce/extended.rs::bind_stub_params`, which gives it
-the role `Earlier { step: 0 }` with no run guard). Only two kinds of action of `X` keep such a
-parameter: a folded `S_a` action, where it is one of the fold's `T` parameters, and a rise.
+`t`. A stub's existence is constant in `X`, absent when a use case creates the parent, so a kept
+parameter on a stub whose role needs a present row (`Existing`, `Parent`, `Triggered`) would
+not bind where the cone binds it. `Extended::build` therefore binds every such parameter to any
+slot (`reduce/extended.rs::bind_stub_params`, which gives it the role `Earlier { step: 0 }` with
+no run guard). Only two kinds of action of `X` keep such a parameter: a folded `S_a` action,
+where it is one of the fold's `T` parameters, and a rise.
 Every build checks the built `X` against this definition (`extended.rs::StubCheck`): no
 parameter of any action of `X` (folded and unfolded `S_a` actions, rises, and the bits' flips)
 on a stub needs a present row, `bind_stub_params` binds no parameter of an unfolded `S_a`
-action, nor a folded one's outside its fold, and `restrict_to` keeps every fold's key. On a fault `reduced_with` reduces nothing, so the
-cone is decided unreduced, with a warning; a debug or `shadow` build panics (Lemma 6,
-"Parameters").
+action, nor a folded one's outside its fold, and `restrict_to` keeps every fold's key. On a
+fault `reduced_with` reduces nothing, so the cone is decided unreduced, with a warning; a debug
+or `shadow` build panics (Lemma 6, "Parameters").
 
 **Lemma 6 (the extended system covers the cone).** For every `(t, s) ∈ Reach(C)`: `x(t, s) ∈ X_n`
 (up to the inner reduction's canonical form); `(t, s) → (t, s')` is an `S_a` step of `C` iff
@@ -678,41 +700,193 @@ bytes is matched by a sequence of rises from `x(t, s)` through the stages to `x(
 `restrict_to`, which projects `I_C` (Lemma 2's argument); a bit starts where the cone starts
 (`fold_initial`). An `S_a` action reads only `S_v`, inputs, and folds (Lemma 5c), and its guards on
 those are kept by `restrict_to` with havoc off, so it has the same successors on `S_v` in `C` at
-`(t, s)` and in `X` at `x(t, s)` provided each folded guard equals its bit at `bits(t)`. A
-`T_a` action that writes an input keeps in `X` only its guards on `S_v` and inputs, which hold where
-they hold in `C`; it writes the raw inputs, and each changed bit slot then has a free flip.
+`(t, s)` and in `X` at `x(t, s)` provided each folded guard equals its bit at `bits(t)`, which
+step (a) below derives, and provided the two systems bind the parameters alike, which the
+matrix below settles. A `T_a` step that changes the input bytes has its rises by step (c).
 
-Parameters. A step binds each parameter to a slot, and the two systems must admit the same
-bindings. `restrict_to` drops a `T` parameter on an entity it neither keeps nor stubs, and a
-`New` one on an entity whose existence it does not hold, each with the guards that name it (a
-guard can name a created row by its index alone); a `T` parameter on a stub it keeps with its
-role. Only a rise has a dropped `New` parameter, since an `S_a` action creates rows of `S_v`
-alone. No fold is keyed by a dropped parameter: `split_with` leaves an action unfolded when
-`restrict_to(S_v ∪ inputs)` would drop its fold's key (a `T` parameter that no variable of `S_v`
-or the inputs names, such as the acting row of a fold that no guard or effect keys otherwise),
-so the action reads `T` raw and is an unfolded `S_a` action below. A stub is absent in every
-state of `X`, so `Extended::build` binds every kept parameter on a stub whose role needs a present
-row (`Existing`, `Parent`, `Triggered`) to any slot (`bind_stub_params`, Definition 4). Such a
-parameter belongs to one of two kinds of action:
+**Parameters.** A step of `C` binds each parameter to a candidate slot of its role
+(`explore/moves.rs::candidate_slots`: a present slot for `Existing`, `Parent` and `Triggered`,
+any slot for `Earlier`, the lowest absent slot for `New`), and the guards filter the bindings.
+`C` at `(t, s)` and `X` at `x(t, s)` must admit bindings with the same successors. The cases
+are the product of three things:
 
-- A folded `S_a` action, where the parameter is one of the fold's `T` parameters. The bit at the
-  key holds iff some binding of the `T` parameters is on rows present where their roles need it and
-  satisfies every folded guard, and no effect names a `T` parameter but the key (`fold_of`). So at
-  `x(t, s)` with the bit true every binding of the other `T` parameters gives the same successor on
-  `S_v`, which a binding of `C` at `(t, s)` also gives, and every binding of `C` has its
-  counterpart in `X`.
-- A rise. It keeps in `X` only its guards on `S_v` and inputs, so binding the parameter freely keeps
-  every `T` step's rise (the direction the lemma needs) and adds only rises that `T_a` guards
-  already left unconstrained; dropping a guard that names a dropped parameter does the same.
+- the *kind* of the action: a *folded* `S_a` action (one of `Split::folds`), an *unfolded*
+  `S_a` action, a *rise* (a `T_a` action that writes a raw input, which `restrict_to` keeps),
+  a *bit writer* (a `T_a` action that writes no raw input but a variable a bit reads, which
+  `X` does not hold), and a *steady* `T_a` action (`Reduction::is_steady`: one that writes
+  neither, which `X` does not hold either);
+- the *side* of the parameter's entity: `S` (its existence is in `S_v`, and with it every
+  variable of the entity, Definition 3); *input* (its existence is in `inputs`, so `X` holds
+  the entity with its variables in `S_v ∪ inputs`); *stub* (Definition 4); *dropped* (a `T`
+  entity that is neither, of which `X` holds no variable);
+- the parameter's *role* in `C` (`types.rs::ParamRole`: `New`, `Existing`, `Parent`, `Earlier`,
+  `Triggered`), with, for a fold, whether it is the key; a node fold adds a parameter of its
+  own, the *node row*.
 
-An unfolded `S_a` action has no parameter on a stub: its raw reads hold the existence of every
-entity it binds (`raw_reads`; for a `Triggered` parameter, the existence of its mark's entity
-through `existences`), so that entity is an input. The check of Definition 4 holds every build
-to it, and to the absence of any other parameter on a stub that needs a present row. Two steps
-are named and not derived here: that `Fold::holds` computes the folded guard exactly (the
-`Twin::FoldHolds` twin compares it with `reduce/fold/reference.rs`, an implementation of the same
-definition), and that a fold's key binding (`Extended::cone_params` binds a dropped `T` parameter to
-slot 0) loses no successor. ∎
+Four facts settle most cells.
+
+- **(P1) A row of `S` binds alike.** `X` keeps an `S` entity with its slots and variables, and
+  the parameter with its role. `x(t, s)` and `(t, s)` agree on `S_v ∪ inputs`, so the
+  parameter has the same candidate slots in both, and a guard kept in `X` reads the same values.
+- **(P2) A row of an input binds alike, under fewer guards.** `X` keeps the entity and its
+  existence, and no function changes the role but `fold_param`, for a fold's key. `x(t, s)`
+  holds `inp(t)`, so the candidate slots are the same. `restrict_to` keeps a guard only when it
+  reads `S_v ∪ inputs` and names no dropped parameter, so `X` drops guards and adds none: every
+  binding of `C` satisfies the guards `X` keeps.
+- **(P3) A row of a stub binds to any slot.** Only the stub's existence is in `X`, and it is no
+  variable of `S_v ∪ inputs`, so `restrict_to` drops every guard that reads a variable of the
+  stub. `bind_stub_params` gives a parameter on a stub whose role needs a present row the role
+  `Earlier { step: 0 }`, which binds any slot with no guard. An `Earlier` parameter binds any
+  slot already, and its run guard reads the stub's mark and goes. A `New` one is dropped, as
+  on a dropped entity (P4), since its entity's existence is not in `S_v ∪ inputs`.
+- **(P4) A row of a dropped entity goes.** `restrict_to_mapped` drops every parameter
+  `restrict.rs::keeps_param` rejects (one on an entity it neither keeps nor stubs, and a `New`
+  one whose entity's existence it does not hold), and every effect that writes no variable of
+  `S_v ∪ inputs`. With `havoc` off, as `Extended::build` calls it, every dropped parameter is
+  in `havoced`, a `New` one included, so every guard that names it goes too, also one that
+  names a created row by `Term::Index` alone (corpus `cone_rise_names_a_dropped_new_row`); an
+  `after` step that names a dropped parameter goes with it. Only a rise has a dropped `New`
+  parameter, since an `S_a` action creates rows of `S_v` alone.
+
+(P2) to (P4) only drop constraints, so `X` admits every binding of `C` and perhaps more. A cell
+must show that what was dropped does not change the successor, and for a folded action that the
+bit says what the dropped guards said. A cell that cannot occur gives the code's reason. The
+last column names the test that runs the step checks of the evidence below on a model that
+fills the cell (`core/tests/reduce.rs`, with the use case that fills it); each such test
+asserts that its models fill its cells and none that cannot occur (`Reduction::param_cells`).
+
+*Folded `S_a` action.* In `fold_of`, a guard that names a `T` parameter and reads only `T` is a
+folded guard. Any other guard that names one must be the link `v[k] = Index(p)`, with `v` a
+variable of `S_v`, and `p` is then the key. No effect names a `T` parameter but the key. So a
+binding of the `S` parameters, the key at slot `c`, and any slots of the other `T` parameters
+has a successor in `C` iff the guards outside the fold hold and the other `T` parameters can be
+bound on candidate slots so that every folded guard holds; by step (a) that is the bit at `c`.
+
+| Side | Role | What the code does | Why no successor is lost | Test |
+|---|---|---|---|---|
+| `S` | any, key or not | kept with its role | (P1) | `New`, `Existing`, `Existing` key: `::the_reduction_models_bind_where_their_cones_bind`; `Parent`: `::stub_and_dropped_rows_bind_where_the_cone_binds_them` (`Grant`); `Triggered`: `::input_rows_bind_where_the_cone_binds_them` (`StampIssued`); `Earlier`: none |
+| input | key: `Existing`, `Parent`, `Triggered` | `fold_param` gives it the role `Earlier { step: 0 }` and adds the guard `bit[key] = true`; the link guard reads `S_v` and stays | `X` binds the key to any slot its link guard allows and the bit holds at, `C` to a candidate slot its link guard allows and the other `T` parameters complete; by step (a) these are the same slots, and the successor depends on the key's slot and the `S` rows alone | `::input_rows_bind_where_the_cone_binds_them`: `Existing` (`StampNoted`), `Parent` (`Grant`, under shops), `Triggered` (`Stamp`) |
+| input | not the key: `Existing`, `Parent`, `Triggered` | kept with its role; a folded guard whose reads are all inputs stays beside the bit (P2) | A binding of `C` satisfies every folded guard, so it satisfies the kept ones on the same input values and makes the bit true. A binding of `X` has the bit true, so by step (a) some binding of `C` with the same key satisfies every folded guard, and no effect names the parameter, so the successors agree | `Triggered`: `::the_reduction_models_bind_where_their_cones_bind` (`CLAIM_CASE`); `Existing`, `Parent`: `::input_rows_bind_where_the_cone_binds_them` (`GrantNoted`, `Grant`, with the desks read raw) |
+| stub | key: `Existing`, `Parent`, `Triggered` | as for an input key; `bind_stub_params` leaves it, since its role no longer needs a present row | as for an input key: the key's presence in `C` is a condition of the bit (`Fold::t_params` marks it), which reads it at `t`, not at the stub | `Parent`, `Existing`: `::stub_and_dropped_rows_bind_where_the_cone_binds_them` (`Grant`, `UseNoted`); `Triggered`: `::the_reduction_models_bind_where_their_cones_bind` (`ORDER_SHIP`) |
+| stub | not the key: `Existing`, `Parent`, `Triggered` | bound to any slot (P3) | the bit stands for the parameter's presence and its guards, and no effect names it | `Triggered`: `::the_reduction_models_bind_where_their_cones_bind` (`TRIGGERED_ON_A_STUB`); `Existing`, `Parent`: none |
+| dropped | not the key: `Existing`, `Parent`, `Triggered` | dropped with its guards, all folded (P4) | as for a stub | `::stub_and_dropped_rows_bind_where_the_cone_binds_them`: `Existing`, `Parent` (`GrantNoted`, `Grant` with the voucher unread), `Triggered` (`UseRung`) |
+| dropped | key | cannot occur in a reduction that is used | a linked or assigned key is compared with, or assigned to, a variable of an `S` row whose domain names its entity, and `restrict_to` keeps the parent of an owner variable of `S_v ∪ inputs` as an input or a stub (only owner variables have a `Domain::Instance`, `build/vars.rs`). The acting-row key of `fold_of` (the first written parameter) has no such link, and can be a `T` row no variable of `S_v` or the inputs names. `split_with` leaves such an action unfolded (`Fold::key_kept`, through `restrict.rs::keeps_param`) and recomputes the inputs, so the action reads `T` raw: the key's existence becomes an input and the parameter is an unfolded action's `Existing` row on an input, a row of the unfolded table. Should a fold's key still be dropped, `fold_param` and `fold_linked` leave `X` as it is and the build records `Fault::KeyDropped`, so the cone is decided unreduced (Definition 4) | corpus `cone_fold_key_dropped`; `core/tests/reduce.rs::a_fold_whose_key_the_restriction_drops_leaves_its_action_unfolded` |
+| dropped, `S` | node row | cannot occur | the node quantifies over a `T` entity (`as_node`), and its link compares a variable of `S_v` with the bound row (`strip_links`), an owner variable whose parent `restrict_to` keeps as an input or a stub, as for a linked key; `fold_linked` maps the entity with `Remap::e`, which expects it kept | — |
+| stub, input | node row | `fold_linked` adds a parameter on the node's entity with the role `Earlier { step: 0 }`, and puts `outside ∧ link = q ∧ bit[q]` where the node stood | the link fixes `q` at the row the `S` row names, and by step (a) the bit there is the node's body there | stub: `::stub_and_dropped_rows_bind_where_the_cone_binds_them` (`UseOpen`); input: `::input_rows_bind_where_the_cone_binds_them` (`Check`) |
+| input, stub, dropped | `New`, `Earlier` | cannot occur | a `New` row comes with its `Create` (`build/actions.rs`), and an `Earlier` row with the assignment of its run mark (`run_marks`), which `run_mark_vars` gives every entity of a step before the last; either writes `T`, and `split_at` puts an action that writes `T` in `T_a` | — |
+
+*Unfolded `S_a` action.*
+
+| Side | Role | What the code does | Why no successor is lost | Test |
+|---|---|---|---|---|
+| `S` | any | kept with its role | (P1) | `::the_reduction_models_bind_where_their_cones_bind`, all five roles |
+| input | `Existing`, `Parent`, `Triggered` | kept with its role; its guards are raw reads, so in `S_v ∪ inputs`, and kept | (P2), with no guard dropped | `Existing`, `Parent`: `::input_rows_bind_where_the_cone_binds_them` (`GrantNoted`, `Grant`); `Triggered`: `::stub_and_dropped_rows_bind_where_the_cone_binds_them` (`RingNote`, in another target's cone) |
+| input | `New`, `Earlier` | cannot occur | as for a folded action | — |
+| stub, dropped | any | cannot occur | `raw_reads` holds the existence of every `Existing` and `Parent` row and the reads of every guard; a `Triggered` row's `GuardWhy::Raised` guard reads its mark, whose `existences` hold the entity's existence; `split_with` makes them inputs. Every build checks it for a stub (`extended.rs::StubCheck`) | — |
+
+*Rise.* `X` evaluates the rise at `x(t, s)`, which holds `s`; step (c) shows what it writes.
+
+| Side | Role | What the code does | Why no successor is lost | Test |
+|---|---|---|---|---|
+| `S` | `Existing`, `Parent`, `Triggered` | kept with its role | (P1) | `Parent`, `Triggered`: `::the_reduction_models_bind_where_their_cones_bind`; `Existing`: `::input_rows_bind_where_the_cone_binds_them` (`GrantNoted`, in another target's cone) |
+| `S` | `New`, `Earlier` | cannot occur | the `Create` of a `New` row and the run mark of an `Earlier` row write `S`, and a `T_a` action writes only `T_v` (Lemma 5b) | — |
+| input | any | kept with its role | (P2); step (c) | `Existing`: `::the_reduction_models_bind_where_their_cones_bind` (`CLAIM_CASE`); `New`, `Parent`, `Triggered`, `Earlier`: `::input_rows_bind_where_the_cone_binds_them` (`OpenDesk`, `SheetNote`, `ClosedNote`, `CloseNote`) |
+| stub | any | bound to any slot, or dropped if `New` (P3) | any slot includes the one `C` binds; step (c) | `::stub_and_dropped_rows_bind_where_the_cone_binds_them`: `Existing`, `Parent`, `Triggered`, `Earlier`, `New` (`SheetNote`, `RingNote`, `PaidNote`, `MarkNote`, `OpenNote`) |
+| dropped | any | dropped with its guards (P4) | step (c) | `::stub_and_dropped_rows_bind_where_the_cone_binds_them`: all five (`ShopNote`, `ShopOpenNote`, `MemoNote`, `RingNote`, `CloseNote`) |
+
+*Steady `T_a` action and bit writer*, any side and role: `X` holds neither. `R` runs the action
+on `(t, ρ)` with `C`'s binding rule. It reads `S_v` only in `obs` (Lemma 5b; `Rd` holds the
+existence a present slot's selection reads), so its bindings and successors at `(t, s)` and
+`(t, ρ)` agree by (B1). A steady step leaves the input bytes as they are (Theorem A8, point 2).
+A bit writer's step that changes the bits has only the flips of step (c) to match, which bind
+no parameter of the action (Theorem A8, point 5). Test: the `assert_reduction_exact` tests,
+which compare the states on `T_v ∪ obs`; `lemma6_steps_hold` records a steady action's cells
+from its steps, and a bit writer's from the steps whose flips it matched.
+
+The cells marked none are reachable as far as the code shows, and no test model fills them; each
+uses the argument of its row, which the filled cells of the same row check.
+
+**(a) `Fold::holds` computes the folded guard.** Let `f` be a fold of action `a`. For a key
+`FoldKey::Param(k)` and a state `t`, `holds(f, t, c)` holds iff some binding of `a`'s `T`
+parameters, with `k` at `c` when `k` is one of them, puts each on a candidate slot of its role
+at `t` and makes every folded guard true. Four things make it so.
+
+1. `holds` sets the key to `c` and ranges each other `T` parameter over every slot of its
+   entity (`holds_fast`; the reference in `reduce/fold/reference.rs` computes the same).
+2. It then requires a present row for each `T` parameter that `fold_of` marks with
+   `matches!(role, Existing | Parent | Triggered)`, the key included. That is `candidate_slots`
+   for those roles. A `T` parameter of an `S_a` action is never `New` or `Earlier` (the folded
+   table's last row), so no other candidate rule arises.
+3. It evaluates the folded guards with every parameter outside the `T` ones and the key at
+   slot 0. The folded guards name no such parameter: `fold_of` collects the `S` parameters they
+   name into `s_keys`, gives up when there are two or when a linked or assigned `T` parameter
+   would be the key as well, and otherwise makes the one there is the key. The folded guards read only `T`
+   variables and no successor (`fold_of` gives up on one that reads the successor or is a copy),
+   so they read `t` alone.
+4. A group's bit is the disjunction of its folds' `holds` (`Reduction::push_bits`). The folds of
+   a group share their restricted parameters, guards, effects and key (`Signature::Param`), so a
+   step of any of them at `c` is a step of the group's first action in `X`, which
+   `SilentStep::acts` and `lift` read back as the variant it stands for.
+
+For a node fold (`FoldKey::Linked`), `holds` is the row's presence and the body at it. `C` reads
+the node as `∃ e. link = e ∧ body(e)`, and `Pred::Exists` ranges over present rows only
+(`expr.rs::quantify`). The link comparison reads the owner's domain, so an unlinked optional
+owner names no slot on either side (`expr.rs::compare`). `X` reads `link = q ∧ bit[q]`, which
+holds for the one `q` the link names when that row is present and the body holds there.
+
+**(b) A dropped `T` parameter bound to slot 0 loses no successor.** `Extended::cone_params`
+renumbers a class move's parameters into the cone's, with slot 0 for a parameter the
+restriction dropped. It is called in `Quotient::of` alone, on the class moves of `R`. A class
+move's successor is the state with its `S` part replaced by the target class's representative
+(`moves_of_into` writes `reps[to]`), whatever the parameters. `Quotient::of` keeps one move per
+`(class, action, parameters, target)`, so two moves of `X` that differ only in a dropped
+parameter's slot leave the same target. The TLA+ printer reads only the targets of each `S`
+action's class moves (`emit/src/tla/module.rs`). The lift does not read them either: it takes
+the parameters of the path in `X`, and for a folded or merged action, or one whose parameters
+the restriction renumbered (`Reduction::in_cone_params` is false), it finds the cone's move to
+the same state among `plain_moves`, checks it with `is_move` (A16), and prints that one. An
+unfolded `S_a` action drops no parameter (its table above), so its parameters are the cone's.
+The one reader of a class move's parameters by the cone action's numbering, the reason
+`cone_params` renumbers them, is the BFS's view bookkeeping, `explore/bfs.rs::Bfs::observe`:
+for each written row of the action outside `S` it compares the row's pattern before and after
+the step (`a_class_move_of_a_folded_action_binds_the_cones_params` is its test). A class move
+writes no `T` variable, so at whatever slot a dropped parameter points, that row is present on
+both sides with the same columns or absent on both, and `observe` records nothing for it (a
+`shadow` build asserts the first case, `Twin::UnchangedRow`). In `R` slot 0 is a label on an
+edge whose successor is right.
+
+**(c) A rise writes what the `T` step writes.** Let `(t, s) → (t', s)` be a step of `C` by a
+`T_a` action `a` at a binding `b` that changes the input bytes. Some effect of `a` writes a raw
+input when the raw inputs change, so `restrict_to` keeps `a`. Bind its restriction in `X` at
+`x(t, s)` as `b` binds the kept parameters, as the rise table allows. The guards `X` keeps hold
+there by (P1) and (P2), and they are a subset of `C`'s. The effects `X` keeps are those that
+write `S_v ∪ inputs`, which for a `T_a` action are the inputs (Lemma 5b). Each but a `Tick`
+writes a variable `v` of the row of its parameter `p`. The existence of `v`'s entity is an input (`split_with`
+adds the existences of every input), so `p` is a row of an input and keeps its slot `b(p)`. The
+value written is:
+
+- a literal (`Rhs::Lit`), or a slot (`Rhs::Param(q)`). Only an owner variable takes a slot (the
+  builder's `Rhs::Param` sites, in `build/links.rs`, all assign owners), and its parent's existence is an input by `existences`, so `q` is a row of an input and keeps `b(q)`;
+- for a `Transition`, an arm's target, chosen by `v`'s own value, which `x(t, s)` holds;
+- for a `Choose`, one of its listed values;
+- for a `Create`, presence at `b(p)`, the lowest absent slot of an input existence in both
+  systems; for a `Delete`, deletion at `b(p)`, with the row's columns reset, none of which is an
+  input, since `monotone_vars` makes a deleted entity's columns cyclic;
+- for a `Tick`, `now + 1` up to `int_max`, read from `now` itself: when `now` is an input
+  (`monotone_vars` counts the clock as rising), `restrict_to` keeps it as `X`'s clock, and
+  `x(t, s)` holds `t`'s value.
+
+`GuardWhy::ArmCondition` and `GuardWhy::Copy` guards filter the successors, and `X` keeps those
+that read `S_v ∪ inputs` only, so it keeps `C`'s successor on the inputs among its own. So `X`
+has an edge from `x(t, s)` to the state with `s`, the raw inputs of `t'`, and the bits of `t`:
+the first stage of `Reduction::stages`. Each later stage flips one bit slot by the free `Rise`
+or `Fall` of its group (`reduce/extended.rs::flips`, a parameter that binds any slot and a guard on
+the bit alone). A step that changes only bits, with the raw inputs unchanged, has only these
+stages. No stage changes `s`, since a `T_a` action writes no `S_v`.
+
+The step named and not derived here is the nested case: for a nested reduction `x(t, s)` is in
+`X_n` only up to the inner reduction's canonical form, and the induction over the depth is not
+written. ∎
 
 *Evidence.* The `S_a` half is checked against the cone's own step
 relation, in both directions, on every reachable state of every complete reduced cone that folds
@@ -731,10 +905,23 @@ fails the first, and one planted true at a present row 1 fails the second.
 with a `Triggered` parameter beside its key on a stub, at 1 and 2 instances, and checks that the
 reduced cone finds the cone's violation, decides what the cone decides
 (`assert_reduction_exact`), and that every reduced state's path lifts to a real path of the
-cone. `::a_rise_with_a_param_on_a_stub_is_a_rise_of_the_extended_sub_lifecycle` does not run
-the two halves: for a rise with a `Parent` parameter on a stub, at 1 and 2 instances, it
-checks through `assert_reduction_exact` that the reduced cone decides what the cone decides
-(the states on `T_v ∪ obs`, the views and the verdicts) and that its traces lift. Corpus cases
+cone. `::a_rise_with_a_param_on_a_stub_is_a_rise_of_the_extended_sub_lifecycle`, for a rise
+with a `Parent` parameter on a stub, at 1 and 2 instances, checks through
+`assert_reduction_exact` that the reduced cone decides what the cone decides (the states on
+`T_v ∪ obs`, the views and the verdicts) and that its traces lift.
+
+The matrix of "Parameters" has its own three tests, which run the helper `lemma6_steps_hold`
+on every complete reduced cone of their models, folded or not. It runs both halves above, and
+the rise half: from every reachable state, every `T` step that changes the input bytes is a
+rise of `X` by the same action to the successor's raw inputs, then one flip per bit slot that
+changes (`SilentSteps::rises_through`); the same step with an `S` variable of the successor
+moved must be no rise, which shows the check reads the state it is given. `::stub_and_dropped_rows_bind_where_the_cone_binds_them`
+and `::input_rows_bind_where_the_cone_binds_them` run it at 1 instance on models built to fill
+the cells with a row on a stub, a dropped entity, or an input.
+`::the_reduction_models_bind_where_their_cones_bind` runs it at 1 and 2 instances on the models
+of the tests above, `RISE_ON_A_STUB` among them. Each asserts the cells that the actions these checks ran on fill
+(`Reduction::param_cells`) and that none fills a cell the matrix rules out. In every build, `moves_of_into` panics when the
+representative of a class lacks a rise a `T` step needs. Corpus cases
 `cone_triggered_param_on_a_stub` and `cone_rise_param_on_a_stub` hold BFS and TLC to the cone's
 counterexample on both. `::a_param_left_on_a_stub_makes_the_cone_decide_unreduced` drops
 `bind_stub_params` on those two cases: the check names `Issue`'s and `Note`'s parameter, and the
@@ -833,8 +1020,7 @@ explicit.
    and (B1) the representative has rises into the same blocks with the same input bytes, stage by
    stage, which is what `recanon` looks up. A fold is covered by the same argument with its bit
    in place of the variables it folds, since the folded guard is a function of them and the key
-   (that `Fold::holds` computes it exactly is one of the two steps Lemma 6 names and does not
-   derive). The monotone rule is not used here: it bounds the input histories, which keeps the
+   (that `Fold::holds` computes it exactly is step (a) of Lemma 6). The monotone rule is not used here: it bounds the input histories, which keeps the
    extended system finite and small.
 
 Items 1 to 3 of the consequences are existential statements over finite paths labelled by
@@ -902,12 +1088,16 @@ leaves) and the random-graph test below, which also certifies every worklist par
   so a worklist that returned another stable partition would cost states, not soundness, and an
   unstable one falls back to the sweeps.
 - **A10** (monotone inputs): Lemma 5c–d and point 5 of Theorem A8. Monotonicity is not used in A8; it
-  keeps `X` finite and small. It is used in A15 (case 3 and `s_cycles`).
-- **A11** (folds): Lemma 6, with the fold equivalence twin-checked. A count that reads `T` is never
+  keeps `X` finite and small. It is used in A15 (case 3 and `s_cycles`). M: Lean proves Lemma 5
+  (c)(d) (`proofs/lean/RdraIsh/Split.lean::lemma5_of_closed`, Lemma 5's evidence above).
+- **A11** (folds): Lemma 6, whose step (a) derives the fold equivalence from `fold_of` and
+  `Fold::holds`, which the `Twin::FoldHolds` twin checks against its reference. A count that reads `T` is never
   node-folded (counting-rules.md): `reduce/fold.rs::as_node` makes a node only of an existential (or an
   And/Or of them), and `strip_links` returns `None` on a `Pred::Count` in its body.
 - **A12** (counters on `T`): `split_at` seeds `T_v` with every counter, and `monotone_vars` marks
-  counters cyclic, so no counter is an input. P-full by reading.
+  counters cyclic, so no counter is an input. P-full by reading. M: Lean,
+  `proofs/lean/RdraIsh/Split.lean::no_counter_input` (every input is monotone, so a counter that
+  `monotone_vars` marks non-monotone is none).
 - **A13** (one reduction for both engines): `reduced_with` rejects a reduction past
   `TLA_CELL_BUDGET` (530,000 cells, `Reduction::tla_cells`) and an identity quotient
   (`Classified::Nothing`, `Reduction::shrinks`); the one `Reduction` value feeds the native checker and
@@ -1450,10 +1640,11 @@ Evidence: none beyond the reading of `escalate` and the guide.
   they take. A release build does not check it, and a step no run takes is not checked.
 - **Partition and Lemma 6.** A8, A15, and every reduced cone's verdict rest on (B1)–(B3), which
   every build certifies on the partition it uses, given that one non-splitting sweep of
-  `stuttering_blocks` is (B2), argued by inspection; and on Lemma 6, argued and not proved, whose
-  fold half is checked against the cone's step relation on the domain samples and the case fold
-  only, and whose binding of parameters on a stub is checked on two built models and two corpus
-  cases. Among those verdicts are the printed `ok` of a property's `Plain` run (A5.1) and of a
+  `stuttering_blocks` is (B2), argued by inspection; and on Lemma 6, argued over a reading of
+  the code and not proved. Its fold half is checked against the cone's step relation on the
+  domain samples and the built models only; its parameter matrix is checked cell by cell on
+  built models, with three reachable cells that no model fills; and its parameters on a stub
+  also on two corpus cases. Among those verdicts are the printed `ok` of a property's `Plain` run (A5.1) and of a
   property on a cone that frees slots or leaves a mark out (A6).
 - **Differential evidence compares implementations, not specifications.** The shadow twins
   compare two implementations of one definition and skip large inputs; a `shadow` build reports
