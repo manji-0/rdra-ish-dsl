@@ -4,6 +4,7 @@ use std::collections::{BTreeSet, HashMap};
 
 use super::fold::Fold;
 use crate::lifecycle::cone::{Seed, VarSet};
+use crate::lifecycle::explore::symmetry::dropped;
 use crate::lifecycle::types::{ActId, Effect, Rhs, Value, VarId};
 use crate::lifecycle::TransitionSystem;
 
@@ -123,6 +124,9 @@ impl TransitionSystem {
             .chain(self.var_ids().filter(|v| self.is_counted(*v)))
             .collect();
         let mut t_actions = BTreeSet::new();
+        // A test or a `shadow` build may leave the side rule out (`dropped`), so that the
+        // split's check fails (`split_faults`).
+        let sides = !dropped("split_sides");
         loop {
             let mut grew = false;
             for i in 0..self.actions.len() {
@@ -139,7 +143,7 @@ impl TransitionSystem {
                     grew = true;
                 }
             }
-            for v in self.var_ids() {
+            for v in self.var_ids().filter(|_| sides) {
                 let Some(e) = own[v.index()] else { continue };
                 grew |= (t.contains(&v) && t.insert(e)) || (t.contains(&e) && t.insert(v));
             }
@@ -213,11 +217,9 @@ impl TransitionSystem {
         for v in inputs.clone() {
             inputs.extend(self.existences(v));
         }
+        // Every input is monotone (Lemma 5d): `reduced_with` checks it with the rest of the
+        // lemma (`split_faults`).
         inputs.retain(|v| t.contains(v));
-        assert!(
-            inputs.iter().all(|v| monotone[v.index()]),
-            "every input of S is monotone"
-        );
         Split {
             t,
             s,

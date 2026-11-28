@@ -630,8 +630,23 @@ is in `T_a`.
 
 *Proof.* (a), (b), (e) are the closure conditions of `split_at` and the definition of `obs`. For
 (c), an action reading a non-monotone `T_v` variable joins `T_a`, so an `S_a` action reads in `T_v`
-only monotone variables, which become inputs unless a fold takes them. (d) is checked at run time:
-`split_with` asserts `inputs.iter().all(monotone)`. ∎
+only monotone variables, which become inputs unless a fold takes them. For (d), an input is such a
+variable or the existence of one's entity (or, for an owner variable, of its parent), which only a
+create (absent to present) and a delete (present to deleted) write. ∎
+
+*Run-time certificate.* Every build checks (a)–(e) and the side rule of Definition 3 on the
+split before the reduction uses it (`reduce/lemma5.rs::split_faults`, called by `reduced_with`).
+The check reads the split's sets and the seeds, and computes from each action its `Rd` (mark reads
+and copy reads included) and `Wr`, and monotonicity with `monotone_vars`; it takes nothing from
+`split_at`. It also checks that the sets are a split: `T_v` and `S_v` partition `V_C`, each
+writing action is in exactly one of `T_a` and `S_a` and no other action is in `S_a`, `inputs ⊆
+T_v`, `obs ⊆ S_v`, and each fold is of an `S_a` action. For (c), a variable an `S_a` action reads
+outside `S_v` and the inputs is one its fold reads (`Fold::reads`), and each `T_v` variable it reads
+outside the fold (`raw_reads`) is an input. On a fault `reduced_with` reduces nothing, so the cone
+is decided unreduced, with a warning; a debug or `shadow` build panics. So (a)–(e) hold of every
+split a reduction uses, nested ones included, whatever `split_at` computed. What the check does not
+show is that `action_reads`, `copy_reads` and `action_writes` are the reads and writes of the step
+relation, and that `monotone_vars` is sound (A10).
 
 **Definition 4 (extended sub-lifecycle and quotient).** `X` is
 `reduce/extended.rs::Extended::build`: `restrict_to(S_v ∪ inputs)` without the havoc of `Triggered`
@@ -837,11 +852,16 @@ the next section treats it.
 
 *Hypotheses and code.* (B1)–(B3): `reduce/partition.rs::quotient_blocks`, certified by
 `reduce/partition/reference.rs::stable` before use (below);
-Lemma 5: `split_at`, `split_with`; Lemma 6: `Extended::build`, `reduce/fold.rs`; the checks a
+Lemma 5: `split_at`, `split_with`, certified by `reduce/lemma5.rs::split_faults` before use; Lemma 6: `Extended::build`, `reduce/fold.rs`; the checks a
 reduced cone keeps: `drop_unreadable_checks` (A14).
 
-*Evidence.* P-sketch (Lemma 6 is argued, not proved; (B1)–(B3) are checked at run time on each
-partition the reduction uses, R). M: `Twin::Partition` (worklist against
+*Evidence.* P-sketch (Lemma 6 is argued, not proved; Lemma 5 is checked at run time on each split
+and (B1)–(B3) on each partition the reduction uses, R). For Lemma 5:
+`reduce/lemma5.rs::a_planted_split_fails_the_clause_it_breaks` plants a split that breaks
+each clause and the side rule in turn, and the last through the switch `split_sides`, on which a
+reduced cone is decided unreduced; `core/tests/reduce.rs::every_split_passes_its_check` checks
+every top-level split of the samples, the domain samples and the corpus cases, with and without
+inputs. M: `Twin::Partition` (worklist against
 sweeps), `Twin::ClassMoves`, `Twin::FoldHolds`, the `shadow_assert!` that a steady action leaves the
 inputs. D: `core/tests/reduce.rs::reduced_cones_decide_what_the_cones_decide`,
 `::reduced_domain_cones_decide_what_the_cones_decide`, `::a_violation_behind_the_sub_lifecycle_lifts_to_a_longer_real_trace`;
@@ -876,7 +896,8 @@ leaves) and the random-graph test below, which also certifies every worklist par
   No verdict rests on it: the certificate above checks the partition used,
   so a worklist that returned another stable partition would cost states, not soundness, and an
   unstable one falls back to the sweeps.
-- **A10** (monotone inputs): Lemma 5c–d and point 5 of Theorem A8. Monotonicity is not used in A8; it
+- **A10** (monotone inputs): Lemma 5c–d, checked at run time on every split (`split_faults`, R),
+  and point 5 of Theorem A8. Monotonicity is not used in A8; it
   keeps `X` finite and small. It is used in A15 (case 3 and `s_cycles`).
 - **A11** (folds): Lemma 6, with the fold equivalence twin-checked. A count that reads `T` is never
   node-folded (counting-rules.md): `reduce/fold.rs::as_node` makes a node only of an existential (or an
@@ -898,7 +919,8 @@ the tests count one cone's cells and keep a cone below the budget, and none make
   `drop_unreadable_checks` drops only checks that ride along in the cone system and are not its
   targets; each has its own target and cone. `Covered::covers` requires the covered checks to be in the
   covering module, so a dropped check is never covered by a cone that dropped it. P-full by reading;
-  no test targets it.
+  R: Lemma 5e is checked at run time on every split (`split_faults`); no test targets the drop
+  itself.
 - **A16** (lifted traces): `reduce/lift.rs::TransitionSystem::lift` replaces each class move by the
   silent path (B2) promises, recursively through nested reductions, and the violation is re-read on
   the lifted last state (`LiftFault` when it no longer violates). Every lifted step, a `T` step and

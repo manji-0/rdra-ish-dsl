@@ -1932,14 +1932,8 @@ fn a_param_left_on_a_stub_makes_the_cone_decide_unreduced() {
     }
 }
 
-/// The check never fires on the samples, the domain samples, and the engine corpus cases that
-/// build a model: for every
-/// target and property cone, with and without the inputs of S, the extended sub-lifecycle
-/// `reduced_with` builds binds no param on a stub that needs a present row. Only the top
-/// level is built here; a nested one, built in `Classes::of`, goes through the same check in
-/// every run, which a debug or `shadow` build turns into a panic.
-#[test]
-fn no_extended_sub_lifecycle_leaves_a_param_on_a_stub() {
+/// The samples, the domain samples, and the engine corpus cases that build a model.
+fn walked_models() -> Vec<(String, SemanticModel)> {
     let corpus = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../rdra-ish-cli/tests/engine_corpus"
@@ -1962,6 +1956,18 @@ fn no_extended_sub_lifecycle_leaves_a_param_on_a_stub() {
             models.push((case.to_string(), model));
         }
     }
+    models
+}
+
+/// The check never fires on the samples, the domain samples, and the engine corpus cases that
+/// build a model: for every
+/// target and property cone, with and without the inputs of S, the extended sub-lifecycle
+/// `reduced_with` builds binds no param on a stub that needs a present row. Only the top
+/// level is built here; a nested one, built in `Classes::of`, goes through the same check in
+/// every run, which a debug or `shadow` build turns into a panic.
+#[test]
+fn no_extended_sub_lifecycle_leaves_a_param_on_a_stub() {
+    let models = walked_models();
     let (mut built, mut rebound) = (0, 0);
     for (name, model) in &models {
         for bounds in [Bounds::STATES, Bounds::VERIFY] {
@@ -1983,6 +1989,37 @@ fn no_extended_sub_lifecycle_leaves_a_param_on_a_stub() {
         built > 0 && rebound > 0,
         "{built} built, {rebound} params rebound"
     );
+}
+
+/// The split `split_with` chooses passes its check (Lemma 5 of docs/theory/cones.md,
+/// `reduce/lemma5.rs`) on the samples, the domain samples, and the engine corpus cases that
+/// build a model: for every target and property cone, with and without the inputs of S.
+/// Only the top level is walked here; a nested split, chosen in `Classes::of`, goes through
+/// the same check in every run, which a debug or `shadow` build turns into a panic.
+#[test]
+fn every_split_passes_its_check() {
+    let (mut splits, mut reducing) = (0, 0);
+    for (name, model) in &walked_models() {
+        for bounds in [Bounds::STATES, Bounds::VERIFY] {
+            let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+            for (cone, seed) in cones_with_seeds(&ts) {
+                let (sys, local) = ts.cone_system(&cone, [seed]);
+                for inputs in [true, false] {
+                    let split = sys.split_with(&local, inputs);
+                    let faults = sys.split_faults(&local, &split);
+                    let faults: Vec<String> = faults.iter().map(ToString::to_string).collect();
+                    assert!(
+                        faults.is_empty(),
+                        "{name}: a cone of {:?}: {faults:?}",
+                        cone.vars
+                    );
+                    splits += 1;
+                    reducing += usize::from(!split.s.is_empty());
+                }
+            }
+        }
+    }
+    assert!(reducing > 0, "{splits} splits, {reducing} with an S side");
 }
 
 /// The reduction is a divergence-blind stuttering bisimulation, and `Deadlock` reads "no
