@@ -6,3 +6,7 @@ autoImplicit = false
 
 [[lean_lib]]
 name = "RdraIsh"
+
+[[lean_exe]]
+name = "lemma5-check"
+root = "Lemma5CheckMain"
