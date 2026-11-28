@@ -2575,7 +2575,7 @@ fn a_param_left_on_a_stub_makes_the_cone_decide_unreduced() {
 }
 
 /// The samples, the domain samples, and the engine corpus cases that build a model.
-fn walked_models() -> Vec<(String, SemanticModel)> {
+pub(super) fn walked_models() -> Vec<(String, SemanticModel)> {
     let corpus = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../rdra-ish-cli/tests/engine_corpus"

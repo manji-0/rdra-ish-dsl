@@ -919,6 +919,10 @@ the sections it cites, and carries the tag of the statements it rests on.
    owners and keys, split use cases, triggers, copies, `chooses`, `drives`, `now`,
    multi-entity rules, quantifiers, `after` assertions, property verdicts); and, since it
    compares whole-model runs, the cone choice, the ladder, the quotient tables and `TlaNames`.
+   Of the cone choice, every run checks what Theorems A1 and A2 need: each cone is closed,
+   holds its seed and is exact where its use needs it, and its restriction drops only what
+   Definition 2 lists ([claims.md, A1](./claims.md#a-cones-of-influence-and-reductions)); the
+   read and write sets that check shares with the choice remain common-mode.
    It shares the parser, `build_model`, the rule names, and D2's reading of which Int-typed
    columns are numbers with the builder. This item and the next are the main residual risks
    of all the theory documents.

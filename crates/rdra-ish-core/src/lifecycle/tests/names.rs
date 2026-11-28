@@ -295,6 +295,11 @@ fn one_of_each() -> Vec<StateDiag> {
             name: "Deadlock_Order_status_open".into(),
             fault: crate::lifecycle::LassoFault::Satisfies,
         },
+        StateDiag::BuildFault {
+            usecase: "Order".into(),
+            what: "Built.new_create: Order: param 0 is not created".into(),
+            site: site(),
+        },
         StateDiag::StateTooWide {
             bits: 1 << 33,
             most: u64::from(u32::MAX),
@@ -323,6 +328,7 @@ fn one_of_each() -> Vec<StateDiag> {
             | StateDiag::AfterAssertViolated { .. }
             | StateDiag::LiftFault { .. }
             | StateDiag::TraceFault { .. }
+            | StateDiag::BuildFault { .. }
             | StateDiag::PropertyViolated { .. }
             | StateDiag::GoalUnreachable { .. }
             | StateDiag::NoWitness { .. }

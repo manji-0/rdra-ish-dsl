@@ -10,6 +10,7 @@
 use crate::lifecycle::narrow::id8;
 use std::collections::BTreeSet;
 
+use super::cone_check::Exactness;
 use super::expr::{State, StateSlice};
 use super::types::{
     ActId, Action, At, Effect, EntId, Guard, GuardWhy, ParamRole, Pred, Property, Term, VarId,
@@ -383,12 +384,21 @@ impl TransitionSystem {
             vars: self.cone(&seed, &keep),
             keep,
         };
-        match target {
+        let need = match target {
             Target::Entity(_) if self.cone_leaves_marks(&cone) => {
-                self.exact_target_cone(target, false)
+                return self.exact_target_cone(target, false)
             }
-            _ => cone,
-        }
+            Target::Entity(_) => Exactness {
+                marks: true,
+                slots: false,
+            },
+            Target::Reach(_) => Exactness {
+                marks: true,
+                slots: true,
+            },
+            Target::Invariant(_) | Target::AfterAssert(_) => Exactness::NONE,
+        };
+        self.certified(&seed, cone, need)
     }
 
     /// What a target reads directly, and the actions its cone keeps whatever they write.
@@ -495,10 +505,11 @@ impl TransitionSystem {
     /// properties on a cone").
     pub fn property_cone(&self, i: usize) -> Cone {
         let (seed, keep) = self.property_seed(i);
-        Cone {
+        let cone = Cone {
             vars: self.cone(&seed, &keep),
             keep,
-        }
+        };
+        self.certified(&seed, cone, Exactness::NONE)
     }
 
     /// What a property reads directly, with its fair actions' writes and new slots, and those
@@ -578,7 +589,7 @@ impl TransitionSystem {
             !slots || !self.cone_frees_slots(&cone),
             "and counts every slot"
         );
-        cone
+        self.certified(&seed, cone, Exactness { marks: true, slots })
     }
 
     /// The targets `check` and `states` explore: views and safety checks. A `can_reach` is a

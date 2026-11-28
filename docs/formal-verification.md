@@ -280,6 +280,13 @@ a rule or an assertion, `error[LassoFault]` for a property, and `error[TraceFaul
 for a deadlock, a `can_reach` failure, or a witness. A reduced lasso whose lift fails counts
 as spurious, and the property is decided on the unreduced cone.
 
+Two checks before any engine runs are tool errors too. A built action outside the slot
+syntax the proofs take fails the build with `error[BuildFault_<use case>]`, and no engine
+runs. A cone that fails its check (closed, holding what its check reads, exact where the
+check needs it) is decided on the whole system, with a warning, and a restriction to a cone
+that drops more than its exceptions allow stops the run
+([cones.md](./theory/cones.md#the-cone-of-a-seed)).
+
 **Under `--with-tlc`.** TLC runs each cone and property run beside BFS, as many at once as
 their heaps fit TLC's share of the [memory limit](./cli-reference.md#memory-limit), each
 with up to 8 workers. A safety cone that fails runs again on one worker, so its trace is the

@@ -293,6 +293,15 @@ pub enum StateDiag {
         name: String,
         fault: crate::lifecycle::LassoFault,
     },
+    /// An action of the built system is outside the slot syntax the Lean proofs take
+    /// (`WF`, `Built` of `proofs/lean/RdraIsh/SymActions.lean`; `build/syntax.rs`). The
+    /// builder is at fault, never the model, and no engine runs (claims A8 and A18 of
+    /// docs/theory/claims.md).
+    BuildFault {
+        usecase: String,
+        what: String,
+        site: Site,
+    },
     /// A temporal property fails on the infinite behavior of a lasso, `trace` then `lasso`,
     /// or on the finite `trace` of a form `LtlKind::is_explored` names. A replayed TLC
     /// counterexample builds it, and so does `ComponentRun::decide_property`.
@@ -701,6 +710,7 @@ impl StateDiag {
             StateDiag::TimeBudgetReached { .. } => with("TimeBudgetReached", &[]),
             StateDiag::LiftFault { name, .. } => with("LiftFault", &[name]),
             StateDiag::TraceFault { name, .. } => with("TraceFault", &[name]),
+            StateDiag::BuildFault { usecase, .. } => with("BuildFault", &[usecase]),
             StateDiag::AssertOnInertUseCase { anchor, .. } => {
                 with("AssertOnInertUseCase", &[anchor])
             }
@@ -819,6 +829,7 @@ impl StateDiag {
             StateDiag::ConstraintViolated { site, .. }
             | StateDiag::AfterAssertViolated { site, .. }
             | StateDiag::LiftFault { site, .. }
+            | StateDiag::BuildFault { site, .. }
             | StateDiag::VacuousRule { site, .. }
             | StateDiag::PropertyViolated { site, .. }
             | StateDiag::GoalUnreachable { site, .. }
@@ -938,6 +949,7 @@ impl StateDiag {
             | StateDiag::ConstraintViolated { .. }
             | StateDiag::AfterAssertViolated { .. }
             | StateDiag::TraceFault { .. }
+            | StateDiag::BuildFault { .. }
             | StateDiag::LiftFault { .. }
             | StateDiag::PropertyViolated { .. }
             | StateDiag::GoalUnreachable { .. }
@@ -1160,6 +1172,10 @@ impl fmt::Display for StateDiag {
             StateDiag::TraceFault { name, fault } => write!(
                 f,
                 "tool error: the trace of {name} fails to replay ({fault:?}), so {name} is not reported (a tool bug, not a finding about the model)"
+            ),
+            StateDiag::BuildFault { usecase, what, .. } => write!(
+                f,
+                "tool error: the built step of {usecase} is outside the slot syntax the proofs take ({what}), so no engine runs (a tool bug, not a finding about the model)"
             ),
             StateDiag::LiftFault { name, fault, .. } => write!(
                 f,
