@@ -1,0 +1,331 @@
+# Lines from GitHub Actions logs of manji-0/rdra-ish-dsl, workflow CI (ci.yml), runner ubuntu-latest.
+# Timestamps and ANSI colour codes stripped; nothing else changed. Fetched 2026-11-28.
+# `## run` headers are added here; every other line is a log line.
+
+## run 46114833478 commit 1d69695d7ff38b5665cebb217ecdc7f58091e4d3 started 2026-11-28T06:03:18Z job formal-verify 140886222125 step verify-samples
+ok       samples/ec-site                                          check                     0.00s     12 MB
+ok       samples/ec-site                                          verify (native)           0.00s     15 MB
+ok       samples/clinic-ops                                       check                     0.04s     21 MB
+ok       samples/clinic-ops                                       verify                   24.79s    699 MB
+ok       samples/patent-ops                                       check                     0.04s     22 MB
+ok       samples/patent-ops                                       verify                   23.84s    651 MB
+ok       samples/food-permit-ops                                  check                     0.04s     20 MB
+ok       samples/food-permit-ops                                  verify                   22.44s    814 MB
+ok       samples/insurance-claim-ops                              check                     0.06s     21 MB
+ok       samples/insurance-claim-ops                              verify                  105.98s   1170 MB
+ok       samples/oidc-auth                                        check                     0.33s     34 MB
+ok       samples/oidc-auth                                        verify --instance-count 1 --prove --deny-undecided   49.36s    500 MB
+ok       samples/oidc-auth                                        verify --deny-undecided --entity BackchannelRequest --entity DeviceAuthorization --entity LogoutNotice --entity SigningKey    1.25s    179 MB
+ok       samples/personal-info                                    check                     0.00s     12 MB
+ok       samples/personal-info                                    verify (native)           0.00s     15 MB
+ok       samples/api-contract                                     check                     0.00s     11 MB
+ok       samples/api-contract                                     verify (native)           0.00s     13 MB
+ok       samples/incremental-order/step-7-business-rules/src      check                     0.00s     12 MB
+ok       samples/incremental-order/step-7-business-rules/src      verify (native)           0.00s     14 MB
+ok       samples/formal-verification/after_assert_unmet.rdra      check                     0.00s     11 MB
+ok       samples/formal-verification/after_assert_unmet.rdra      verify (native)           0.00s     14 MB
+ok       samples/formal-verification/can_reach_met.rdra           check                     0.00s     11 MB
+ok       samples/formal-verification/can_reach_met.rdra           verify (native)           0.00s     13 MB
+ok       samples/formal-verification/can_reach_unmet.rdra         check                     0.00s     11 MB
+ok       samples/formal-verification/can_reach_unmet.rdra         verify (native)           0.00s     13 MB
+ok       samples/formal-verification/check_met.rdra               check                     0.00s     11 MB
+ok       samples/formal-verification/check_met.rdra               verify (native)           0.00s     13 MB
+ok       samples/formal-verification/check_unmet.rdra             check                     0.00s     11 MB
+ok       samples/formal-verification/check_unmet.rdra             verify (native)           0.00s     13 MB
+ok       samples/formal-verification/cross_order_payment.rdra     check                     0.00s     11 MB
+ok       samples/formal-verification/cross_order_payment.rdra     verify (native)           0.00s     14 MB
+ok       samples/formal-verification/cross_order_payment_split.rdra check                     0.00s     11 MB
+ok       samples/formal-verification/cross_order_payment_split.rdra verify (native)           0.00s     14 MB
+ok       samples/formal-verification/deadlock.rdra                check                     0.00s     11 MB
+ok       samples/formal-verification/deadlock.rdra                verify (native)           0.00s     13 MB
+ok       samples/formal-verification/event_order.rdra             check                     0.00s     11 MB
+ok       samples/formal-verification/event_order.rdra             verify (native)           0.00s     14 MB
+ok       samples/formal-verification/int_stock.rdra               check                     0.00s     11 MB
+ok       samples/formal-verification/int_stock.rdra               verify (native)           0.00s     14 MB
+ok       samples/formal-verification/min_card_met.rdra            check                     0.00s     11 MB
+ok       samples/formal-verification/min_card_met.rdra            verify (native)           0.00s     14 MB
+ok       samples/formal-verification/min_card_unmet.rdra          check                     0.00s     11 MB
+ok       samples/formal-verification/min_card_unmet.rdra          verify (native)           0.00s     14 MB
+ok       samples/formal-verification/none_any_child.rdra          check                     0.00s     11 MB
+ok       samples/formal-verification/none_any_child.rdra          verify (native)           0.00s     14 MB
+ok       samples/formal-verification/none_any_child_bypassed.rdra check                     0.00s     11 MB
+ok       samples/formal-verification/none_any_child_bypassed.rdra verify (native)           0.00s     14 MB
+ok       samples/formal-verification/now_coupon.rdra              check                     0.00s     11 MB
+ok       samples/formal-verification/now_coupon.rdra              verify (native)           0.00s     14 MB
+ok       samples/formal-verification/one_to_one_shared.rdra       check                     0.00s     11 MB
+ok       samples/formal-verification/one_to_one_shared.rdra       verify (native)           0.00s     14 MB
+ok       samples/formal-verification/order.rdra                   check                     0.00s     11 MB
+ok       samples/formal-verification/order.rdra                   verify (native)           0.00s     14 MB
+ok       samples/formal-verification/partial_scope.rdra           check                     0.00s     11 MB
+ok       samples/formal-verification/partial_scope.rdra           verify (native)           0.00s     11 MB
+ok       samples/formal-verification/partial_scope.rdra           verify --entity Order     0.29s     93 MB
+ok       samples/formal-verification/quantifier_none.rdra         check                     0.00s     11 MB
+ok       samples/formal-verification/quantifier_none.rdra         verify (native)           0.00s     14 MB
+ok       samples/formal-verification/quantifier_guard.rdra        check                     0.00s     11 MB
+ok       samples/formal-verification/quantifier_guard.rdra        verify (native)           0.00s     14 MB
+ok       samples/formal-verification/split_run_order.rdra         check                     0.00s     11 MB
+ok       samples/formal-verification/split_run_order.rdra         verify (native)           0.00s     14 MB
+ok       samples/formal-verification/temporal_fair.rdra           check                     0.00s     11 MB
+ok       samples/formal-verification/temporal_fair.rdra           verify (native)           0.00s     14 MB
+ok       samples/formal-verification/temporal_along.rdra          check                     0.00s     11 MB
+ok       samples/formal-verification/temporal_along.rdra          verify (native)           0.00s     14 MB
+ok       samples/formal-verification/order_stability.rdra         check                     0.00s     11 MB
+ok       samples/formal-verification/order_stability.rdra         verify (native)           0.00s     14 MB
+ok       samples/formal-verification/temporal_unmet.rdra          check                     0.00s     11 MB
+ok       samples/formal-verification/temporal_unmet.rdra          verify (native)           0.00s     14 MB
+ok       samples/formal-verification/untriggered_sets.rdra        check                     0.00s     11 MB
+ok       samples/formal-verification/untriggered_sets.rdra        verify (native)           0.00s     14 MB
+ok       samples/formal-verification/unwitnessed_state.rdra       check                     0.00s     11 MB
+ok       samples/formal-verification/unwitnessed_state.rdra       verify (native)           0.00s     14 MB
+ok       samples/formal-verification/unique_double_booking.rdra   check                     0.00s     11 MB
+ok       samples/formal-verification/unique_double_booking.rdra   verify (native)           0.00s     14 MB
+ok       samples/formal-verification/unique_booking_guarded.rdra  check                     0.00s     11 MB
+ok       samples/formal-verification/unique_booking_guarded.rdra  verify (native)           0.00s     14 MB
+ok       samples/formal-verification/counting_rules.rdra          check                     0.00s     11 MB
+ok       samples/formal-verification/counting_rules.rdra          verify (native)           0.00s     14 MB
+ok       samples/formal-verification/counting_rules.rdra          verify --instances Loan=4    1.48s    121 MB
+ok       samples/formal-verification-fail/order.rdra              check                     0.00s     11 MB
+ok       samples/formal-verification-fail/order.rdra              verify (native)           0.00s     14 MB
+verify-samples: 40 roots, 83 runs, 0 mismatches
+## run 46114833478 commit 1d69695d7ff38b5665cebb217ecdc7f58091e4d3 started 2026-11-28T06:03:18Z job formal-verify 140886222125 step reduction-diff-tlc
+seed 2: same (9.2 s)
+seed 4: same (7.3 s)
+seed 0: same (21.7 s)
+seed 7: same (13.8 s)
+seed 13: same (7.2 s)
+seed 8: same (19.2 s)
+seed 15: same (5.8 s)
+seed 18: same (10.7 s)
+seed 22: same (12.6 s)
+seed 23: same (6.7 s)
+seed 27: same (9.3 s)
+seed 32: same (7.1 s)
+seed 31: same (19.2 s)
+seed 39: same (17.8 s)
+seed 41: same (13.5 s)
+seed 45: same (17.1 s)
+seed 46: same (11.3 s)
+seed 38: same (67.5 s)
+seed 47: same (6.6 s)
+seed 49: same (10.6 s)
+seed 52: same (34.3 s)
+seed 55: same (4.3 s)
+seed 57: same (7.8 s)
+seed 59: same (10.4 s)
+seed 53: same (59.4 s)
+seed 188: same (12.6 s)
+seed 244: same (9.7 s)
+seed 419: same (4.7 s)
+seed 459: same (8.4 s)
+seed 417: same (21.2 s)
+seed 78: same (7.2 s)
+seed 496: same (14.3 s)
+seed 79: same (9.8 s)
+seed 86: same (11.4 s)
+seed 88: same (9.8 s)
+seed 89: same (12.2 s)
+seed 92: same (9.7 s)
+seed 99: same (11.5 s)
+seed 100: same (6.4 s)
+seed 109: same (6.7 s)
+seed 95: same (34.0 s)
+seed 113: same (11.8 s)
+seed 114: same (13.7 s)
+seed 125: same (15.7 s)
+seed 127: same (9.3 s)
+{"generated": 45, "loaded": 45, "compared": 45, "reduced": 33, "stub_fold": 0, "stub_rise": 0, "nested": 12, "up_to_h": 0, "three_instances": 10, "plain_undecided": [], "reduced_undecided": [], "timed_out": [], "load_errors": [], "diverged": [], "with_tlc": true, "disagreed": []}
+## run 46114833478 commit 1d69695d7ff38b5665cebb217ecdc7f58091e4d3 started 2026-11-28T06:03:18Z job engine-equivalence 140886222137 step engine_equivalence
+test a_corrupted_tlc_trace_does_not_replay ... ok
+test a_job_that_exits_the_batch_jvm_runs_as_a_process ... ok
+test a_job_past_the_time_limit_runs_as_a_process_and_is_no_fault ... ok
+test a_tlc_the_batch_driver_cannot_call_runs_as_a_process ... ok
+test bfs_and_tlc_agree_on_a_date_sets ... ok
+test bfs_and_tlc_agree_on_a_delete_its_children_restrict ... ok
+test bfs_and_tlc_agree_on_a_guard_along_a_path ... ok
+test bfs_and_tlc_agree_on_a_guard_over_an_unassigned_column ... ok
+test bfs_and_tlc_agree_on_a_guard_over_every_group ... ok
+test bfs_and_tlc_agree_on_a_guard_over_the_created_entity ... ok
+test bfs_and_tlc_agree_on_a_none_along_a_path ... ok
+test bfs_and_tlc_agree_on_a_published_outbox ... ok
+test bfs_and_tlc_agree_on_a_quantifier_along_a_path ... ok
+test bfs_and_tlc_agree_on_a_sub_lifecycle_of_many_classes ... ok
+test bfs_and_tlc_agree_on_a_violation_through_the_sub_lifecycle ... ok
+test a_property_cone_decides_what_the_whole_model_decides ... ok
+test bfs_and_tlc_agree_on_a_written_parent_on_one_key ... ok
+test bfs_and_tlc_agree_on_an_after_assert_of_a_split_use_case ... ok
+test bfs_and_tlc_agree_on_an_interleaving_between_two_steps ... ok
+test bfs_and_tlc_agree_on_an_ordered_run ... ok
+test bfs_and_tlc_agree_on_arm_guards ... ok
+test bfs_and_tlc_agree_on_choice_guards ... ok
+test bfs_and_tlc_agree_on_chooses ... ok
+test bfs_and_tlc_agree_on_condition_guards ... ok
+test bfs_and_tlc_agree_on_copies ... ok
+test bfs_and_tlc_agree_on_links ... ok
+test bfs_and_tlc_agree_on_null_in_a_check ... ok
+test bfs_and_tlc_agree_on_generated_names_beside_model_ids ... ok
+test bfs_and_tlc_agree_on_relinks ... ok
+test bfs_and_tlc_agree_on_relinks_and_unlinks ... ok
+test bfs_and_tlc_agree_on_set_guards ... ok
+test a_tlc_alone_finds_the_deadlocks_and_missing_witnesses_bfs_finds ... ok
+test bfs_and_tlc_agree_on_split_use_cases ... ok
+test bfs_and_tlc_agree_on_the_binding_of_each_edge ... ok
+test bfs_and_tlc_agree_on_set_membership ... ok
+test bfs_and_tlc_agree_on_transition_choices ... ok
+test bfs_and_tlc_agree_on_the_key_a_join_names ... ok
+test bfs_and_tlc_agree_on_two_lifecycle_columns ... ok
+test bfs_and_tlc_read_the_columns_only_a_set_guard_reads ... ok
+test bfs_and_tlc_agree_on_two_keys_to_one_parent ... ok
+test every_fallback_root_runs_tlc_in_formal_verify ... ok
+test bfs_and_tlc_agree_on_two_actions_of_one_name ... ok
+test recorded_tlc_runs_are_the_same_in_a_batch_jvm ... ignored
+test tla_names_cover_every_slot ... ok
+test none_of_an_entity_is_none_of_every_value ... ok
+test tlc_alone_finds_no_deadlock_before_a_handler_s_event_is_raised ... ok
+test tlc_alone_finds_a_deadlock_beside_a_toggled_column ... ok
+test tlc_alone_misses_a_deadlock_while_its_cone_cycles ... ok
+test bfs_and_tlc_report_every_check_that_fails_in_the_same_state ... ok
+test a_bfs_and_tlc_reach_the_same_states_and_verdicts ... ok
+test result: ok. 49 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 699.75s
+## run 46114833478 commit 1d69695d7ff38b5665cebb217ecdc7f58091e4d3 started 2026-11-28T06:03:18Z job engine-equivalence 140886222137 step engine_corpus
+test every_corpus_header_is_well_formed ... ok
+test rule_2_fails_a_tlc_line_the_header_expects_and_the_run_lacks ... ok
+test rule_8_fails_a_check_symmetry_leaves_undecided ... ok
+test a_reduced_wf_next_run_decides_what_the_unreduced_one_decides ... ok
+test a_capped_graph_decides_nothing_the_full_graph_contradicts ... ok
+test tlc_refinement_catches_class_moves_left_out_that_tlc_on_the_reduced_cone_misses ... ok
+test tlc_refinement_holds_on_every_reduced_cone_of_the_corpus ... ok
+test bfs_and_tlc_and_z3_agree_on_the_adversarial_corpus ... ok
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 318.48s
+
+## run 46086823346 commit 9857092ae33cd9c1dc4b1812a28cdba9b79a720e started 2026-11-28T00:14:32Z job formal-verify 140798265053 step verify-samples
+ok       samples/ec-site                                          check                     0.00s     12 MB
+ok       samples/ec-site                                          verify (native)           0.00s     14 MB
+ok       samples/clinic-ops                                       check                     0.04s     20 MB
+ok       samples/clinic-ops                                       verify                   25.46s    720 MB
+ok       samples/patent-ops                                       check                     0.04s     22 MB
+ok       samples/patent-ops                                       verify                   21.88s    644 MB
+ok       samples/food-permit-ops                                  check                     0.03s     20 MB
+ok       samples/food-permit-ops                                  verify                   20.86s    812 MB
+ok       samples/insurance-claim-ops                              check                     0.06s     20 MB
+ok       samples/insurance-claim-ops                              verify                  104.06s   1176 MB
+ok       samples/oidc-auth                                        check                     0.33s     33 MB
+ok       samples/oidc-auth                                        verify --instance-count 1 --prove --deny-undecided   46.07s    499 MB
+ok       samples/oidc-auth                                        verify --deny-undecided --entity BackchannelRequest --entity DeviceAuthorization --entity LogoutNotice --entity SigningKey    1.22s    180 MB
+ok       samples/personal-info                                    check                     0.00s     12 MB
+ok       samples/personal-info                                    verify (native)           0.00s     14 MB
+ok       samples/api-contract                                     check                     0.00s     10 MB
+ok       samples/api-contract                                     verify (native)           0.00s     12 MB
+ok       samples/incremental-order/step-7-business-rules/src      check                     0.00s     12 MB
+ok       samples/incremental-order/step-7-business-rules/src      verify (native)           0.00s     14 MB
+ok       samples/formal-verification/after_assert_unmet.rdra      check                     0.00s     11 MB
+ok       samples/formal-verification/after_assert_unmet.rdra      verify (native)           0.00s     13 MB
+ok       samples/formal-verification/can_reach_met.rdra           check                     0.00s     11 MB
+ok       samples/formal-verification/can_reach_met.rdra           verify (native)           0.00s     13 MB
+ok       samples/formal-verification/can_reach_unmet.rdra         check                     0.00s     11 MB
+ok       samples/formal-verification/can_reach_unmet.rdra         verify (native)           0.00s     13 MB
+ok       samples/formal-verification/check_met.rdra               check                     0.00s     11 MB
+ok       samples/formal-verification/check_met.rdra               verify (native)           0.00s     13 MB
+ok       samples/formal-verification/check_unmet.rdra             check                     0.00s     11 MB
+ok       samples/formal-verification/check_unmet.rdra             verify (native)           0.00s     13 MB
+ok       samples/formal-verification/cross_order_payment.rdra     check                     0.00s     11 MB
+ok       samples/formal-verification/cross_order_payment.rdra     verify (native)           0.00s     13 MB
+ok       samples/formal-verification/cross_order_payment_split.rdra check                     0.00s     11 MB
+ok       samples/formal-verification/cross_order_payment_split.rdra verify (native)           0.00s     13 MB
+ok       samples/formal-verification/deadlock.rdra                check                     0.00s     11 MB
+ok       samples/formal-verification/deadlock.rdra                verify (native)           0.00s     13 MB
+ok       samples/formal-verification/event_order.rdra             check                     0.00s     11 MB
+ok       samples/formal-verification/event_order.rdra             verify (native)           0.00s     13 MB
+ok       samples/formal-verification/int_stock.rdra               check                     0.00s     11 MB
+ok       samples/formal-verification/int_stock.rdra               verify (native)           0.00s     13 MB
+ok       samples/formal-verification/min_card_met.rdra            check                     0.00s     11 MB
+ok       samples/formal-verification/min_card_met.rdra            verify (native)           0.00s     13 MB
+ok       samples/formal-verification/min_card_unmet.rdra          check                     0.00s     11 MB
+ok       samples/formal-verification/min_card_unmet.rdra          verify (native)           0.00s     13 MB
+ok       samples/formal-verification/none_any_child.rdra          check                     0.00s     11 MB
+ok       samples/formal-verification/none_any_child.rdra          verify (native)           0.00s     13 MB
+ok       samples/formal-verification/none_any_child_bypassed.rdra check                     0.00s     11 MB
+ok       samples/formal-verification/none_any_child_bypassed.rdra verify (native)           0.00s     13 MB
+ok       samples/formal-verification/now_coupon.rdra              check                     0.00s     11 MB
+ok       samples/formal-verification/now_coupon.rdra              verify (native)           0.00s     13 MB
+ok       samples/formal-verification/one_to_one_shared.rdra       check                     0.00s     11 MB
+ok       samples/formal-verification/one_to_one_shared.rdra       verify (native)           0.00s     13 MB
+ok       samples/formal-verification/order.rdra                   check                     0.00s     11 MB
+ok       samples/formal-verification/order.rdra                   verify (native)           0.00s     14 MB
+ok       samples/formal-verification/partial_scope.rdra           check                     0.00s     11 MB
+ok       samples/formal-verification/partial_scope.rdra           verify (native)           0.00s     10 MB
+ok       samples/formal-verification/partial_scope.rdra           verify --entity Order     0.24s     93 MB
+ok       samples/formal-verification/quantifier_none.rdra         check                     0.00s     11 MB
+ok       samples/formal-verification/quantifier_none.rdra         verify (native)           0.00s     13 MB
+ok       samples/formal-verification/quantifier_guard.rdra        check                     0.00s     11 MB
+ok       samples/formal-verification/quantifier_guard.rdra        verify (native)           0.00s     13 MB
+ok       samples/formal-verification/split_run_order.rdra         check                     0.00s     11 MB
+ok       samples/formal-verification/split_run_order.rdra         verify (native)           0.00s     14 MB
+ok       samples/formal-verification/temporal_fair.rdra           check                     0.00s     11 MB
+ok       samples/formal-verification/temporal_fair.rdra           verify (native)           0.00s     13 MB
+ok       samples/formal-verification/temporal_along.rdra          check                     0.00s     11 MB
+ok       samples/formal-verification/temporal_along.rdra          verify (native)           0.00s     13 MB
+ok       samples/formal-verification/order_stability.rdra         check                     0.00s     11 MB
+ok       samples/formal-verification/order_stability.rdra         verify (native)           0.00s     13 MB
+ok       samples/formal-verification/temporal_unmet.rdra          check                     0.00s     11 MB
+ok       samples/formal-verification/temporal_unmet.rdra          verify (native)           0.00s     13 MB
+ok       samples/formal-verification/untriggered_sets.rdra        check                     0.00s     11 MB
+ok       samples/formal-verification/untriggered_sets.rdra        verify (native)           0.00s     13 MB
+ok       samples/formal-verification/unwitnessed_state.rdra       check                     0.00s     11 MB
+ok       samples/formal-verification/unwitnessed_state.rdra       verify (native)           0.00s     13 MB
+ok       samples/formal-verification/unique_double_booking.rdra   check                     0.00s     11 MB
+ok       samples/formal-verification/unique_double_booking.rdra   verify (native)           0.00s     13 MB
+ok       samples/formal-verification/unique_booking_guarded.rdra  check                     0.00s     11 MB
+ok       samples/formal-verification/unique_booking_guarded.rdra  verify (native)           0.00s     13 MB
+ok       samples/formal-verification/counting_rules.rdra          check                     0.00s     11 MB
+ok       samples/formal-verification/counting_rules.rdra          verify (native)           0.00s     13 MB
+ok       samples/formal-verification/counting_rules.rdra          verify --instances Loan=4    1.41s    121 MB
+ok       samples/formal-verification-fail/order.rdra              check                     0.00s     11 MB
+ok       samples/formal-verification-fail/order.rdra              verify (native)           0.00s     13 MB
+verify-samples: 40 roots, 83 runs, 0 mismatches
+## run 46086823346 commit 9857092ae33cd9c1dc4b1812a28cdba9b79a720e started 2026-11-28T00:14:32Z job formal-verify 140798265053 step reduction-diff-tlc
+seed 2: same (7.9 s)
+seed 4: same (6.5 s)
+seed 0: same (19.8 s)
+seed 7: same (12.3 s)
+seed 13: same (7.4 s)
+seed 8: same (19.0 s)
+seed 15: same (5.9 s)
+seed 18: same (9.9 s)
+seed 22: same (11.9 s)
+seed 23: same (6.4 s)
+seed 27: same (8.0 s)
+seed 32: same (7.2 s)
+seed 31: same (17.3 s)
+seed 39: same (16.5 s)
+seed 41: same (12.7 s)
+seed 45: same (16.3 s)
+seed 46: same (10.7 s)
+seed 38: same (63.9 s)
+seed 47: same (6.3 s)
+seed 49: same (10.1 s)
+seed 52: same (33.2 s)
+seed 55: same (4.2 s)
+seed 57: same (7.6 s)
+seed 59: same (9.2 s)
+seed 53: same (58.3 s)
+seed 188: same (12.3 s)
+seed 244: same (9.4 s)
+seed 419: same (4.6 s)
+seed 417: same (20.0 s)
+seed 459: same (8.1 s)
+seed 78: same (7.9 s)
+seed 496: same (13.9 s)
+seed 79: same (9.8 s)
+seed 86: same (11.3 s)
+seed 88: same (9.7 s)
+seed 92: same (9.6 s)
+seed 89: same (12.1 s)
+seed 99: same (11.5 s)
+seed 100: same (6.1 s)
+seed 109: same (6.3 s)
+seed 95: same (32.9 s)
+seed 113: same (10.8 s)
+seed 114: same (12.1 s)
+seed 125: same (14.2 s)
+seed 127: same (8.2 s)
+{"generated": 45, "loaded": 45, "compared": 45, "reduced": 33, "three_instances": 10, "plain_undecided": [], "reduced_undecided": [], "timed_out": [], "load_errors": [], "diverged": [], "with_tlc": true, "disagreed": []}

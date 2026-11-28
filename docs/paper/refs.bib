@@ -1,0 +1,558 @@
+% References for docs/paper/related-work.md (Paper 1, issue #594).
+% Entries checked against the publisher, DBLP or the authors' pages on 2026-11-28 carry no
+% note. Entries taken from docs/theory/*.md without a fresh check say so in `note`.
+% Entries that could not be checked carry note = {unverified}.
+
+% ---------------------------------------------------------------- symmetry
+
+@article{ipdill96,
+  author  = {C. Norris Ip and David L. Dill},
+  title   = {Better Verification Through Symmetry},
+  journal = {Formal Methods in System Design},
+  volume  = {9},
+  number  = {1--2},
+  pages   = {41--75},
+  year    = {1996},
+  note    = {as cited in docs/theory/cones.md; not re-checked}
+}
+
+@article{emersonsistla96,
+  author  = {E. Allen Emerson and A. Prasad Sistla},
+  title   = {Symmetry and Model Checking},
+  journal = {Formal Methods in System Design},
+  volume  = {9},
+  number  = {1--2},
+  pages   = {105--131},
+  year    = {1996}
+}
+
+@article{emersonsistla97,
+  author  = {E. Allen Emerson and A. Prasad Sistla},
+  title   = {Utilizing Symmetry when Model-Checking under Fairness Assumptions: An
+             Automata-Theoretic Approach},
+  journal = {ACM Transactions on Programming Languages and Systems},
+  volume  = {19},
+  number  = {4},
+  pages   = {617--638},
+  year    = {1997},
+  note    = {as cited in docs/theory/cones.md; not re-checked}
+}
+
+@article{clarke96symmetry,
+  author  = {Edmund M. Clarke and Reinhard Enders and Thomas Filkorn and Somesh Jha},
+  title   = {Exploiting Symmetry in Temporal Logic Model Checking},
+  journal = {Formal Methods in System Design},
+  volume  = {9},
+  number  = {1--2},
+  pages   = {77--104},
+  year    = {1996}
+}
+
+@inproceedings{clarke98symmetry,
+  author    = {Edmund M. Clarke and E. Allen Emerson and Somesh Jha and A. Prasad Sistla},
+  title     = {Symmetry Reductions in Model Checking},
+  booktitle = {Computer Aided Verification (CAV 1998)},
+  series    = {LNCS},
+  volume    = {1427},
+  pages     = {147--158},
+  publisher = {Springer},
+  year      = {1998},
+  doi       = {10.1007/BFb0028741}
+}
+
+@article{sistlagodefroid04,
+  author  = {A. Prasad Sistla and Patrice Godefroid},
+  title   = {Symmetry and Reduced Symmetry in Model Checking},
+  journal = {ACM Transactions on Programming Languages and Systems},
+  volume  = {26},
+  number  = {4},
+  pages   = {702--734},
+  year    = {2004},
+  doi     = {10.1145/1011508.1011511}
+}
+
+@inproceedings{emerson00virtual,
+  author    = {E. Allen Emerson and John Havlicek and Richard J. Trefler},
+  title     = {Virtual Symmetry Reduction},
+  booktitle = {15th Annual IEEE Symposium on Logic in Computer Science (LICS 2000)},
+  pages     = {121--131},
+  publisher = {IEEE Computer Society},
+  year      = {2000}
+}
+
+@inproceedings{emersonwahl05,
+  author    = {E. Allen Emerson and Thomas Wahl},
+  title     = {Dynamic Symmetry Reduction},
+  booktitle = {Tools and Algorithms for the Construction and Analysis of Systems (TACAS 2005)},
+  series    = {LNCS},
+  volume    = {3440},
+  pages     = {382--396},
+  publisher = {Springer},
+  year      = {2005},
+  doi       = {10.1007/978-3-540-31980-1_25}
+}
+
+@article{miller06survey,
+  author  = {Alice Miller and Alastair Donaldson and Muffy Calder},
+  title   = {Symmetry in Temporal Logic Model Checking},
+  journal = {ACM Computing Surveys},
+  volume  = {38},
+  number  = {3},
+  pages   = {Article 8},
+  year    = {2006},
+  doi     = {10.1145/1132960.1132962}
+}
+
+@article{iosif04,
+  author  = {Radu Iosif},
+  title   = {Symmetry Reductions for Model Checking of Concurrent Dynamic Software},
+  journal = {International Journal on Software Tools for Technology Transfer},
+  volume  = {6},
+  number  = {4},
+  pages   = {302--319},
+  year    = {2004},
+  doi     = {10.1007/s10009-004-0154-9}
+}
+
+@article{bosnacki02symmspin,
+  author  = {Dragan Bo{\v{s}}na{\v{c}}ki and Dennis Dams and Leszek Holenderski},
+  title   = {Symmetric {Spin}},
+  journal = {International Journal on Software Tools for Technology Transfer},
+  volume  = {4},
+  number  = {1},
+  pages   = {92--106},
+  year    = {2002},
+  doi     = {10.1007/s100090200074}
+}
+
+% ---------------------------------------------------------------- TLC, TLA+, Apalache
+
+@misc{tlaplus-contrib,
+  author       = {{The TLA+ project}},
+  title        = {Contributions: symmetry reduction for liveness checking},
+  howpublished = {\url{https://github.com/tlaplus/tlaplus/blob/master/general/docs/contributions.md}},
+  note         = {states that TLC's liveness checking can fail to find violations if
+                  symmetry is declared; accessed 2026-11-28}
+}
+
+@misc{lamport-symliveness,
+  author       = {Leslie Lamport},
+  title        = {Re: Symmetry and Liveness},
+  howpublished = {TLA+ mailing list, \url{https://discuss.tlapl.us/msg00134.html}},
+  note         = {accessed 2026-11-28; date of the post not checked}
+}
+
+@inproceedings{yu99tlc,
+  author    = {Yuan Yu and Panagiotis Manolios and Leslie Lamport},
+  title     = {Model Checking {TLA+} Specifications},
+  booktitle = {Correct Hardware Design and Verification Methods (CHARME 1999)},
+  series    = {LNCS},
+  volume    = {1703},
+  pages     = {54--66},
+  publisher = {Springer},
+  year      = {1999},
+  note      = {cited in docs/theory/native.md; volume and pages unverified}
+}
+
+@book{lamport02,
+  author    = {Leslie Lamport},
+  title     = {Specifying Systems: The {TLA+} Language and Tools for Hardware and Software
+               Engineers},
+  publisher = {Addison-Wesley},
+  year      = {2002}
+}
+
+@article{konnov19apalache,
+  author  = {Igor Konnov and Jure Kukovec and Thanh-Hai Tran},
+  title   = {{TLA+} Model Checking Made Symbolic},
+  journal = {Proceedings of the ACM on Programming Languages},
+  volume  = {3},
+  number  = {OOPSLA},
+  pages   = {123:1--123:30},
+  year    = {2019},
+  doi     = {10.1145/3360549}
+}
+
+% ---------------------------------------------------------------- Alloy, B
+
+@inproceedings{torlak07kodkod,
+  author    = {Emina Torlak and Daniel Jackson},
+  title     = {Kodkod: A Relational Model Finder},
+  booktitle = {Tools and Algorithms for the Construction and Analysis of Systems (TACAS 2007)},
+  series    = {LNCS},
+  volume    = {4424},
+  pages     = {632--647},
+  publisher = {Springer},
+  year      = {2007},
+  doi       = {10.1007/978-3-540-71209-1_49}
+}
+
+@article{shlyakhter07,
+  author  = {Ilya Shlyakhter},
+  title   = {Generating Effective Symmetry-Breaking Predicates for Search Problems},
+  journal = {Discrete Applied Mathematics},
+  volume  = {155},
+  number  = {12},
+  pages   = {1539--1548},
+  year    = {2007},
+  doi     = {10.1016/j.dam.2005.10.018}
+}
+
+@inproceedings{leuschel07flooding,
+  author    = {Michael Leuschel and Michael Butler and Corinna Spermann and Edd Turner},
+  title     = {Symmetry Reduction for {B} by Permutation Flooding},
+  booktitle = {B 2007: Formal Specification and Development in B},
+  series    = {LNCS},
+  volume    = {4355},
+  pages     = {79--93},
+  publisher = {Springer},
+  year      = {2007},
+  doi       = {10.1007/11955757_9}
+}
+
+@inproceedings{turner07symmetry,
+  author    = {Edd Turner and Michael Leuschel and Corinna Spermann and Michael Butler},
+  title     = {Symmetry Reduced Model Checking for {B}},
+  booktitle = {First Joint IEEE/IFIP Symposium on Theoretical Aspects of Software Engineering
+               (TASE 2007)},
+  pages     = {25--34},
+  publisher = {IEEE},
+  year      = {2007}
+}
+
+@inproceedings{spermann08nauty,
+  author    = {Corinna Spermann and Michael Leuschel},
+  title     = {{ProB} Gets Nauty: Effective Symmetry Reduction for {B} and {Z} Models},
+  booktitle = {Second IEEE/IFIP International Symposium on Theoretical Aspects of Software
+               Engineering (TASE 2008)},
+  pages     = {15--22},
+  publisher = {IEEE},
+  year      = {2008}
+}
+
+@inproceedings{turner10refinement,
+  author    = {Edd Turner and Michael Butler and Michael Leuschel},
+  title     = {A Refinement-Based Correctness Proof of Symmetry Reduced Model Checking},
+  booktitle = {Abstract State Machines, Alloy, B and Z (ABZ 2010)},
+  series    = {LNCS},
+  volume    = {5977},
+  pages     = {231--244},
+  publisher = {Springer},
+  year      = {2010},
+  doi       = {10.1007/978-3-642-11811-1_18}
+}
+
+@inproceedings{plagge10z,
+  author    = {Daniel Plagge and Michael Leuschel},
+  title     = {Validating {Z} Specifications Using the {ProB} Animator and Model Checker},
+  booktitle = {Integrated Formal Methods (IFM 2007)},
+  series    = {LNCS},
+  volume    = {4591},
+  year      = {2007},
+  note      = {unverified: venue, year and volume from memory; the title was seen in a search
+               result}
+}
+
+% ---------------------------------------------------------------- partial-order reduction
+
+@inproceedings{peled93,
+  author    = {Doron Peled},
+  title     = {All from One, One for All: On Model Checking Using Representatives},
+  booktitle = {Computer Aided Verification (CAV 1993)},
+  series    = {LNCS},
+  volume    = {697},
+  pages     = {409--423},
+  publisher = {Springer},
+  year      = {1993},
+  note      = {as cited in docs/theory/cones.md; not re-checked}
+}
+
+@book{godefroid96,
+  author    = {Patrice Godefroid},
+  title     = {Partial-Order Methods for the Verification of Concurrent Systems},
+  series    = {LNCS},
+  volume    = {1032},
+  publisher = {Springer},
+  year      = {1996},
+  note      = {as cited in docs/theory/cones.md; not re-checked}
+}
+
+@inproceedings{holzmannpeled94,
+  author    = {Gerard J. Holzmann and Doron Peled},
+  title     = {An Improvement in Formal Verification},
+  booktitle = {Formal Description Techniques VII (FORTE 1994)},
+  pages     = {197--211},
+  publisher = {Chapman \& Hall},
+  year      = {1994},
+  note      = {page range differs between sources: 197--211 in the bound proceedings,
+               177--194 in the authors' own citations}
+}
+
+@article{brunner18por,
+  author  = {Julian Brunner and Peter Lammich},
+  title   = {Formal Verification of an Executable {LTL} Model Checker with Partial Order
+             Reduction},
+  journal = {Journal of Automated Reasoning},
+  volume  = {60},
+  number  = {1},
+  pages   = {3--21},
+  year    = {2018},
+  doi     = {10.1007/s10817-017-9418-4}
+}
+
+% ---------------------------------------------------------------- artifact-centric / data-centric
+
+@inproceedings{deutsch09icdt,
+  author    = {Alin Deutsch and Richard Hull and Fabio Patrizi and Victor Vianu},
+  title     = {Automatic Verification of Data-Centric Business Processes},
+  booktitle = {Database Theory (ICDT 2009)},
+  pages     = {252--267},
+  publisher = {ACM},
+  year      = {2009}
+}
+
+@inproceedings{hariri13pods,
+  author    = {Babak Bagheri Hariri and Diego Calvanese and Giuseppe De Giacomo and
+               Alin Deutsch and Marco Montali},
+  title     = {Verification of Relational Data-Centric Dynamic Systems with External Services},
+  booktitle = {Principles of Database Systems (PODS 2013)},
+  pages     = {163--174},
+  publisher = {ACM},
+  year      = {2013},
+  doi       = {10.1145/2463664.2465221}
+}
+
+@inproceedings{calvanese13pods,
+  author    = {Diego Calvanese and Giuseppe De Giacomo and Marco Montali},
+  title     = {Foundations of Data-Aware Process Analysis: A Database Theory Perspective},
+  booktitle = {Principles of Database Systems (PODS 2013)},
+  pages     = {1--12},
+  publisher = {ACM},
+  year      = {2013},
+  doi       = {10.1145/2463664.2467796}
+}
+
+@article{belardinelli14jair,
+  author  = {Francesco Belardinelli and Alessio Lomuscio and Fabio Patrizi},
+  title   = {Verification of Agent-Based Artifact Systems},
+  journal = {Journal of Artificial Intelligence Research},
+  volume  = {51},
+  pages   = {333--376},
+  year    = {2014}
+}
+
+@article{li17verifas,
+  author  = {Yuliang Li and Alin Deutsch and Victor Vianu},
+  title   = {{VERIFAS}: A Practical Verifier for Artifact Systems},
+  journal = {Proceedings of the VLDB Endowment},
+  volume  = {11},
+  number  = {3},
+  pages   = {283--296},
+  year    = {2017},
+  doi     = {10.14778/3157794.3157798}
+}
+
+% ---------------------------------------------------------------- parameterized verification
+
+@inproceedings{emersonnamjoshi95,
+  author    = {E. Allen Emerson and Kedar S. Namjoshi},
+  title     = {Reasoning about Rings},
+  booktitle = {Principles of Programming Languages (POPL 1995)},
+  pages     = {85--94},
+  publisher = {ACM},
+  year      = {1995},
+  note      = {unverified}
+}
+
+@inproceedings{emersonkahlon00,
+  author    = {E. Allen Emerson and Vineet Kahlon},
+  title     = {Reducing Model Checking of the Many to the Few},
+  booktitle = {Automated Deduction (CADE-17)},
+  series    = {LNCS},
+  volume    = {1831},
+  pages     = {236--254},
+  publisher = {Springer},
+  year      = {2000},
+  doi       = {10.1007/10721959_19}
+}
+
+@inproceedings{padon16ivy,
+  author    = {Oded Padon and Kenneth L. McMillan and Aurojit Panda and Mooly Sagiv and
+               Sharon Shoham},
+  title     = {Ivy: Safety Verification by Interactive Generalization},
+  booktitle = {Programming Language Design and Implementation (PLDI 2016)},
+  publisher = {ACM},
+  year      = {2016},
+  note      = {as cited in docs/theory/z3.md; pages not checked}
+}
+
+@article{padon18liveness,
+  author  = {Oded Padon and Jochen Hoenicke and Giuliano Losa and Andreas Podelski and
+             Mooly Sagiv and Sharon Shoham},
+  title   = {Reducing Liveness to Safety in First-Order Logic},
+  journal = {Proceedings of the ACM on Programming Languages},
+  volume  = {2},
+  number  = {POPL},
+  pages   = {26:1--26:33},
+  year    = {2018},
+  doi     = {10.1145/3158114}
+}
+
+@inproceedings{wilcox24mypyvy,
+  author    = {James R. Wilcox and Yotam M. Y. Feldman and Oded Padon and Sharon Shoham},
+  title     = {mypyvy: A Research Platform for Verification of Transition Systems in
+               First-Order Logic},
+  booktitle = {Computer Aided Verification (CAV 2024)},
+  series    = {LNCS},
+  pages     = {71--85},
+  publisher = {Springer},
+  year      = {2024},
+  doi       = {10.1007/978-3-031-65630-9_4}
+}
+
+@inproceedings{koenig20separators,
+  author    = {Jason R. Koenig and Oded Padon and Neil Immerman and Alex Aiken},
+  title     = {First-Order Quantified Separators},
+  booktitle = {Programming Language Design and Implementation (PLDI 2020)},
+  pages     = {703--717},
+  publisher = {ACM},
+  year      = {2020},
+  doi       = {10.1145/3385412.3386018}
+}
+
+@inproceedings{yao21distai,
+  author    = {Jianan Yao and Runzhou Tao and Ronghui Gu and Jason Nieh and Suman Jana and
+               Gabriel Ryan},
+  title     = {{DistAI}: Data-Driven Automated Invariant Learning for Distributed Protocols},
+  booktitle = {Operating Systems Design and Implementation (OSDI 2021)},
+  publisher = {USENIX},
+  year      = {2021},
+  note      = {as cited in docs/theory/z3.md; not re-checked}
+}
+
+@inproceedings{goel21ic3po,
+  author    = {Aman Goel and Karem A. Sakallah},
+  title     = {On Symmetry and Quantification: A New Approach to Verify Distributed
+               Protocols},
+  booktitle = {NASA Formal Methods (NFM 2021)},
+  series    = {LNCS},
+  volume    = {12673},
+  pages     = {131--150},
+  publisher = {Springer},
+  year      = {2021},
+  doi       = {10.1007/978-3-030-76384-8_9},
+  note      = {volume number 12673 not checked; the rest checked}
+}
+
+% ---------------------------------------------------------------- stuttering bisimulation
+
+@article{browne88,
+  author  = {Michael C. Browne and Edmund M. Clarke and Orna Grumberg},
+  title   = {Characterizing Finite {Kripke} Structures in Propositional Temporal Logic},
+  journal = {Theoretical Computer Science},
+  volume  = {59},
+  number  = {1--2},
+  pages   = {115--131},
+  year    = {1988},
+  note    = {as cited in docs/theory/cones.md; not re-checked}
+}
+
+@article{denicola95,
+  author  = {Rocco De Nicola and Frits Vaandrager},
+  title   = {Three Logics for Branching Bisimulation},
+  journal = {Journal of the ACM},
+  volume  = {42},
+  number  = {2},
+  pages   = {458--487},
+  year    = {1995},
+  note    = {as cited in docs/theory/cones.md; not re-checked}
+}
+
+@inproceedings{groote90,
+  author    = {Jan Friso Groote and Frits Vaandrager},
+  title     = {An Efficient Algorithm for Branching Bisimulation and Stuttering Equivalence},
+  booktitle = {Automata, Languages and Programming (ICALP 1990)},
+  series    = {LNCS},
+  volume    = {443},
+  pages     = {626--638},
+  publisher = {Springer},
+  year      = {1990},
+  note      = {as cited in docs/theory/cones.md; not re-checked}
+}
+
+@article{groote17tocl,
+  author  = {Jan Friso Groote and David N. Jansen and Jeroen J. A. Keiren and Anton J. Wijs},
+  title   = {An {$O(m \log n)$} Algorithm for Computing Stuttering Equivalence and Branching
+             Bisimulation},
+  journal = {ACM Transactions on Computational Logic},
+  volume  = {18},
+  number  = {2},
+  pages   = {13:1--13:34},
+  year    = {2017},
+  doi     = {10.1145/3060140}
+}
+
+@inproceedings{manolios99,
+  author    = {Panagiotis Manolios and Kedar S. Namjoshi and Robert Sumners},
+  title     = {Linking Theorem Proving and Model-Checking with Well-Founded Bisimulation},
+  booktitle = {Computer Aided Verification (CAV 1999)},
+  series    = {LNCS},
+  volume    = {1633},
+  pages     = {369--379},
+  publisher = {Springer},
+  year      = {1999},
+  doi       = {10.1007/3-540-48683-6_32}
+}
+
+% ---------------------------------------------------------------- cones, abstraction, certificates
+
+@book{kurshan94,
+  author    = {Robert P. Kurshan},
+  title     = {Computer-Aided Verification of Coordinating Processes: The Automata-Theoretic
+               Approach},
+  publisher = {Princeton University Press},
+  year      = {1994},
+  note      = {as cited in docs/theory/cones.md; not re-checked}
+}
+
+@book{clarke99book,
+  author    = {Edmund M. Clarke and Orna Grumberg and Doron A. Peled},
+  title     = {Model Checking},
+  publisher = {MIT Press},
+  year      = {1999}
+}
+
+@article{clarke94abstraction,
+  author  = {Edmund M. Clarke and Orna Grumberg and David E. Long},
+  title   = {Model Checking and Abstraction},
+  journal = {ACM Transactions on Programming Languages and Systems},
+  volume  = {16},
+  number  = {5},
+  pages   = {1512--1542},
+  year    = {1994},
+  note    = {as cited in docs/theory/cones.md; not re-checked}
+}
+
+@inproceedings{clarke00cegar,
+  author    = {Edmund M. Clarke and Orna Grumberg and Somesh Jha and Yuan Lu and Helmut Veith},
+  title     = {Counterexample-Guided Abstraction Refinement},
+  booktitle = {Computer Aided Verification (CAV 2000)},
+  series    = {LNCS},
+  volume    = {1855},
+  pages     = {154--169},
+  publisher = {Springer},
+  year      = {2000},
+  note      = {as cited in docs/theory/cones.md; not re-checked}
+}
+
+@inproceedings{namjoshi01certifying,
+  author    = {Kedar S. Namjoshi},
+  title     = {Certifying Model Checkers},
+  booktitle = {Computer Aided Verification (CAV 2001)},
+  series    = {LNCS},
+  volume    = {2102},
+  pages     = {2--13},
+  publisher = {Springer},
+  year      = {2001},
+  doi       = {10.1007/3-540-44585-4_2}
+}
