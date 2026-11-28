@@ -13,7 +13,8 @@ cones.md:
   rows hold base values, a set `W` that holds the initial states and is closed under steps
   and every `G_s`. `SymOn` (`SymmetryLiveness.lean`) assumes it on such a `W`, and
   `SymActions.lean` derives that `SymOn` from (G1)–(G6) over a slot-level model of the
-  cone system (`SymAct.Sys.symOn`).
+  cone system (`SymAct.Sys.symOn`). The liveness theorems and the orbit search have forms
+  over `SymOn` (`a23_on`, `liveHolds_iff_not_oAccepts_on`).
 - The group laws are only what the proofs use: `act` composes and has an inverse, `G_s` is
   closed under both, and `G_{g(s)} = G_s` for `g ∈ G_s` (`mem_act`). No group structure is
   imported.

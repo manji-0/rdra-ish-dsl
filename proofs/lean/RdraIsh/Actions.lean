@@ -19,9 +19,11 @@ transition systems of `Reduction.lean`:
   under `b`.
 
 `rd a` is the code's read set of `split_with`: `action_reads` (the plain reads and the mark
-reads) together with `copy_reads`. `wr a` is `action_writes`. Nothing here computes them from
-the syntax of an action; that they bound what the guard and the effect look at is the
-hypothesis `Local` below, which this file states and does not derive.
+reads) together with `copy_reads`. `wr a` is `action_writes`. This file does not compute them
+from a syntax; that they bound what the guard and the effect look at is the hypothesis `Local`
+below. `SymActModel.lean` reads a model off the slot syntax of `SymActions.lean`, with `rd`
+and `wr` computed from the guards and effects as the code computes them, and proves `Local`
+of it (`SymAct.Sys.local_`).
 
 The parameters and roles are carried for Lemma 6 (`restrict_to` drops a parameter with its
 guards; `bind_stub_params` re-binds one on a stub). Lemma 5 does not look at them.

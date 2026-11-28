@@ -1,4 +1,4 @@
-import RdraIsh.SymActions
+import RdraIsh.SymActModel
 
 /-!
 # Commutation fails outside `W` (cones.md, Theorem A18)
@@ -139,5 +139,13 @@ theorem off_W_counterexample :
   have := congrArg (fun st => st.own () 0) h.2.2.2
   revert this
   decide
+
+/-- The same system as an action model: `Local` holds of it, so it meets the locality Lemmas 5
+and 6 assume as well as every hypothesis of `step_comm`. -/
+theorem model_local :
+    Act.Local (S.model [false, true] [] [()] [()] (fun e => by cases e <;> simp)
+      (fun c => nomatch c) (fun _ => List.mem_singleton_self _)
+      (fun _ => List.mem_singleton_self _)) :=
+  Sys.local_ built
 
 end RdraIsh.ExampleOffW

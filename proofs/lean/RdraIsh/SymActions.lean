@@ -26,7 +26,9 @@ on the syntax of its actions, from which the commutation of Theorem A18 is deriv
   of the last effect in the list that writes it, and its old value when none does;
 - a step binds each parameter by its role (`candidate_slots`): `Existing`, `Parent` and
   `Triggered` a present slot, `New` the lowest absent slot, `Earlier` any slot; every choice
-  effect picks a value (`Binding.choice`, by the effect's position).
+  effect picks a value (`Binding.choice`, by the effect's position). Parameters, roles and
+  bindings are those of `Actions.lean`, and a role binds what `Rows.cand` says, through
+  `rows` on a slot's existence (`roleOk`).
 
 `W` (`BaseAbsent`) is the set of states in which every absent row holds the base value of
 each of its columns and owners. It holds the initial states, is closed under steps and under

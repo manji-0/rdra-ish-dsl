@@ -26,3 +26,4 @@ import RdraIsh.Search
 import RdraIsh.SearchSym
 import RdraIsh.SearchExample
 import RdraIsh.SymActSearch
+import RdraIsh.SymActModel

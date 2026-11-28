@@ -31,6 +31,11 @@ The theorems:
   behaviour of `M` that satisfies `Fair_P`, stays forever only where `stop` holds and
   violates the property. With N9 (`accepts_iff`) and Theorem A23 (`a23`), the orbit search's
   verdict is the plain search's and the annotated quotient's.
+- `liveHolds_iff_not_oAccepts_on`, `oAccepts_on_iff_accepts`: the same with the commutation
+  only on a closed set `W` (`SymOn`, as Theorem A18 gives it). The search runs on `M`
+  restricted to `W`, whose stored states lie in `W` and whose edges from them are `M`'s, and
+  the verdicts it equals are `M`'s. `SymActSearch.lean` composes them with
+  `SymAct.Sys.symOn`.
 -/
 
 namespace RdraIsh
