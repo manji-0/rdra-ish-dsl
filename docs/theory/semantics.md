@@ -8,7 +8,7 @@ gives the meaning of the model's rules and properties on that system, and of eve
 the tools print. The theme documents listed in the [index](./README.md) state their guarantees
 in this notation. The [claims inventory](./claims.md) refers to the definitions by number
 (D1, D2, …), and each definition has an anchor of its own (`semantics.md#d1` … `#d25`).
-The code it cites was read at commit `5f59fae2` (origin/main, 2026-11-28, the merge of #537).
+The code it cites was read at commit `5ae62f2c` (origin/main, 2026-11-28, the merge of #542).
 
 **What the definitions rest on.** D1 to D13 and D24 define `T_β(M)` from the model's text.
 Each clause names the surface construct it gives meaning to (an entity, a column and its
@@ -36,12 +36,12 @@ D14 to D23 define the meaning of rules, properties, and verdicts on a transition
 `T`, and D25 that of the deadlock finding. They apply to `T_β(M)` and to every system derived from it (a cone, a reduced cone, a
 quotient), and they cite code where a verdict is printed.
 
-This document was checked against commit `5f59fae2` (origin/main, 2026-11-28; first
-`b83b9544`, then `670eec79` and `fec53d6a`, see [Errata](#errata)). Code is cited by Rust path (`lifecycle::types::Bounds`) or as
+This document was checked against commit `5ae62f2c` (origin/main, 2026-11-28; first
+`b83b9544`, then `670eec79`, `fec53d6a` and `5f59fae2`, see [Errata](#errata)). Code is cited by Rust path (`lifecycle::types::Bounds`) or as
 `file.rs::symbol`, with file paths relative to `crates/rdra-ish-core/src/lifecycle/` unless
 they start with `cli/` (`crates/rdra-ish-cli/`), as in the [claims inventory](./claims.md).
 **Implemented by** notes are pointers, not statements, and carry no read status. A code
-citation in a statement was read at `5f59fae2` unless it carries `unread@pin`
+citation in a statement was read at `5ae62f2c` unless it carries `unread@pin`
 ([claims inventory](./claims.md#how-to-read-a-row)). Revisions are listed in
 [Errata](#errata).
 
@@ -625,7 +625,7 @@ this table says only as far as the build returns `T_β(M, σ)` (claim
 |---|---|---|
 | `ok` | a cone or property line of `verify` (`cli/src/tlc_output.rs::Outcome::Ok`) | The checks of the line hold on `T_β(M)` (D16, D17, D19, D21 under the fairness of D20, D22). For a line of a cone the verdict is derived from the cone, and theme (a) owns the step from cone to model. |
 | `ok (checked in Cone_X)` | a covered safety cone (`cli/src/verify/bfs.rs`) | `ok`, decided by the run of a cone `Cone_X` that holds every variable, action, guard, and parameter of this one. |
-| `counterexample` | a line, or `result:` (`RunResult::Counterexample`) | A finite trace (safety) or a lasso (liveness) of the explored system that breaks a check. It is a behavior of `T_β(M)` except where theme (a) says otherwise. A cone that frees slots may need more instances of an entity it does not read; such a counterexample is re-decided on the whole model for properties, or printed with the instances it needs. A cone that leaves a raised mark out may reach states the event order forbids; since #477 such a counterexample of a state rule or `after` is decided again, and since #509 by a refinement loop (`targets.rs::TransitionSystem::recheck_on`): the cone grows by the raisers of the events the trace runs without (`free_triggers`) and by the entities it creates past the bound (`over_bound`) until its run vouches for the trace or finds none, with the exact cone (`exact_target_cone`) as the last step (P1, fixed). Every printed trace, safety or liveness, replays through the step relation of the system it is about before it prints; one that does not is a `tool_error` (P20, fixed in #518 and #522). Since #529 and #531 the lifts' own look-ups are faults too (`explore/orbit.rs::lift_path`, `reduce/lift.rs::lift` with the search for a class move's S path, `reduce/partition.rs::Succ::shortest_path`, the lasso lift `explore/orbit/liveness.rs::Product::lift`); the `expect`s and `panic!`s left are listed in the index's P20 row with the reason each holds; the two that read a lifted path (`reduce/lift.rs::lift_stop`'s state list, `explore/orbit.rs::run_orbits_annotating`'s last step of an `after` violation) hold whatever path is lifted. |
+| `counterexample` | a line, or `result:` (`RunResult::Counterexample`) | A finite trace (safety) or a lasso (liveness) of the explored system that breaks a check. It is a behavior of `T_β(M)` except where theme (a) says otherwise. A cone that frees slots may need more instances of an entity it does not read; such a counterexample is re-decided on the whole model for properties, or printed with the instances it needs. A cone that leaves a raised mark out may reach states the event order forbids; since #477 such a counterexample of a state rule or `after` is decided again, and since #509 by a refinement loop (`targets.rs::TransitionSystem::recheck_on`): the cone grows by the raisers of the events the trace runs without (`free_triggers`) and by the entities it creates past the bound (`over_bound`) until its run vouches for the trace or finds none, with the exact cone (`exact_target_cone`) as the last step (P1, fixed). Every printed trace, safety or liveness, replays through the step relation of the system it is about before it prints; one that does not is a `tool_error` (P20, fixed in #518 and #522). Since #529 and #531 the lifts' own look-ups are faults too (`explore/orbit.rs::lift_path`, `reduce/lift.rs::lift`, the lasso lift `explore/orbit/liveness.rs::Product::lift`), and since #541 so is the search for a class move's S path (`reduce/partition.rs::Succ::shortest_path`, which panicked until then); the `expect`s and `panic!`s left are listed in the index's P20 row with the reason each holds or the assumption it rests on; the two that read a lifted path (`reduce/lift.rs::lift_stop`'s state list, `explore/orbit.rs::run_orbits_annotating`'s last step of an `after` violation) hold whatever path of the system's own states is lifted. |
 | `violated` | `property P (BFS on its cone): violated`; `can_reach (BFS on N cones): k checked, m violated` (`cli/src/verify/bfs.rs`) | `counterexample`, in the lines of the forms only BFS decides (`stable`, `unchanged`, `precedes`, `can_reach`). |
 | `not decided` | a line (`cli/src/verify/native.rs::Answer::Stopped`, `RunResult::NotDecided`) | The run stopped before it found a counterexample. No claim is made either way. The line's note names the stop: `stopped at the state cap (--max-states) or the memory limit`, `stopped at the state cap of N states`, `stopped at the memory limit of L`, `stopped at the time budget of S s`, or, for a property its cone cannot decide, `needs the whole model's WF_vars(Next)` and `its counterexample may create instances past the bound`. |
 | `tool_error` | a line or `result:` | A tool fault, not a fact about the model: a counterexample or trace that does not certify itself (`LassoFault` for a property, `LiftFault` for a state rule or `after`, `TraceFault` for a deadlock, a `can_reach` failure, or a witness; P20), a disagreement between the native checker and TLC, or a TLC failure without a violation. |
@@ -706,6 +706,11 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
 
 ## Errata
 
+- **2026-11-28, fourth audit; re-pin to `5ae62f2c`** (the merge of #542). The crates change
+  after `5f59fae2` only by #539 (a test) and #541 (`reduce/lift.rs::lift`,
+  `reduce/partition.rs::Succ::shortest_path`), which were read. D23's `counterexample` row
+  credited the fault of the S-path search to #529 and #531 under the old pin, where
+  `shortest_path` still panicked; it now credits #541.
 - **2026-11-28, second audit at `5f59fae2`.** The remark "Operands on absent rows" said D22 reads `goal`
   whatever the row's existence; D22's path keeps the row present, goal state included, as
   `reach.rs::reach_failure` does. S2 cited an `Ltl` in `model/constraints.rs`, which has
