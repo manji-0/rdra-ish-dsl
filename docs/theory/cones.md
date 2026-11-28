@@ -664,8 +664,8 @@ the role `Earlier { step: 0 }` with no run guard). Only two kinds of action of `
 parameter: a folded `S_a` action, where it is one of the fold's `T` parameters, and a rise.
 Every build checks the built `X` against this definition (`extended.rs::StubCheck`): no
 parameter of any action of `X` (folded and unfolded `S_a` actions, rises, and the bits' flips)
-on a stub needs a present row, and `bind_stub_params` binds no parameter of an unfolded `S_a`
-action, nor a folded one's outside its fold. On a fault `reduced_with` reduces nothing, so the
+on a stub needs a present row, `bind_stub_params` binds no parameter of an unfolded `S_a`
+action, nor a folded one's outside its fold, and `restrict_to` keeps every fold's key. On a fault `reduced_with` reduces nothing, so the
 cone is decided unreduced, with a warning; a debug or `shadow` build panics (Lemma 6,
 "Parameters").
 
@@ -683,8 +683,14 @@ those are kept by `restrict_to` with havoc off, so it has the same successors on
 they hold in `C`; it writes the raw inputs, and each changed bit slot then has a free flip.
 
 Parameters. A step binds each parameter to a slot, and the two systems must admit the same
-bindings. `restrict_to` drops a `T` parameter on an entity it neither keeps nor stubs, with the
-guards that name it; a `T` parameter on a stub it keeps with its role. A stub is absent in every
+bindings. `restrict_to` drops a `T` parameter on an entity it neither keeps nor stubs, and a
+`New` one on an entity whose existence it does not hold, each with the guards that name it (a
+guard can name a created row by its index alone); a `T` parameter on a stub it keeps with its
+role. Only a rise has a dropped `New` parameter, since an `S_a` action creates rows of `S_v`
+alone. No fold is keyed by a dropped parameter: `split_with` leaves an action unfolded when
+`restrict_to(S_v ∪ inputs)` would drop its fold's key (a `T` parameter that no variable of `S_v`
+or the inputs names, such as the acting row of a fold that no guard or effect keys otherwise),
+so the action reads `T` raw and is an unfolded `S_a` action below. A stub is absent in every
 state of `X`, so `Extended::build` binds every kept parameter on a stub whose role needs a present
 row (`Existing`, `Parent`, `Triggered`) to any slot (`bind_stub_params`, Definition 4). Such a
 parameter belongs to one of two kinds of action:
@@ -697,7 +703,7 @@ parameter belongs to one of two kinds of action:
   counterpart in `X`.
 - A rise. It keeps in `X` only its guards on `S_v` and inputs, so binding the parameter freely keeps
   every `T` step's rise (the direction the lemma needs) and adds only rises that `T_a` guards
-  already left unconstrained.
+  already left unconstrained; dropping a guard that names a dropped parameter does the same.
 
 An unfolded `S_a` action has no parameter on a stub: its raw reads hold the existence of every
 entity it binds (`raw_reads`; for a `Triggered` parameter, the existence of its mark's entity
@@ -735,6 +741,15 @@ counterexample on both. `::a_param_left_on_a_stub_makes_the_cone_decide_unreduce
 cone is decided unreduced, with the cone's verdicts. `::no_extended_sub_lifecycle_leaves_a_param_on_a_stub`
 builds the top-level `X` of every target and property cone of the samples, the domain samples
 and the corpus, with and without inputs, and the check passes on each.
+`::a_fold_whose_key_the_restriction_drops_leaves_its_action_unfolded` runs corpus case
+`cone_fold_key_dropped` at 1 and 2 instances: `GrantNoted`'s fold would be keyed by its acting
+`Existing` Desk row, which `restrict_to(S_v ∪ inputs)` drops; the split leaves it unfolded with
+Desk's existence an input, the check passes, and `assert_reduction_exact` holds; with the
+unfolding dropped, the check names the key (`Fault::KeyDropped`) and the cone is decided
+unreduced, with the cone's verdicts. `::a_rise_guard_on_a_dropped_new_row_goes_with_the_row`
+runs corpus case `cone_rise_names_a_dropped_new_row`, a rise whose condition joins a row of
+`S_v` to the order it creates, which `X` drops with that guard, through
+`assert_reduction_exact` at 1 and 2 instances.
 `reduce/extended.rs::tests::a_stub_param_no_fold_or_rise_stands_for_is_left_and_reported` counts
 `Note`'s rise among the `S_a` actions: `bind_stub_params` leaves its parameter's role, and the
 check reports it as unfolded.
@@ -765,7 +780,7 @@ shares `Reduction::key` (and so `Fold::holds`), `Extended::build` and the step r
 code it checks.
 
 TLC checks the first conjunct and the `C ⇒ X` direction of the others on every reached state of
-each of the 17 reduced corpus cones
+each of the 21 reduced corpus cones
 (`cli/tests/engine_corpus.rs::tlc_refinement_holds_on_every_reduced_cone_of_the_corpus`,
 [tlc-agreement.md](./tlc-agreement.md#the-reduction-step-by-step)), with its own semantics of
 the unreduced cone: each state's key is a state of `X_n`, and each `S_a` step and rise of the
@@ -843,7 +858,17 @@ reduced cone keeps: `drop_unreadable_checks` (A14).
 *Evidence.* P-sketch (Lemma 6 is argued, not proved; (B1)–(B3) are checked at run time on each
 partition the reduction uses, R). M: `Twin::Partition` (worklist against
 sweeps), `Twin::ClassMoves`, `Twin::FoldHolds`, the `shadow_assert!` that a steady action leaves the
-inputs. D: `core/tests/reduce.rs::reduced_cones_decide_what_the_cones_decide`,
+inputs. M also: the Lean proof in `proofs/lean/` proves the theorem and its four
+consequences from Lemma 5 (a)(b), Lemma 6, the shape of `X` and (B1)–(B3) as hypotheses:
+`ReductionLabels.lean::a8_branching` (the relation is a divergence-blind branching
+bisimulation that keeps every `T_a` label, with its binding), `a8_edges_iff` (consequence 2),
+`a8_stuck_iff` (consequence 3), `Plain.lean::a8_plain_iff` (consequence 4, for
+`□(trig ⇒ ◇goal)` under `Fair_P` over infinite behaviours), `Stages.lean::a8_staged` (point
+5 with `recanon` over the stages), and `Nested.lean::a8_nested` (a nested `X`, by induction
+on depth). It does not derive Lemma 6 from the code. In the nested case its outer
+representative is a reachable state of `X` and its outer class moves and rises are read on
+`X`, where the code takes an inner representative and reads them on the inner run.
+D: `core/tests/reduce.rs::reduced_cones_decide_what_the_cones_decide`,
 `::reduced_domain_cones_decide_what_the_cones_decide`, `::a_violation_behind_the_sub_lifecycle_lifts_to_a_longer_real_trace`;
 `scripts/reduction-diff.py`; `cli/tests/engine_equivalence.rs` on reduced cones.
 

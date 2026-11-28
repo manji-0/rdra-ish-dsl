@@ -1852,6 +1852,153 @@ fn a_rise_with_a_param_on_a_stub_is_a_rise_of_the_extended_sub_lifecycle() {
     }
 }
 
+/// A fold keyed by a T param that `restrict_to(S ∪ inputs)` drops leaves its action unfolded
+/// (claim A8; docs/theory/cones.md, Lemma 6, "Parameters"). In `cone_fold_key_dropped` the
+/// rule's cone drops `GrantNoted`'s owner assignment and its `memo` effect, so its fold would
+/// be keyed by its `Existing` Desk param, on an entity no var of S or the inputs names. The
+/// split leaves `GrantNoted` unfolded with Desk's existence an input, the extended
+/// sub-lifecycle passes its check, and the reduced cone decides what the cone decides, at one
+/// and two instances. With the unfolding dropped the fold comes back, the build's check names
+/// its key, and the cone is decided unreduced, with the cone's verdicts.
+#[test]
+fn a_fold_whose_key_the_restriction_drops_leaves_its_action_unfolded() {
+    use crate::lifecycle::explore::symmetry::witnesses::dropping;
+    let model = model_from(include_str!(
+        "../../../../rdra-ish-cli/tests/engine_corpus/cone_fold_key_dropped.rdra"
+    ));
+    let caps = Caps::new(usize::MAX, 200_000);
+    for b in [Bounds::STATES, Bounds::VERIFY] {
+        let ts = TransitionSystem::build(&model, b.clone(), &Scope::ALL).ts;
+        let rule = *ts
+            .targets()
+            .iter()
+            .find(|t| matches!(t, Target::Invariant(_)))
+            .expect("the rule");
+        let (sys, seeds) = ts.cone_system(&ts.target_cone(rule), [ts.target_seed(rule)]);
+        let folded = || -> Vec<String> {
+            let split = sys.split_with(&seeds, true);
+            let act = |a: crate::lifecycle::ActId| sys.actions()[a.index()].name.clone();
+            split.folds.iter().map(|f| act(f.act())).collect()
+        };
+        let split = sys.split_with(&seeds, true);
+        assert!(
+            split
+                .s_actions
+                .iter()
+                .any(|a| sys.actions()[a.index()].name == "GrantNoted"),
+            "{b:?}: GrantNoted is an S action"
+        );
+        assert!(
+            !folded().contains(&"GrantNoted".to_string()),
+            "{b:?}: GrantNoted stays unfolded: {:?}",
+            folded()
+        );
+        let inputs: Vec<String> = split.inputs.iter().map(|v| sys.var_name(*v)).collect();
+        assert!(
+            inputs.iter().any(|v| v.starts_with("Desk")),
+            "{b:?}: Desk's existence is an input: {inputs:?}"
+        );
+        assert_eq!(
+            sys.stub_check(&seeds, true).and_then(|(_, f)| f),
+            None,
+            "{b:?}: the check passes"
+        );
+        let reduced = sys.reduced(&seeds, caps);
+        assert!(
+            reduced.reduction().is_some(),
+            "{b:?}: the rule's cone reduces"
+        );
+        // Planted: with the unfolding dropped, GrantNoted folds on its dropped key, the build's
+        // check names it, and the cone is decided unreduced.
+        let (planted, fault, fallback) = dropping("unfold_dropped_keys", || {
+            (
+                folded(),
+                sys.stub_check(&seeds, true).and_then(|(_, f)| f),
+                sys.reduced(&seeds, caps),
+            )
+        });
+        assert!(
+            planted.contains(&"GrantNoted".to_string()),
+            "{b:?}: the planted split folds GrantNoted: {planted:?}"
+        );
+        let fault = fault.expect("the planted check fails");
+        assert!(
+            fault.contains("of S action GrantNoted keys its fold"),
+            "{b:?}: {fault}"
+        );
+        assert!(fallback == sys, "{b:?}: the unreduced cone is the cone");
+        let run = |s: &TransitionSystem| -> BTreeSet<String> {
+            let run = s.clone().run(caps);
+            assert!(run.complete, "{b:?}");
+            run.diags.iter().map(|d| d.diag.name(&[])).collect()
+        };
+        assert_eq!(run(&reduced), run(&sys), "{b:?}: verdicts");
+        let explored = ts.explore_targets_reduced(&ts.targets(), caps);
+        assert!(
+            !violated(&explored).is_empty(),
+            "{b:?}: the reduced cone finds the violation"
+        );
+        assert!(assert_reduction_exact("cone_fold_key_dropped", &model, b) >= 1);
+    }
+}
+
+/// A rise's guard that names a created row by its index alone goes with the row's `New`
+/// param when the extended sub-lifecycle drops it (claim A8). In
+/// `cone_rise_names_a_dropped_new_row`, `Place` creates an order and a sheet; Sheet's
+/// existence is an input, Order's is neither in S nor an input, and `HasOpen` joins a voucher
+/// (of S) to the new order. `restrict_to(S ∪ inputs)` keeps `Place` as a rise with its sheet
+/// param alone and without that guard, and the reduced cone decides what the cone decides,
+/// at one and two instances.
+#[test]
+fn a_rise_guard_on_a_dropped_new_row_goes_with_the_row() {
+    let model = model_from(include_str!(
+        "../../../../rdra-ish-cli/tests/engine_corpus/cone_rise_names_a_dropped_new_row.rdra"
+    ));
+    for b in [Bounds::STATES, Bounds::VERIFY] {
+        let ts = TransitionSystem::build(&model, b.clone(), &Scope::ALL).ts;
+        let rule = *ts
+            .targets()
+            .iter()
+            .find(|t| matches!(t, Target::Invariant(_)))
+            .expect("the rule");
+        let (sys, seeds) = ts.cone_system(&ts.target_cone(rule), [ts.target_seed(rule)]);
+        let split = sys.split_with(&seeds, true);
+        let all: VarSet = split.s.union(&split.inputs).copied().collect();
+        let place = sys
+            .actions()
+            .iter()
+            .find(|a| a.name == "Place")
+            .expect("Place");
+        assert_eq!(
+            place.params.len(),
+            2,
+            "{b:?}: Place binds an order and a sheet"
+        );
+        assert!(
+            !place.guards.is_empty(),
+            "{b:?}: Place has its condition in the cone"
+        );
+        let (ext, _) = sys.restrict_to_mapped(&all, &BTreeSet::new(), false);
+        let place = ext
+            .actions()
+            .iter()
+            .find(|a| a.name == "Place")
+            .expect("Place is a rise of the extended sub-lifecycle");
+        assert_eq!(place.params.len(), 1, "{b:?}: the order param is dropped");
+        assert!(
+            place.guards.is_empty(),
+            "{b:?}: the guard that names the order goes with it: {:?}",
+            place.guards
+        );
+        let reduced = sys.reduced(&seeds, Caps::new(usize::MAX, 200_000));
+        assert!(
+            reduced.reduction().is_some(),
+            "{b:?}: the rule's cone reduces"
+        );
+        assert!(assert_reduction_exact("cone_rise_names_a_dropped_new_row", &model, b) >= 1);
+    }
+}
+
 /// The corpus cases whose fold and rise keep a param on a stub (claim A8), each with the
 /// action that keeps it.
 const STUB_CASES: &[(&str, &str, &str)] = &[
