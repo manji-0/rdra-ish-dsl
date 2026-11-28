@@ -153,14 +153,26 @@ The proofs assume the following hypotheses and do not derive them:
   for one rise per stage of `stages`. `x(t, s) ∈ Reach(X)` is not assumed: `x_reach`
   derives it. Over the action model, `lemma6_by`, `lemma6_staged` and `lemma6` derive all
   four from `Lemma6Hyp` ([below](#definition-4-and-lemma-6-over-actions)).
+  Every build certifies the side of `Lemma6Staged` that `X` holds
+  (`reduce/hypotheses.rs::rise_faults`, `::layout_faults`). Each rise of a block's
+  representative sets the raw inputs or flips one bit slot, and `stages` lists it as exactly
+  one stage; by (B3) so does every rise of the run of `X`. The engines read the input bytes
+  with the raw width and length `X` lays out. That a `T_a` step of `C` has rises through every
+  stage is not certified: a missing stage is a `recanon` miss in `moves_of_into`, which
+  panics in every build.
 - **The rise table** (`RiseTable`, for `a8_staged`). Every rise of a reachable
-  representative is entered under its block and the input bytes it ends at.
+  representative is entered under its block and the input bytes it ends at. Every build
+  certifies it on each run of `X` (`rise_faults`). The table holds exactly the rises of each
+  block's first state, the code's representative, under the input bytes they end at and with
+  the block they enter. This is `RiseTable` literally when `X` has no inner reduction and is
+  not run up to `H`. Otherwise the check reads the inner run or the orbit graph.
 - **The nested case** (`InnerMap`, `Tower`, for `a8_nested`). Each level's inner run is
   related to the level above by an inner map, which `a8_innerMap` derives from that level's
-  own A8 hypotheses. That the inner split puts `obs` and the input bytes on its `T` side and
-  keeps the rises (the seeds `reduced_in` gets in `Classes::of`) enters as the choice of
-  observation and visibility of the map, and the reindexing of `S × I` as `T' × S'` as an
-  `InnerMap.ofIso`.
+  own A8 hypotheses. The seeds `reduced_in` gets in `Classes::of` are `obs` and the rises.
+  So the inner split keeps every rise in its `T_a`, and puts each `obs` variable and input of
+  `X` on its `T` side or in its own `obs`. Every build certifies both
+  (`reduce/hypotheses.rs::inner_faults`). This enters as the choice of observation and
+  visibility of the map, and the reindexing of `S × I` as `T' × S'` as an `InnerMap.ofIso`.
 - **Definition 4's shape of `X`** (`Extended`). A silent edge keeps the input bytes, and a
   rise keeps `S`. `Ext.extended` proves it of the `X` of `Restrict.lean`.
 - **(B1)–(B3)** (`Stable`), on the reachable states of `X`, with
@@ -191,9 +203,13 @@ The proofs assume the following hypotheses and do not derive them:
     complete" asks; when `obs = ∅` the code does not explore `X`, and `LX` is only a
     hypothesis of the proof.
   - `hloop`: every block whose silent edges between different states contain a cycle from
-    a reachable state can loop (`SilentCycle`, Definition 5, case 1). The code's
-    `partition.rs::divergence` and, for `obs = ∅`, `s_cycles` must make it true; cones.md
-    argues both.
+    a reachable state can loop (`SilentCycle`, Definition 5, case 1). Every build certifies
+    it on each explored run of `X` (`reduce/hypotheses.rs::loop_faults`), whether
+    `partition.rs::divergence` set the marks or `s_cycles` left every class unmarked. The
+    check peels the silent edges inside the unmarked classes. It is `hloop` literally on a
+    flat `X` not run up to `H`, and the same check on the stored graph otherwise. When `obs = ∅` a release build
+    does not explore `X`, so there `s_cycles` is checked only in tests, on a plain run of `X`
+    under the test's own caps; a run past them is skipped (`partition.rs::unobserved_loops`).
 - **The searches** (`Accepts`, `OAccepts`; [below](#the-liveness-searches)).
   - The searched graph is the system's step relation on its reachable states: a complete
     run (N1), so `En`, `Moves` and `Tk` are those of `M`.
@@ -229,13 +245,21 @@ The proofs assume the following hypotheses and do not derive them:
     `R`, and `R`'s `T` move reads a rise only through the input bytes it ends at.
   - What `stages` returns. `Lemma6Staged` takes the stage list as a parameter. Over the
     action model `Ext.stages` is `Reduction::stages`, and `lemma6_staged` proves that the
-    rises of that `X` follow it.
+    rises of that `X` follow it. The run-time certificate shows that each rise of `X`
+    is one stage of `Reduction::stages`.
   - The outer representative in the nested case. The code takes it among the inner run's
     states, so its `S` bytes are an inner representative's, which need not be a reachable
     state of `X`; `a8_nested` takes a reachable member of the block (`exists_rep`). `R`
-    reads the representative only through `obs` and its rises, which (B1) and (B3) fix on
-    the block, but that the inner representative's are those of a reachable member is not
-    derived.
+    reads the representative only through `obs`, its input bytes and its rises. The inner
+    split's certificate puts the `obs` variables and inputs on the inner `T` side or in the
+    inner `obs`, and Lemma 5 (b) of the inner split keeps the rises' guards and effects there.
+    The inner partition's (B1) then fixes on the inner class the representative's `obs` and
+    input bytes, which rises it takes, and the input bytes they end at. All three are
+    certified at run time. The block a rise enters is read on the inner run (the next item).
+    That some reachable member of `X` has the representative's inner `T` part is A8 for the
+    inner cone. No theorem assembles these steps. Checking the representative against a
+    concrete reachable member would need that member, which comes only from lifting a path to
+    each representative through the inner reduction, or from a plain run of `X`.
   - The outer reduced cone's moves in the nested case. `a8_nested` builds `R` with the class
     moves and rises of `X` under the pulled-back partition. The code reads them on the inner
     run. `InnerMap.path_fwd`, `path_back`, `rise_fwd` and `rise_back` carry the moves between

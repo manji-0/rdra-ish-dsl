@@ -1114,6 +1114,35 @@ bisimulation that keeps every `T_a` label, with its binding), `a8_edges_iff` (co
 on depth). `Lemma6.lean::a8_actions` derives the hypotheses `Split`, Lemma 6 and the shape of `X` over the action model (Lemma 6's evidence), so A8 with `recanon` holds there from `Lemma6Hyp`, (B1)–(B3) and the rise table; it does not derive Lemma 6 from the code. In the nested case its outer
 representative is a reachable state of `X` and its outer class moves and rises are read on
 `X`, where the code takes an inner representative and reads them on the inner run.
+R: every build checks, on each run of `X` before the reduction uses it, three hypotheses the
+Lean proof takes (`reduce/hypotheses.rs`). On a fault the cone is decided unreduced, with a
+warning; a debug or `shadow` build panics. The run is `X`'s own when `X` has no inner
+reduction and is not run up to `H`, and there the checks are the Lean hypotheses literally.
+Otherwise they read the graph `of_graph` reads, the inner run or the orbit graph, and the step
+from it to `X` stays argued. An unobserved `S` has no rise table to check.
+
+- `rise_faults` checks the rise table (`RiseTable`) and `X`'s side of the stages
+  (`Lemma6Staged`). Each rise of a class's representative sets the raw inputs or flips one
+  bit slot, and `stages` lists it as exactly one stage. The table holds exactly the rises of
+  each class's first state, the representative, under the input bytes they end at and with
+  the class they enter. That every other state of the class rises as the representative does
+  is (B3), which the stability certificate below checks.
+- `layout_faults` checks that the engines read the input bytes with `X`'s raw width and length.
+- `inner_faults` checks the inner split of a nested reduction. Every rise is in its `T_a`, and
+  every `obs` variable and input of `X` is on its `T` side or in its `obs`. With the inner
+  partition's (B1) and Lemma 5 (b) of the inner split, this fixes on the inner class the
+  representative's `obs` and input bytes, which rises it takes, and the input bytes they end
+  at. It does not fix the block a rise enters, which the code reads on the inner run.
+
+The checks recompute what they check from the run's edges, the state bytes and the split's
+sets. They do not show that a `T_a` step of `C` has rises through every stage it lists: a
+missing stage is a `recanon` miss in `moves_of_into`, which panics in every build.
+`reduce/hypotheses.rs::tests::a_planted_stage_or_rise_table_fails_its_check` plants faulty stages
+and tables. `::a_planted_fault_makes_a_reduced_cone_decide_unreduced` plants each fault in
+`of_graph` and `Classes::of` and sees the cone decided unreduced.
+`core/tests/reduce.rs::every_quotient_passes_the_checks_of_its_hypotheses` reduces every cone
+of the samples, the domain samples and the corpus cases at `Bounds::STATES`, rises and nested
+reductions included.
 D: `core/tests/reduce.rs::reduced_cones_decide_what_the_cones_decide`,
 `::reduced_domain_cones_decide_what_the_cones_decide`, `::a_violation_behind_the_sub_lifecycle_lifts_to_a_longer_real_trace`;
 `scripts/reduction-diff.py`; `cli/tests/engine_equivalence.rs` on reduced cones.
@@ -1280,7 +1309,18 @@ proved in `Search.lean` (`accepts_iff_lasso`), makes the two the same.
 Cases 2 and 3 of Definition 5 and the proof's (ii) belong to the nested case, which is not
 modelled; case 4 enters only through the hypothesis, and the proof's (iii) is not formalized.
 `ExampleFair.eventually_flag` discharges every hypothesis on a cone whose one block holds a
-silent cycle. R: lift, replay, and fairness check of each candidate. D: corpus cases `cone_reduced_class_loops`, `cone_reduced_inner_class_loops`,
+silent cycle. R: every build checks that hypothesis, case 1, on each explored run of `X`
+(`reduce/hypotheses.rs::loop_faults`): it peels the silent edges between different states
+inside the unmarked classes, and a state left over lies on or after a cycle of its class. The
+marks it checks are `divergence`'s, or all false when `s_cycles` says nothing loops. On a fault
+the cone is decided unreduced, with a warning; a debug or `shadow` build panics. On a flat `X`
+not run up to `H` this is case 1 literally; otherwise the check reads the stored graph, and
+cases 2 and 3 stay argued. An unobserved `S` is not explored in a release build. There,
+`s_cycles` is checked only in a test build, on a plain run of `X` under the test's own caps; a
+run past them is skipped (`partition.rs::unobserved_loops`).
+`reduce/hypotheses.rs::tests::a_planted_loop_mark_fails_its_check` and
+`::a_planted_fault_makes_a_reduced_cone_decide_unreduced` (a back edge that marks nothing, and
+`s_cycles` false) plant the fault. R also: lift, replay, and fairness check of each candidate. D: corpus cases `cone_reduced_class_loops`, `cone_reduced_inner_class_loops`,
 `cone_reduced_loop_fair_enabled`, `cone_reduced_loop_unreached`, `cone_reduced_no_loop_capped`;
 `cli/tests/engine_corpus.rs::a_reduced_wf_next_run_decides_what_the_unreduced_one_decides`;
 `reduce/partition.rs::an_unobserved_sub_lifecycle_can_loop_unless_every_var_only_rises`.
