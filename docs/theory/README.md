@@ -81,7 +81,9 @@ A28).
   Entity cones and `can_reach` cones are exact (A2, A7).
 - A property cone decides under its own fairness by the three-run protocol (A4, A5).
 - The sub-lifecycle reduction is a divergence-blind stuttering bisimulation, relative to the
-  stability of its partition, which every build certifies, and to Lemma 6 (A8 to A15, A22).
+  stability of its partition, which every build certifies, and to Lemma 6, which is proved
+  from per-action facts about the code (A8 to A15, A22). The proof is step by step for a flat
+  reduction and a sketch for a nested one or one run up to `H`.
   `_WF` runs on a reduced cone are sound relative to the same hypotheses (A15).
 - Instance symmetry is a bisimulation under the group the scan computes; leaving a class out
   costs states, never a verdict (A18 to A23).
@@ -137,11 +139,11 @@ verifies:
 - **The build** returns `T_β(M)` (I1). It is shared by every engine, together with the
   parser, `build_model`, the choice of a cone, the staging of a property cone's runs, the
   quotient tables of a reduced cone, and `TlaNames`.
-- **Paper arguments** that are sketches, not proofs: Lemma 6 of the reduction (A8), the
-  per-construct argument for the TLA+ printer (T1), the theorems marked `P-sketch` in the
+- **Paper arguments** that are sketches, not proofs: the nested case of the reduction (A8),
+  the per-construct argument for the TLA+ printer (T1), the theorems marked `P-sketch` in the
   [summary by evidence class](./claims.md#summary-by-evidence-class).
 - **Lean** (4.36.0, its kernel and the three standard axioms) for the Lean proofs that the
-  M evidence of A8, A15, A18, A20, A21, A23 and N9 cites ([proofs/lean](../../proofs/lean/README.md)).
+  M evidence of A8, A9, A10, A11, A12, A15, A18, A20, A21, A23 and N9 cites ([proofs/lean](../../proofs/lean/README.md)).
 - **Kani** and the Rust compiler. CI's verification jobs build with overflow checks (profile
   `ci-checked`), so a fixed-width integer that wraps panics there; release builds wrap
   silently.
@@ -231,32 +233,68 @@ not a bound on what exists.
 - **A2.** That `Trace::free_triggers` lists every step that runs an action reading a mark
   outside the cone is a reading of the code, with no test of its own; that the exact cone's
   counterexample is vouched for is a `debug_assert!` only.
-- **A5.** Rests on Lemma 6, which is argued, not proved (A8).
-- **A6.** Rests on Lemma 6 (A8).
-- **A8.** Lemma 6, which ties the extended sub-lifecycle to the cone, is argued, not proved;
-  the tests check what it assumes on the models and bounds they run. TLC checks the reduction
-  step by step on the corpus's reduced cones only, one way (`C ⇒ R`), without fairness. Of
-  the locality Lemma 5 and 6 assume (`Local`), Kani proves only that a predicate reads its
-  `pred_reads`, for shapes of depth 1; that a step writes only `Wr(a)` and writes a function of
-  `Rd(a) ∪ Wr(a)` has no harness.
-- **A10.** Rests on Lemma 6 (A8).
-- **A11.** The fold equivalence is proved by Kani for one action at small bounds and tested
-  on the models and bounds of the fold tests otherwise; Lemma 6 is argued (A8).
+- **A5.** Parts 1 and 3 rest on A8 and A15: on a nested reduction or one run up to `H` on
+  their sketched part, and on a flat one on the facts of `Lemma6Hyp` read from the code (A8).
+- **A6.** Rests on A8: its nested case and the run up to `H` are sketched, and its flat case rests on the facts of
+  `Lemma6Hyp` read from the code.
+- **A8.** Lemma 6 is proved from the sixteen fields of `Lemma6Hyp`, and eight of them
+  (`kept_rd`, `folded_og`, `folded_names`, `other_names`, `eff_names`, `exact`, `rise_eff`,
+  `eff_s`), with the half of `cover` that says what an unfolded guard names, are read from
+  the code with no run-time check; that the code's actions
+  are the slot syntax over which `local_`, `shape` and `new_writes` are proved is read too.
+  The Lean model has one bit per fold, no node fold, the cone's parameter positions and `X`'s
+  initial states as projections; cones.md argues those parts on paper. The nested case (the
+  induction over the depth, the outer representative and class moves read on the inner run)
+  and a run of `S` up to `H` are sketched. Lemma 6 is checked step by step only on the cones the tests explore unreduced,
+  with code the check shares. TLC checks the reduction step by step on the corpus's reduced
+  cones only, one way (`C ⇒ R`), without fairness. Of the locality Lemma 5 and 6 assume
+  (`Local`), Kani proves only that a predicate reads its `pred_reads`, for shapes of depth 1;
+  that a step writes only `Wr(a)` and writes a function of `Rd(a) ∪ Wr(a)` has no harness.
+- **A10.** Rests on A8 (its nested case and the run up to `H` are sketched; its flat case rests on the facts read
+  from the code). That the guards give `Pre` at each step is read from the code, and the
+  write-graph model of `monotone_vars` is not joined to the action model of Lemma 5.
+- **A11.** The fold equivalence is read from `fold_of` and `holds_fast`, not derived in Lean
+  (`Lemma6Hyp.exact`); Kani proves it for one action at small bounds (`reduce/fold.rs::proofs`),
+  and it is tested on the models and bounds of the fold tests otherwise; node
+  folds and bit groups are argued on paper, outside the Lean model; the nested case and the
+  run up to `H` are sketched (A8).
 - **A13.** No test makes `reduced_with` reject a reduction past the TLA+ cell budget; that
   rejection is read from the code only.
 - **A14.** No test targets the cone of its own that a dropped check gets.
-- **A15.** Relative to A8's hypotheses, which include Lemma 6.
+- **A15.** Relative to A8's hypotheses (A8 lists the facts of `Lemma6Hyp` read from the
+  code). The nested case and the run up to `H` (Definition 5's cases 2 and 3) and case 4's reading of the one
+  unobserved class as the partition by input bytes are sketched.
 - **A16.** No test reaches most of the lift's look-up faults (a class with no initial S state,
   an S path up to `H` that starts elsewhere, a rise or a target with no block, an S action
   that is not the cone's, `Length`). The lifted start is not checked against the unreduced
   cone's initial states. The panics left on a lift's way stop the run.
 - **A18.** No Kani harness proves the canonical form invariant under the group; it rests on an
   exhaustive unit test and the `Canonical` twin. The `g6.rs` test has no `always` or
-  `unchanged`.
+  `unchanged`. The scan does not check the builder's two facts, and the extended
+  sub-lifecycle's `Earlier { step: 0 }` parameters carry no run-mark conjunct. The Lean model
+  has action guards only, so (G6) outside guards is a paper step, and `a18_holds_iff` takes the
+  invariant's invariance as a hypothesis. The model reads effects in list order, where
+  `each_successor` applies the deletes and then the choices last; it has no owner
+  `Transition`, no data domain sizes and no `null` data values, and covers neither the reduced
+  cone nor the extended sub-lifecycle (A22). That the model is `Group::apply`, `breaks.rs::scan`
+  and `each_successor` is read from the code, and so is `WF`. The Lean model's `G6` forbids
+  every guard read of a `New` row's owner, where the scan forbids it only when the parent's
+  class moves; the remaining case is a paper step. The least BFS depth of each class is a paper
+  step only.
 - **A20.** Whether each symmetry rule is needed is open: eleven reasons have no
-  witness of their own: the seven of `Reduced` and four of the six of `Observed`.
-- **A23.** The entity-cone findings up to symmetry have no theorem. The orbit run's search is
-  proved by its acceptance criterion, not by its code.
+  witness of their own: the seven of `Reduced` and four of the six of `Observed`; the snapshot
+  shows only that dropping one changes which entities a cone's group leaves out. That `Hyp`
+  holds when a class is marked as not moving is read off its definition, with no Lean theorem.
+- **A21.** Deadlocks past the branch cap rest on the entity-cone findings of A23, which have no
+  theorem. That `Canon::canonical` returns a member of the orbit as a function of the state
+  past the cap is read from the code.
+- **A23.** The entity-cone findings up to symmetry have no theorem: that the deadlock criterion
+  reads the same on a (state, slot) pair and its image is not derived. The orbit run's search
+  is proved by its acceptance criterion, not by its code: Tarjan's components, N10's cut,
+  `is_real` as `t ≠ r`, the permutation stored per edge, the bit sets, the choice of binding
+  and start, and the lasso the code builds are read from the code. (LiveEqui), that the trigger
+  and goal read the same on a state and its image, is argued on paper only. The orbit search on
+  a reduced cone and A22's run up to `H` are not modelled.
 - **A24.** That a counterexample a cap-stopped safety cone finds is real has no test.
 - **A26.** The memory limit does not bound the process.
 - **A27.** Covered cones have no test of their own.
@@ -296,7 +334,9 @@ not a bound on what exists.
   evaluator, and does not cover entity cones up to symmetry. That the reported state is the
   first in BFS order rests on the proof alone.
 - **N9.** The Lean proof states the acceptance criterion, not `avoid`'s code: Tarjan's
-  components, the bit sets and N10's cut are read from the code.
+  components, the bit sets, the choice of binding and start, and N10's cut are read from the
+  code.
+- **N10.** No Lean theorem covers a stopped graph: the cut at `expanded` is read from the code.
 - **N11.** The lasso checks share code with the search they certify (`moves` and
   `Property::fair_instance`; `holds_bound` and `triggers`), so a fault there passes both.
 - **N13.** The second half of `a_path_that_does_not_replay_is_a_fault` never runs.

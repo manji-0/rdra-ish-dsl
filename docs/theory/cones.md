@@ -471,8 +471,8 @@ dropped-copy case does not arise.
 
 *Evidence.* P-full relative to the covering cone's `ok`, because the proof reduces to Theorem
 A2. `cone_jobs` reduces `C_ℓ` (`reduced_cone_in`), and when it is reduced its `ok` rests on
-Theorem A8 (Lemma 6 argued; (B1)–(B3) certified at run time), as every reduced cone's verdict
-does. No test names A27.
+Theorem A8, as every reduced cone's verdict does: proved for a flat reduction relative to its
+hypotheses, and sketched for a nested one or one run up to `H`. No test names A27.
 
 ---
 
@@ -525,9 +525,10 @@ exact by construction.
    `C`. `cli/src/property_cone.rs::PropertyCone::bundle` prints `ConeRun::Plain` from `self.reduced`.
    `cli/src/verify/native.rs::native_property` runs `p.cone.reduced`, and `Plain::of` asserts
    (`shadow_assert!`) that its run is of `cone.reduced`. So the implication is Theorem A8.4
-   (`R ⊨ P ⇔ C ⊨ P` under `Plain`), then Theorem A4.1, then D21. A8 is a sketch: it assumes
-   (B1)–(B3), which every build certifies on the partition it uses, and Lemma 6, which is
-   argued. When nothing reduces, `reduced` is `C` itself and A4.1 alone suffices.
+   (`R ⊨ P ⇔ C ⊨ P` under `Plain`), then Theorem A4.1, then D21. A8 is proved for a flat
+   reduction relative to its hypotheses ((B1)–(B3), which every build certifies on the
+   partition it uses, and Lemma 6, from the fields of `Lemma6Hyp`), and sketched for a nested
+   one. When nothing reduces, `reduced` is `C` itself and A4.1 alone suffices.
 2. `Cone_P_WF` (`WfNext` on `C`) counterexample, `W` exact ⇒ `T ⊭ P` under `WfNext`.
 3. `Cone_P_WF` `ok` and `whole` ⇒ `T ⊨ P` under `WfNext`. On a reduced cone, the first
    `WfNext` run reads `R` (`decide_liveness_reduced`), and its `ok` is `C`'s by Theorem A15,
@@ -569,11 +570,13 @@ tests: its one caller in the CLI, `cli/src/verify/bfs.rs::explored_properties`, 
 - `always` reads the reduced cone (`decide_property` calls `reduced_cone` for `Ltl::Always`). So
   do `eventually`, `leads_to`, and `always` in `verify`, through the `Plain` run of A5.1. For
   these forms the `ok` is sound by Theorem A8 (points 1 and 4), then A4.1 and A2. A8 assumes
-  (B1)–(B3), certified at run time, and Lemma 6, which is argued.
+  (B1)–(B3), certified at run time, and Lemma 6; it is proved for a flat reduction and
+  sketched for a nested one or one run up to `H`.
 
 *Evidence for A4 to A6.* Theorem A4, a statement about the unreduced cone `C`: P-full, given
-Lemmas 2 to 4. A5.1, A6, and A5.3 on a reduced cone: P-sketch, because the printed verdict is
-read on the reduced cone and rests on Theorems A8 and A15, whose Lemma 6 is argued, not proved.
+Lemmas 2 to 4. A5.1, A6, and A5.3 on a reduced cone: the printed verdict is read on the reduced cone and
+rests on Theorems A8 and A15, so P-full for a flat reduction, relative to their hypotheses, and
+P-sketch for a nested one or one run up to `H`.
 A5.2: P-full. D:
 `cli/tests/engine_equivalence.rs::a_property_cone_decides_what_the_whole_model_decides` (release jobs); corpus rules 1
 to 3 (`cli/tests/engine_corpus.rs`); `core/tests/explored.rs::a_cone_that_frees_slots_decides_a_violation_on_the_whole_model`;
@@ -636,11 +639,44 @@ not a counter and not a column or owner of a deleted entity.
 fold. (d) Every input is monotone. (e) Every seed's read of `S_v` is in `obs`, and every kept action
 is in `T_a`.
 
-*Proof.* (a), (b), (e) are the closure conditions of `split_at` and the definition of `obs`. For
-(c), an action reading a non-monotone `T_v` variable joins `T_a`, so an `S_a` action reads in `T_v`
-only monotone variables, which become inputs unless a fold takes them. For (d), an input is such a
-variable or the existence of one's entity (or, for an owner variable, of its parent), which only a
-create (absent to present) and a delete (present to deleted) write. ∎
+*Hypotheses.* The proof reads `split_at`'s result as a pair `(T_v, T_a)` closed under the
+conditions of Definition 3 (`Split.lean::Closed`): the anchor and the counters are in `T_v`; an
+action that writes something or is kept, and that is kept, writes `T_v`, or reads a
+non-monotone variable of `T_v`, is in `T_a`; every variable a `T_a` action writes is in `T_v`;
+a variable is in `T_v` iff its entity's existence is. It also takes three facts of the folds
+and of `raw_reads` (`Split.lean::FoldData`):
+
+- `raw_rd`: an action's raw reads are among its `Rd`;
+- `cover`: every `T_v` read of an `S_a` action is a raw read, the existence of a raw `T_v` read
+  (a `Triggered` row, whose existence `existences` of its mark brings back), or a read its fold
+  takes;
+- `ex_mono`: the existence of a monotone variable is monotone.
+
+*Proof.* Each part is one closure condition or definition (`Split.lean::lemma5_of_closed`).
+
+- (a) Let `a ∈ S_a` write `v`. If `v ∈ T_v`, then `a` writes something and writes `T_v`, so the
+  closure puts `a` in `T_a`, which `S_a` excludes. So `v ∈ S_v` (`s_writes_s`).
+- (b) A `T_a` action writes only `T_v` by the closure. A read of it in `S_v` is in `obs` by the
+  definition of `obs`.
+- (c) Let `a ∈ S_a` read `v ∈ T_v`. By `cover`, `v` is a raw read of `a`, and so an input; or
+  the existence of a raw `T_v` read of `a`, which `inputs` holds with its existences; or a read
+  of `a`'s fold.
+- (d) Let `u` be a raw `T_v` read of some `a ∈ S_a`. Then `u ∈ Rd(a)` (`raw_rd`). If `u` were
+  not monotone, `a` would write something and read a non-monotone variable of `T_v`, so the
+  closure would put it in `T_a`. So `u` is monotone. An input is such a `u` or an existence of
+  one, which `ex_mono` makes monotone.
+- (e) A seed's read in `S_v` is in `obs` by the definition of `obs`. A kept action is in `T_a`
+  by the closure.
+
+`obs ⊆ S_v` and `inputs ⊆ T_v` hold by definition. ∎
+
+`split_at` returns such a closed pair. One pass applies every condition at once, and passes
+from the anchor and the counters reach a pair that a pass leaves unchanged, which is closed
+and is the least closed pair (`Split.lean::computed_iff`). `split_at`'s in-place loop applies
+the conditions one insert at a time, in some order. A closed pair whose members all follow
+from the conditions is that least pair, whatever the order (`Split.lean::mem_eq_of_sound`).
+That each insert of the loop applies one condition is read from the code. The run-time certificate
+below checks (c) and (d) on the split directly, so a split that reaches the reduction meets them whether or not the facts hold.
 
 *Run-time certificate.* Every build checks (a)–(e) and the side rule of Definition 3 on the
 split before the reduction uses it (`reduce/lemma5.rs::split_faults`, called by `reduced_with`).
@@ -656,7 +692,8 @@ split a reduction uses, nested ones included, whatever `split_at` computed. What
 show is that `action_reads`, `copy_reads` and `action_writes` are the reads and writes of the step
 relation, and that `monotone_vars` is sound (A10).
 
-*Evidence.* M: `proofs/lean/RdraIsh/Split.lean` proves the lemma in Lean over an action-level
+*Evidence.* P-full relative to the closure of `split_at`'s result and the three facts of the
+folds (the proof above); R: the certificate above. M: `proofs/lean/RdraIsh/Split.lean` proves the lemma in Lean over an action-level
 model of `C` (`Actions.lean`: variables with their entities' existences, valuations, actions
 with `Rd`, `Wr`, guard conjuncts and an effect). Definition 3 for one anchor is the least set
 `Mem` closed under its conditions, with `split_at`'s skip of an action that writes nothing and
@@ -681,7 +718,10 @@ the code. `Local` is a theorem for the action model read off the slot-level mode
 syntax of guards and effects as `action_reads`, `copy_reads` and `effect_writes` compute them,
 except that a `Triggered` parameter's existence always counts as read; that the code's actions
 are that syntax is read from the code. That `raw_reads` and the folds
-meet `FoldData` is a hypothesis.
+meet `FoldData` is a hypothesis. M also: `scripts/check-lean-certificates.sh` dumps every
+top-level split of the samples, the domain samples and the corpus with its actions' reads and
+writes, and runs on each a checker proved sound for `Lemma5` in Lean
+(`proofs/lean/RdraIsh/Lemma5Check.lean::check_sound`); it runs by hand, not in CI.
 
 **Definition 4 (extended sub-lifecycle and quotient).** `X` is
 `reduce/extended.rs::Extended::build`: `restrict_to(S_v ∪ inputs)` without the havoc of `Triggered`
@@ -720,18 +760,193 @@ action, nor a folded one's outside its fold, and `restrict_to` keeps every fold'
 fault `reduced_with` reduces nothing, so the cone is decided unreduced, with a warning; a debug
 or `shadow` build panics (Lemma 6, "Parameters").
 
-**Lemma 6 (the extended system covers the cone).** For every `(t, s) ∈ Reach(C)`: `x(t, s) ∈ X_n`
-(up to the inner reduction's canonical form); `(t, s) → (t, s')` is an `S_a` step of `C` iff
-`x(t, s) → x(t, s')` is a silent edge of `X`; and a `T_a` step `(t, s) → (t', s)` that changes the input
-bytes is matched by a sequence of rises from `x(t, s)` through the stages to `x(t', s)`.
+**Lemma 6 (the extended system covers the cone).** Write `C°` for `C` without the steps of
+the actions outside `T_a` that write nothing. For every `(t, s) ∈ Reach(C)`:
 
-*Proof sketch.* Induct on reachability. Initial states: `X`'s initial states are those of
-`restrict_to`, which projects `I_C` (Lemma 2's argument); a bit starts where the cone starts
-(`fold_initial`). An `S_a` action reads only `S_v`, inputs, and folds (Lemma 5c), and its guards on
-those are kept by `restrict_to` with havoc off, so it has the same successors on `S_v` in `C` at
-`(t, s)` and in `X` at `x(t, s)` provided each folded guard equals its bit at `bits(t)`, which
-step (a) below derives, and provided the two systems bind the parameters alike, which the
-matrix below settles. A `T_a` step that changes the input bytes has its rises by step (c).
+1. an initial `(t₀, s₀)` of `C` gives an initial `x(t₀, s₀)` of `X`, and `x(t, s) ∈ X_n` (up
+   to the inner reduction's canonical form);
+2. (`C ⇒ X`) an `S_a` step `(t, s) → (t, s')` of `C°` by `a` at binding `b` is a silent edge
+   `x(t, s) → x(t, s')` of `X` by `a` at `b`;
+3. (`X ⇒ C`) a silent edge `x(t, s) → (s', inp(t))` of `X` by `a` at `b'` is an `S_a` step
+   `(t, s) → (t, s')` of `C°` by `a` at some `b` that equals `b'` outside the fold's free `T`
+   parameters (the `T` parameters of `a`'s fold other than its key);
+4. a `T_a` step `(t, s) → (t', s)` is matched by one rise of `X` per stage of
+   `Reduction::stages(inp(t), inp(t'))`, from `x(t, s)` to `x(t', s)`. A step that keeps the
+   input bytes has no stage.
+
+`C` and `C°` reach the same states. A step of an action that writes nothing changes nothing,
+since an effect leaves every variable outside `Wr(a)` as it is (`Local`). `X` holds no such
+action, since `restrict_to` drops an action whose effects write nothing in `S_v ∪ inputs`
+(`Lemma6.lean::coneW_reach_iff`). Items 2 and 3 with `C` for `C°` differ only by those
+stutters.
+
+*Hypotheses.* The proof is for a flat reduction (no inner reduction of `X`, and `X` not run up
+to `H`) and a fold of a parameter (`FoldKey::Param`) with a bit of its own. It reads `C` and `X`
+as `proofs/lean/RdraIsh/Restrict.lean` models them:
+
+- a parameter's role is a guard conjunct on its entity's existence (`candidate_slots`);
+- each parameter's entity is on a *side*: `S` (existence in `S_v`), *input* (existence in
+  `inputs`), *stub* or *dropped* (Definition 4);
+- `X` gives a parameter a role (`xrole`): kept on `S` and on an input; `Earlier { step: 0 }`
+  for a fold's key off `S` and for a stub parameter of a rise or a folded action whose role
+  needs a present row; none on a dropped entity and for `New` on a stub;
+- `X`'s guard is those roles, the conjuncts `restrict_to` keeps, and the fold's bit at the
+  key's slot (`xguard`);
+- a silent edge is an `S_a` action under that guard; a rise is a `T_a` action that writes an
+  input, under that guard, which writes the raw inputs, or the free flip of one bit;
+- `X`'s initial states are the projections of `C`'s (the initial states below show that the
+  code builds them so), and `X` reads a variable outside `S_v ∪ inputs` at the value of its
+  first initial state, so a stub reads nothing of `t`.
+
+It takes these facts of every action `a`, the sixteen fields of `Restrict.lean::Lemma6Hyp`. The
+last column says how the code meets each one: R and M as in the claims inventory, and "read"
+for a reading of the code that this section gives and nothing checks.
+
+| Field | Fact | How the code meets it |
+|---|---|---|
+| `local_` | `Local`: a guard conjunct reads only `Rd(a) ∪ Wr(a)` and depends only on what it reads; the effect leaves every variable outside `Wr(a)` as it is, and its value on `Wr(a)` depends only on `Rd(a) ∪ Wr(a)` | M: proved for the action model read off the slot syntax of Theorem A18 (`SymActModel.lean::local_`, under `Built`); Kani proves that a predicate reads only its `pred_reads` (T13); a debug or `shadow` build holds every step to `Wr(a)` (A1). That the code's actions are that syntax is read |
+| `lemma5` | Lemma 5 (a)(b) | R: `split_faults`; the proof of Lemma 5 above |
+| `reads` | Lemma 5 (c), with a fold's reads those of `Fold::reads` | R: `split_faults` checks (c) with `Fold::reads` |
+| `shape` | `a`'s guard is its role conjuncts followed by its other conjuncts `og` | M: proved for the slot model (`SymActModel.lean::shape`); that `candidate_slots` filters by role before the guards is read |
+| `new_writes` | a `New` parameter's entity's existence is in `Wr(a)` | M: proved for the slot model under `Built` (`SymActModel.lean::new_writes`); that a `New` row comes with its `Create` is read from `build/actions.rs` |
+| `kept_rd` | a conjunct `X` keeps reads only `S_v ∪ inputs` | read: `restrict_to` keeps a guard only when it reads `S_v ∪ inputs` (P2) |
+| `cover` | every conjunct in `og` of an `S_a` action is kept or folded | R in part: a guard `fold_of` does not fold is read raw (`raw_reads`), and `split_faults` checks that every `T_v` variable an `S_a` action reads raw is an input, so the guard reads `S_v ∪ inputs`. Read: it names no `T` parameter but the key (`fold_of`), which `StubCheck` checks `restrict_to` keeps, and no other dropped parameter (the tables of "Parameters"), so `restrict_to` keeps it |
+| `rise_eff` | a `T_a` action's value on an input depends only on `S_v ∪ inputs` | read: step (c) below |
+| `fold_sa` | a fold is of an `S_a` action | R: `split_faults` |
+| `folded_og` | a fold's folded guards are guards of its action | read: `fold_of` collects them from the action's guards |
+| `exact` | the bit at slot `c` holds at `t` iff some binding with the key at `c` puts each `T` parameter whose role needs a present row on one and makes every folded guard true; stated for every slot number, where the code has bits for the key entity's slots alone | read: step (a) below; M: `Twin::FoldHolds` checks `holds_fast` against its reference |
+| `folded_names` | the folded guards depend only on the slots of the `T` parameters and the key | read: `fold_of`'s `s_keys` (step (a), point 3) |
+| `other_names` | no other guard depends on a free `T` parameter's slot | read: `fold_of` gives up on any other guard that names a `T` parameter, unless it is the link `v[k] = Index(p)`, and then `p` is the key |
+| `eff_names` | no effect depends on a free `T` parameter's slot | read: `fold_of`'s `touched_t`: the one `T` parameter an effect may reference is the key |
+| `eff_s` | a folded action's effect on `Wr(a)` depends only on `S_v ∪ inputs` | read: its effects write `S_v` (Lemma 5 (a)) from a literal, a slot, the variable's own value or a listed choice, the forms of step (c) |
+| `bind` | `bind_stub_params` runs | R: `extended.rs::StubCheck` checks the built `X` against it |
+
+D for all of them at once: `reduce/lemma6.rs::check` and `lemma6_steps_hold` check the lemma
+itself on the tested cones (Evidence below).
+
+*Proof.* Steps 1 to 10, each with the Lean theorem it corresponds to
+(`proofs/lean/RdraIsh/Lemma6.lean`, namespace `Act.Ext`) and the fields it uses.
+
+1. *Agreement* (`xval_inp`). `x(t, s)` and `(t, s)` give every variable of `S_v ∪ inputs` the
+   same value: `x(t, s)` holds `s` and the raw inputs of `t`.
+2. *Guards* (`role_of_guard`, `og_of_guard`, `guard_of`; `shape`). `a`'s guard holds at a
+   binding iff each parameter's slot is a candidate of its role at the value of its entity's
+   existence, and every conjunct of `og` holds.
+3. *Kept conjuncts* (`kept_iff`; `kept_rd`, `local_`). A conjunct `X` keeps reads only
+   `S_v ∪ inputs` and depends only on what it reads, so by step 1 it has the same value at
+   `(t, s)` and at `x(t, s)`, at every binding.
+4. *Sides of an unfolded action* (`unfolded_side`; `shape`, `local_`, `reads`, `lemma5`). A
+   parameter of an unfolded `S_a` action whose role reads its row is on `S` or an input. Its
+   role conjunct reads its entity's existence, which is in `Rd(a) ∪ Wr(a)` (`Local`). In
+   `Rd(a)`, it is in `S_v` or `inputs` by (c), since `a` has no fold. In `Wr(a)`, it is in
+   `S_v` by (a). This derives the stub and dropped cells of the unfolded table.
+5. *Roles* (`xrole_cand`, `hstub_sa`, `hstub_ta`; `bind`). Let a slot be a candidate of a
+   parameter's role at `(t, s)`. Then it is a candidate of the role `X` gives the parameter at
+   `x(t, s)`:
+   - on `S` and on an input, the role is the same and the existence has the same value
+     (step 1);
+   - a fold's key off `S` gets `Earlier { step: 0 }`, which admits every slot;
+   - on a stub, an `Earlier` parameter admits every slot, and one whose role needs a present
+     row is rebound to `Earlier { step: 0 }` when its action is a rise or a folded action
+     (`bind`). Of an `S_a` action only a folded one has such a parameter (step 4);
+   - `X` gives no role to a parameter it drops.
+6. *Guards, `C ⇒ X`* (`xguard_of_guard`; `exact`, `folded_og`). Let `a`'s guard hold at `b` and
+   `(t, s)`. The roles of `X` hold by step 5 and the kept conjuncts by step 3. For a fold, `b`
+   itself is a binding with the key at `b(key)` that puts each `T` parameter whose role needs a
+   present row on one (its role conjunct, step 2) and makes every folded guard true (they are
+   conjuncts of `og`, `folded_og`). So by `exact` the bit at `b(key)` holds at `t`, and
+   `x(t, s)` holds that bit.
+7. *Effects on `S_v`* (`eff_x`, `eff_agree`; `eff_s`, `local_`, `reads`, `lemma5`,
+   `eff_names`). An `S_a` action at `b` writes the same `S_v` values from `x(t, s)` as from
+   `(t, s)`. Outside `Wr(a)` both keep their values, which agree by step 1. On `Wr(a)`, the
+   value of a folded action depends only on `S_v ∪ inputs` (`eff_s`), and that of an unfolded
+   one only on `Rd(a) ∪ Wr(a)` (`Local`), which lies in `S_v ∪ inputs` by (c) and (a); step 1
+   gives the rest. Two bindings that agree outside the free `T` parameters give the same
+   effect: for a fold by `eff_names`, and an unfolded action has no free parameters.
+8. *Item 2* (`s_fwd`). An `S_a` step of `C°` by `a` at `b` has `a`'s guard at `(t, s)`, so `X`'s
+   guard at `x(t, s)` and `b` (step 6). `X`'s successor holds the same `S_v` values (step 7)
+   and the same input bytes, by the definition of a silent edge. `a` writes no `T_v`
+   (Lemma 5 (a)), so the cone's successor is `(t, s')` and `X`'s is `x(t, s')`.
+9. *Item 3* (`s_back`; `cover`, `exact`, `new_writes`, `folded_names`, `other_names`). Let
+   `X`'s guard hold at `b'` and `x(t, s)`. A binding `b` at which `a`'s guard holds at `(t, s)`
+   is built as follows.
+   - *Unfolded `a`.* Take `b = b'`. A role that reads no row admits every slot. A parameter
+     whose role reads its row is on `S` or an input (step 4), where `X` keeps its role and the
+     existence has the same value (step 1). Every conjunct of `og` is kept or folded (`cover`),
+     so kept, and holds at `(t, s)` by step 3.
+   - *Folded `a`.* The bit at `b'(key)` holds at `t`, so by `exact` some binding `b''` with
+     `b''(key) = b'(key)` puts each `T` parameter whose role needs a present row on one and
+     makes every folded guard true at `(t, s)`. Take `b` equal to `b''` on the free `T`
+     parameters and to `b'` elsewhere. Then `b` equals `b''` on every `T` parameter and on the
+     key. An `S` parameter is not free, so `b` binds it as `b'` does, and `X` keeps its role
+     (step 1). A `T` parameter is never `New`: by `new_writes` its existence would be in
+     `Wr(a)`, so in `S_v` by (a). An `Earlier` one admits every slot, and the others are on
+     present rows under `b''`. A folded guard holds at `b''` and depends only on the `T`
+     parameters and the key (`folded_names`), where `b` and `b''` agree. Any other conjunct of
+     `og` is kept (`cover`), holds at `b'` and `x(t, s)`, so at `b'` and `(t, s)` (step 3), and
+     does not depend on the free parameters (`other_names`), so it holds at `b`.
+
+   So `a`'s guard holds at `b` and `(t, s)` (step 2). The cone's successor has the `S_v` values
+   `X` wrote, by both points of step 7, and keeps `t`, since `a` writes no `T_v` (Lemma 5 (a)).
+   `b` equals `b'` outside the free `T` parameters, which is the relation `stands` of
+   "Parameters".
+10. *Item 4* (`rise_fwd`, `flips_end`; `rise_eff`, `bind`). Let a `T_a` action `a` step from
+    `(t, s)` to `(t', s)` at `b`. The stages are the raw inputs of `t'` with the bits of `t`,
+    when the raw inputs change, then one flip per bit that differs, in the order of `keys`. If
+    the raw inputs change, some input `v` changes, so `v ∈ Wr(a)` (`Local`) and `a` is a rise.
+    Its guard holds in `X` at `x(t, s)` and `b` (step 6, with `bind` for the stub
+    parameters), and its value on each input is the one it has at `(t, s)` (`rise_eff` and
+    step 1), which is `t'`'s. That edge leaves `S` alone and keeps the bits. Then each bit that
+    differs is flipped by its free flip, whose guard is only that the bit has the other value,
+    and a bit that agrees is skipped. Every key is in `keys`, so the flips end at the bits of
+    `t'`.
+
+Item 1 follows by induction on reachability (`Reduction.lean`, `x_reach`). An initial state maps
+to an initial state by the model of `X`'s initial states. An `S_a` step keeps `t` (Lemma 5
+(a)) and is a silent edge (item 2). A `T_a` step keeps `s` (Lemma 5 (b)) and is a sequence of
+rises (item 4). `X` has the shape Definition 4 gives it: a silent edge keeps the input bytes
+and a rise keeps `S` (`extended`). Items 1 to 4 are the hypotheses `Lemma6Fwd`, `Lemma6`,
+`Lemma6By` and `Lemma6Staged` of the Lean proof of Theorem A8 (`lemma6_fwd`, `lemma6`,
+`lemma6_by`, `lemma6_staged`). ∎
+
+*The parts of the code the proof does not model.* Each has its own argument, except the nested
+case.
+
+- *Initial states.* `X` is `restrict_to(S_v ∪ inputs)` of `C` with the bit variables added.
+  `restrict_to` keeps each kept variable's declaration with its start and base, and `C`'s
+  initial states are a product over components, so their projection onto `S_v ∪ inputs` is
+  `X`'s initial states without the bits (Lemma 2's proof). `split_with` keeps a fold only when
+  `fold_initial` gives it one value at every initial state and every slot of its key.
+  `Extended::build` sets a bit variable's base to true iff some fold of its group has the
+  value true, which is `push_bits`' disjunction at every initial state. So each `x(t₀, s₀)` is
+  initial in `X`.
+- *Groups of folds sharing a bit.* A group's bit is the disjunction of its folds' `holds`, and
+  its folds share their restricted parameters, guards, effects and key (`Signature::Param`,
+  step (a), point 4). In step 6 the fold of the cone's action makes its own `holds` true, so
+  the group's bit. In step 9 a true group bit makes some fold's `holds` true, and that fold's
+  action gives the cone's step. `X` runs the group's first action, which has the same guards
+  and effects, and `SilentStep::acts` reads back the variant it stands for.
+- *Node folds* (`FoldKey::Linked`). Step (a)'s last paragraph and the node rows of the folded
+  table: `X` reads `link = q ∧ bit[q]`, which holds for the one `q` the link names when that
+  row is present and the body holds there, which is the cone's `∃ e. link = e ∧ body(e)`.
+- *Parameter positions.* A binding of `X` keeps the cone's positions in the model. The code
+  renumbers a class move's parameters with slot 0 for a dropped one, and step (b) shows that
+  the successor does not depend on it.
+- *A fold whose key the restriction drops.* The model reads the bit at the key's position
+  whatever its side. In the code `split_with` leaves such an action unfolded, and a fold that
+  keeps a dropped key is `Fault::KeyDropped`, on which the cone is decided unreduced
+  (Definition 4).
+- *The nested case.* For a nested reduction `x(t, s)` is in `X_n` only up to the inner
+  reduction's canonical form. That needs Theorem A8 of the inner cone at each level, and the
+  induction over the depth is named here, not written.
+- *A run up to `H`.* When `S` is run up to `H` (A22), `X_n` holds `X`'s states up to `H`'s
+  canonical form, and the certificates read the orbit graph, not `X`'s own run. That step is
+  A22's, which is a sketch.
+
+*Why the code meets the hypotheses.* The rest of this section reads the code for the fields of
+`Lemma6Hyp` marked "read" above: the tables of "Parameters" for the sides and roles, step (a)
+for `exact` and for what `fold_of` lets a fold name, step (b) for the parameter positions, and
+step (c) for `rise_eff`.
 
 **Parameters.** A step of `C` binds each parameter to a candidate slot of its role
 (`explore/moves.rs::candidate_slots`: a present slot for `Existing`, `Parent` and `Triggered`,
@@ -913,11 +1128,9 @@ or `Fall` of its group (`reduce/extended.rs::flips`, a parameter that binds any 
 the bit alone). A step that changes only bits, with the raw inputs unchanged, has only these
 stages. No stage changes `s`, since a `T_a` action writes no `S_v`.
 
-The step named and not derived here is the nested case: for a nested reduction `x(t, s)` is in
-`X_n` only up to the inner reduction's canonical form, and the induction over the depth is not
-written. ∎
-
-*Evidence.* The `S_a` half is checked against the cone's own step
+*Evidence.* P-full for a flat reduction, relative to the fields of `Lemma6Hyp` (the proof and the
+parts it does not model, above); P-sketch for a nested reduction, whose induction over the depth
+is not written, and for one run up to `H` (the last part not modelled, above). M: the Lean proof below. R: the fields the table marks R. D: the `S_a` half is checked against the cone's own step
 relation, in both directions, on every reachable state of every complete reduced cone that folds
 (`core/tests/reduce.rs`). `::reduced_domain_cones_hold_each_fold_bit_where_its_action_runs`: the
 bit holds at the slot every move of a folded action binds its key to (for a node fold, the row its
@@ -1004,52 +1217,19 @@ cone is a class move or a rise of the printed reduced module, or a stutter. With
 parameters left unbound and the stub check off, it fails on both stub cases at the step `X`
 drops (`Issue`, and `Note`'s rise).
 
-M: `proofs/lean/RdraIsh/Lemma6.lean` proves the lemma over the action-level model of Lemma 5's
-evidence, for an `X` built as this definition builds it (`Restrict.lean`). A role is a guard
-conjunct on its entity's existence (`candidate_slots`). Each parameter has a side, and `X` gives
-it a role: kept on `S` and on an input, `Earlier { step: 0 }` for a fold's key off `S`
-(`fold_param`) and for a stub parameter that needs a present row of a rise or a folded action
-(`bind_stub_params`), dropped on a dropped entity and for `New` on a stub. `X` keeps the
-conjuncts `restrict_to` keeps and reads one bit per fold at the key's slot; a rise writes the
-raw inputs, a flip one bit, and `stages` lists the raw inputs and then each bit that changes.
-From `Lemma6Hyp` it proves both `S_a` halves, with the cone's binding equal to the edge's
-outside the fold's free `T` parameters (`s_fwd`, `s_back`), and the rise half through the
-stages (`rise_fwd`). So the hypotheses `Lemma6By`, `Lemma6Staged` and `Lemma6` of the Lean
-proof of Theorem A8 are theorems (`lemma6_by`, `lemma6_staged`, `lemma6`). `Lemma6Hyp` holds
-per-action facts read from the code, among them (the Lean README lists every field):
+M: `proofs/lean/RdraIsh/Lemma6.lean` proves items 1 to 4 from `Lemma6Hyp` over the model of
+`Restrict.lean`, step by step as above, and `Lemma6Example.lean` discharges `Lemma6Hyp` on a
+model with a folded action whose free `T` parameter is on a stub, an unfolded action with a kept
+conjunct, and a rise with a parameter on a stub. With `bind_stub_params` off, the `C ⇒ X` half
+fails there (`stub_bug`). The Lean proof reads the model, not `Extended::build`, and the tests
+above are evidence on their models and bounds. cone-soundness.md, "Proof obligation", states the
+lemma in points 2, 3, and 5.
 
-- `Local` and Lemma 5 (a)–(c), which `split_faults` certifies;
-- a `New` parameter's existence is written;
-- the conjuncts `X` keeps read `S_v ∪ inputs`, and every other conjunct of an `S_a` action is
-  folded;
-- step (a): `Fold::holds` computes the bit exactly (`exact`);
-- what the folded conjuncts, the other conjuncts and the effects name (`fold_of`);
-- a folded action's effect reads `S_v ∪ inputs`;
-- step (c): a rise's effect on the inputs reads `S_v ∪ inputs`.
-
-The stub and dropped cells of an unfolded `S_a` action, for every role that reads its row (an
-`Earlier` parameter binds any slot on both sides), and a `New` `T` parameter of a folded one,
-are derived from Lemma 5 (a)(c) (`unfolded_side`). The cone is the cone without the steps
-of an action that writes nothing and is not kept, which `X` does not hold either: such steps
-stutter, and the two reach the same states (`coneW_reach_iff`). `Lemma6Example.lean`
-discharges `Lemma6Hyp` on a model with a folded action whose free `T` parameter is on a stub,
-an unfolded action with a kept conjunct, and a rise with a parameter on a stub. With
-`bind_stub_params` off, the `C ⇒ X` half fails there (`stub_bug`).
-
-The model leaves out node folds, groups of folds sharing a bit, the renumbering of step (b)
-(a binding of `X` keeps the cone's positions, and nothing states that `X`'s conjuncts and
-effects ignore the slots of dropped parameters), the rule that a fold whose key the
-restriction drops stays unfolded (`X` reads the bit at the key's position whatever its side,
-so `Fold::key_kept` and `Fault::KeyDropped` play no part), and the nested case. It takes `X`'s initial
-states to be the projections of the cone's, and does not derive them from `restrict_to` and
-`fold_initial`. It reads the model, not `Extended::build`.
-
-The tests above are evidence on these models and bounds, and the Lean proof is a proof over the
-model, not over the code. cone-soundness.md, "Proof obligation", states the lemma in points 2,
-3, and 5.
-
-**Theorem A8 (the reduced cone is stuttering equivalent to the cone).** Assume (B1) to (B3) for
-`B` and Lemma 6. Let `(t, s) ~ (t, ρ)` when `ρ` is the representative of the block of `x(t, s)`.
+**Theorem A8 (the reduced cone is stuttering equivalent to the cone).** Assume Lemma 5 (a)(b),
+Lemma 6, the shape of `X` (a silent edge keeps the input bytes, a rise keeps `S`), and (B1) to
+(B3) for `B` on the reachable states of `X`, with the representative of each block a reachable
+state of it. For `R`'s `T` move by `recanon` (point 5) assume also the rise table: every rise of
+a representative is entered under its block and the input bytes it ends at. Let `(t, s) ~ (t, ρ)` when `ρ` is the representative of the block of `x(t, s)`.
 Then `~` is a divergence-blind stuttering bisimulation between `C` and `R` that preserves `T_v`,
 `obs`, and the action label of every `T_a` step. Consequently `C` and `R` agree on:
 
@@ -1066,41 +1246,76 @@ Then `~` is a divergence-blind stuttering bisimulation between `C` and `R` that 
    `Plain`.
 
 *Proof.* Five points, numbered as in cone-soundness.md, "Proof obligation", with Lemma 6 made
-explicit.
+explicit. Each names the Lean theorem it corresponds to (in `Reduction.lean` unless another
+file is named). First, `x(t, s)` is a reachable state of `X` for every reachable `(t, s)` (item 1
+of Lemma 6, `x_reach`), so (B1)–(B3) apply to it, and the representative `ρ` of its block is
+reachable, in that block, and agrees with `x(t, s)` on `obs` and the input bytes by (B1)
+(`rep_facts`).
 
-1. Related states agree on `T_v` (same `t`) and on `obs` (B1).
+1. Related states agree on `T_v` (same `t`) and on `obs` (B1) (`rel_preserves_obs`).
 2. A `T_a` step that leaves the *input bytes* unchanged. The input bytes are
    `Reduction::input_bytes`: the raw inputs followed by the bits `Reduction::push_bits`
    computes. A step that changes only a bit, with the raw inputs unchanged, is treated under
-   point 5, where `Reduction::stages` gives it a stage of its own. The step reads `T_v` and `obs`
-   only and writes `T_v` only
-   (Lemma 5b), so it is enabled at `(t, s)` iff at `(t, ρ)`, with the same successors on `T_v`, and the
-   block of `x` is unchanged.
-3. An `S_a` step `(t, s) → (t, s')`: by Lemma 6 it is a silent edge of `X`. If `x(t, s')` is in the
-   same block it is a stutter of `R`. Otherwise it enters a block `B'`; by (B2) a silent path from
-   `ρ` through its own block enters `B'`, and its last edge is a class move of `R` into `B'`.
-   Conversely a class move from `(t, ρ)` into `B'` comes from such a path from `ρ`; by (B2) a path
-   from `x(t, s)` through its block enters `B'`, and by Lemma 6 each of its edges is an `S_a` step of
-   `C` from the corresponding state, whose intermediate states are related to `(t, ρ)`.
+   point 5, where `Reduction::stages` gives it a stage of its own. The step reads `S_v` only in
+   `obs`, keeps `S_v` and writes `T_v` only (Lemma 5 (b)), and `ρ` agrees with `s` on `obs`, so
+   it is enabled at `(t, s)` iff at `(t, ρ)`, with the same successors on `T_v`, and the block
+   of `x` is unchanged (`sim_forward` and `sim_backward`, the `T_a` case with no stage).
+3. An `S_a` step `(t, s) → (t, s')`: by Lemma 6 (item 2) it is a silent edge of `X`. If
+   `x(t, s')` is in the same block it is a stutter of `R`. Otherwise it enters a block `B'`;
+   by (B2), applied to `x(t, s)` and `ρ`, a silent path from `ρ` through its own block enters
+   `B'`, and its last edge is a class move of `R` into `B'` (`sim_forward`). Conversely a class
+   move from `(t, ρ)` into `B'` comes from such a path from `ρ`; by (B2) a path from `x(t, s)`
+   through its block enters `B'`. Each of its edges keeps the input bytes (the shape of `X`),
+   so it starts at some `x(t, s₁)`, and by Lemma 6 (item 3) it is an `S_a` step of `C` from
+   `(t, s₁)`, whose states before the last are related to `(t, ρ)` (`lift_silent`,
+   `sim_backward`).
 4. Every initial `(t₀, s₀)` is related to `(t₀, rep(block(x(t₀, s₀))))`, which is how
-   `Classes::init` builds `R`'s initial states; `R` has no other.
-5. A `T_a` step that changes the input bytes (a raw input, a bit, or both): by Lemma 6 it is a
-   sequence of rises from `x(t, s)`, one per stage of `stages`; by (B3)
-   and (B1) the representative has rises into the same blocks with the same input bytes, stage by
-   stage, which is what `recanon` looks up. A fold is covered by the same argument with its bit
-   in place of the variables it folds, since the folded guard is a function of them and the key
-   (that `Fold::holds` computes it exactly is step (a) of Lemma 6). The monotone rule is not used here: it bounds the input histories, which keeps the
-   extended system finite and small.
+   `Classes::init` builds `R`'s initial states; `R` has no other (`init_forward`,
+   `init_backward`).
+5. A `T_a` step `(t, s) → (t', s)` that changes the input bytes (a raw input, a bit, or both):
+   by Lemma 6 (item 4) it is a sequence of rises from `x(t, s)` to `x(t', s)`, one per stage of
+   `stages`. By (B3), applied stage by stage (`b3_star`), `ρ` has a sequence of rises whose
+   states lie in the same blocks. A rise keeps `S` and ends at its stage's input bytes, and by
+   (B1) a block fixes the input bytes, so the end of `ρ`'s sequence is in the block of
+   `x(t', s)`. `recanon` folds the rise table over the stages: from a block it takes the block
+   the representative's rise to the next stage's input bytes enters, which the rise table
+   holds, and the representative of that block rises alike by (B3). So `recanon` gives the
+   block of `x(t', s)` (`Stages.lean`, `recanon_of_through`, `staged_step_iff`). The step is
+   enabled at `(t, ρ)` as in point 2. Conversely a `T_a` move of `R` from `(t, ρ)` is a step
+   of `C` from `(t, s)` by Lemma 5 (b), and by the same argument it ends at the block of
+   `x(t', s)` (`sim_backward`). A fold is covered by the same argument with its bit in place of
+   the variables it folds: the bit is among the input bytes, and Lemma 6 relates the folded
+   action's steps to it. The monotone rule is not used here: it bounds the input histories,
+   which keeps the extended system finite and small.
+
+Points 1 to 5 make `~` a divergence-blind stuttering bisimulation that preserves `T_v` and `obs`
+(`a8_dbsb`), and branching, with each `T_a` step showing its action and binding on both sides,
+since points 2 and 5 take the same action at the same binding (`ReductionLabels.lean`,
+`a8_branching`; with `recanon`, `Stages.lean`, `a8_staged`).
 
 Items 1 to 3 of the consequences are existential statements over finite paths labelled by
 `T_v ∪ obs` and `T_a` actions, which a stuttering bisimulation preserves (Browne, Clarke and
-Grumberg 1988; for the divergence-blind variant, De Nicola and Vaandrager 1995). For item 4, a
-behavior of `C` that steps inside one block forever maps to a behavior of `R` that stops there. Under
-`Plain` a stop is allowed iff no fair instance is enabled; fair instances are `T_a` actions (Lemma
-5e), their enabledness reads `T_v ∪ obs`, which is constant on the block, so if one were enabled the
-`C` behavior, satisfying `Fair_P`, would take it and leave the block's image. The converse lifts a
-stop of `R` to a stop of `C` at the same `T_v ∪ obs`, and a cycle of `R` to an infinite `C` behavior
-by point 3. ∎
+Grumberg 1988; for the divergence-blind variant, De Nicola and Vaandrager 1995). In Lean they
+are `a8_holds_iff` (1) and, in `ReductionLabels.lean`, `a8_reachable_obs_iff` (1),
+`a8_edges_iff` (2) and `a8_stuck_iff` (3), whose change relation is irreflexive, as D25's is. For item 4, a behavior of `C` that steps
+inside one block forever maps to a behavior of `R` that stops there. Under `Plain` a stop is
+allowed iff no fair instance is enabled; fair instances are `T_a` actions (Lemma 5e), their
+enabledness reads `T_v ∪ obs`, which is constant on the block, so if one were enabled the `C`
+behavior, satisfying `Fair_P`, would take it and leave the block's image. The converse lifts a
+stop of `R` to a stop of `C` at the same `T_v ∪ obs`, and a cycle of `R` to an infinite `C`
+behavior by point 3, segment by segment (`Plain.lean`: `a8_plain_sound`, that the property on `R`
+gives it on `C`, from the `C ⇒ X` half of Lemma 6; `a8_plain_complete`, the converse, with
+`seg_exists` for the segments; `a8_plain_iff`, for `□(trig ⇒ ◇goal)` under `Fair_P` over infinite behaviours). ∎
+
+*The nested case.* When `X` is itself reduced, the partition is that of the inner run read
+through each level, and `Nested.lean::a8_nested` proves the theorem for it by induction on the
+depth, from each level's A8 and an inner map between the levels, with the outer
+representative a reachable state of `X`. The code takes the outer representative among the
+inner run's states, whose `S` bytes are an inner representative's, and reads the outer class
+moves and rises on the inner run. The steps that tie these to `X` (the inner split's
+certificate below, the inner partition's (B1), and Theorem A8 of the inner cone for the
+representative's inner `T` part) are named, and no argument assembles them. So the theorem
+is proved step by step for a flat reduction and sketched for a nested one or one run up to `H`.
 
 What the proof does not cover is `WF_vars(Next)`, which a stop inside a diverging block violates;
 the next section treats it.
@@ -1110,8 +1325,15 @@ the next section treats it.
 Lemma 5: `split_at`, `split_with`, certified by `reduce/lemma5.rs::split_faults` before use; Lemma 6: `Extended::build`, `reduce/fold.rs`; the checks a
 reduced cone keeps: `drop_unreadable_checks` (A14).
 
-*Evidence.* P-sketch (Lemma 6 is argued for the code and proved in Lean over an action model; Lemma 5 is checked at run time on each split
-and (B1)–(B3) on each partition the reduction uses, R). For Lemma 5:
+*Evidence.* P-full for a flat reduction (no inner reduction of `X`, and `S` not run up to
+`H`), relative to the hypotheses above: Lemma 5 (a)(b),
+checked at run time on each split (R) and proved above; Lemma 6, proved above from the fields of
+`Lemma6Hyp`, of which the table there says which are checked and which are read from the code;
+the shape of `X`, which Lemma 6's proof derives; (B1)–(B3) with a reachable representative,
+certified on each partition the reduction uses (R, and below); and the rise table, certified on
+each run of `X` (R, below). P-sketch for a nested reduction (the nested case above) and for one whose `S` is run up to
+`H`, where `X_n` holds `X`'s states up to `H` and the certificates read the orbit graph
+(A22, a sketch). For Lemma 5:
 `reduce/lemma5.rs::a_planted_split_fails_the_clause_it_breaks` plants a split that breaks
 each clause and the side rule in turn, and the last through the switch `split_sides`, on which a
 reduced cone is decided unreduced; `core/tests/reduce.rs::every_split_passes_its_check` checks
@@ -1174,13 +1396,28 @@ reduction uses it, with `reference::stable`: (B1) every block lies inside one bl
 labels the partition starts from; (B2) one sweep of `stuttering_blocks` with every block a
 splitter splits nothing; (B3) every state of a block enters by a rise the same set of blocks as
 the block's first state. A partition that fails is reported as a tool bug on stderr and replaced
-by the sweeps' partition. So (B1)–(B3) hold of every partition a reduction uses. M: Lean
-proves the step from the check to (B1)–(B3) over a model of it
-(`proofs/lean/RdraIsh/Sweep.lean::stable_of_cert`): on a complete run of a flat `X`, the
-states one sweep marks for a splitter are exactly those that leave their block into it by a
-silent path through the block (`Sweep.lean::marked_iff`), so a sweep that splits nothing is
-(B2), and a partition that passes the check is `Stable` with each block's first state as
-representative; a `Stable` partition passes it (`Sweep.lean::cert_of_stable`).
+by the sweeps' partition. So (B1)–(B3) hold of every partition a reduction uses.
+
+**Proposition (the certificate gives (B1)–(B3)).** Let the run be complete: its states are the
+reachable states of a flat `X`, numbered, its silent edges and rises are exactly `X`'s between
+them, and two states with the same initial label agree on `obs` and the input bytes
+(`proofs/lean/RdraIsh/Sweep.lean::Complete`). If a partition passes `stable`, then it meets
+(B1)–(B3), and the first state of each block is a reachable state of it
+(`Sweep.lean::stable_of_cert`).
+
+*Proof.* (B1): two states of a block have the same initial label, so they agree on `obs` and the
+input bytes. (B2): a sweep marks, for a splitter `B'`, the states outside `B'` with a silent
+edge into it and, backwards, the states with a silent edge to a marked state of their own block
+(`Sweep.lean::Marked`). By induction on the marking, a state is marked iff a silent path through
+its block followed by one silent edge leaves it into `B'` (`Sweep.lean::marked_iff`; the path
+lies in `X` because the run is complete). A sweep that splits nothing marks all or none of each
+block, which is (B2). (B3): every state of a block enters by a rise the blocks its block's
+first state enters, so any two states of a block enter the same blocks, and a rise of the run
+is one of `X`. The first state of a block is a state of the run, so reachable, and in its
+block. ∎
+
+A `Stable` partition passes the check when the labels are exactly the values of `obs` and the
+input bytes (`Sweep.lean::cert_of_stable`).
 `Sweep.lean::check_sound` proves a Boolean checker over the run's lists sound for the same
 check. Read from the code and not proved: that the depth-first marking of `stuttering_blocks`
 computes the marked set, that the run is `X`'s reachable graph, and that the sweeps'
@@ -1199,19 +1436,37 @@ leaves) and the random-graph test below, which also certifies every worklist par
   No verdict rests on it: the certificate above checks the partition used,
   so a worklist that returned another stable partition would cost states, not soundness, and an
   unstable one falls back to the sweeps.
-- **A10** (monotone inputs): Lemma 5c–d, checked at run time on every split (`split_faults`, R),
-  and point 5 of Theorem A8. Monotonicity is not used in A8; it
-  keeps `X` finite and small. It is used in A15 (case 3 and `s_cycles`). M: Lean proves Lemma 5
-  (c)(d) (`proofs/lean/RdraIsh/Split.lean::lemma5_of_closed`, Lemma 5's evidence above), and,
-  over a model of the write graph `monotone_vars` builds and of `each_successor`, that a step
-  from a pre-state that meets `Pre` (a created row absent with its cells at base, a deleted row
-  present, values in their domains, the clock below `int_max`) moves each cell of a variable
-  that is not cyclic along that graph (`proofs/lean/RdraIsh/Monotone.lean::succ_covers`), so a
-  variable it marks monotone changes finitely often along every behaviour
-  (`Monotone.lean::monotone_finite_changes`).
-- **A11** (folds): Lemma 6, whose step (a) derives the fold equivalence from `fold_of` and
-  `Fold::holds`, which the `Twin::FoldHolds` twin checks against its reference. Two Kani
-  harnesses (`reduce/fold.rs::proofs`) prove step (a) for one action at small bounds. A count that reads `T` is never
+- **A10** (monotone inputs): an `S_a` action reads `T_v` only in the inputs and its fold
+  (Lemma 5 (c)), and every input is monotone (Lemma 5 (d)); both are proved above and checked
+  at run time on every split (`split_faults`, R). Theorem A8's proof reads the inputs only as
+  part of the input bytes, through Lemma 6 and point 5, and does not use their monotonicity,
+  so A8 holds with inputs, under its hypotheses, flat and nested as there. Monotonicity keeps
+  `X` finite and small, and A15 uses it (case 4 and `s_cycles`). That a variable
+  `monotone_vars` marks monotone changes finitely often is proved over a model of its write
+  graph and of `each_successor` (`proofs/lean/RdraIsh/Monotone.lean`), in two steps:
+  1. A step from a pre-state that meets `Pre` (a created row absent with its cells at base, a
+     deleted row present, values in their domains, the clock below `int_max`) moves each cell
+     of a variable that is not cyclic along an edge of that graph, or leaves it
+     (`Monotone.lean::succ_covers`): each effect contributes its own edges, as the doc of
+     `monotone_vars` lists them (a create from absent to present, a delete from present to
+     deleted and its columns to base, a write from base in the creating action and from any
+     value elsewhere, a transition's arms, the clock up).
+  2. A graph with no cycle but self-loops orders the values, and each change moves a cell
+     forward in that order, so a cell changes at most `|dom(v)| - 1` times
+     (`Monotone.lean::monotone_finite_changes`).
+
+  That the guards give `Pre` at each step is read from the code, and the write-graph model is
+  not joined to the action model of Lemma 5, so `ex_mono` stays a hypothesis there; an
+  existence that only creates and deletes write is monotone in the write-graph model
+  (`Monotone.lean::existence_monotone`). The three properties the claim names of
+  `monotone_vars` (a column cyclic when a delete resets it, owners cyclic though a delete keeps
+  them, the starting values listed through the checked `narrow::id8`) are read from it.
+- **A11** (folds): a folded guard is a function of its bit, the fact `exact` of Lemma 6, which
+  step (a) derives from a reading of `fold_of` and `Fold::holds`, and which the `Twin::FoldHolds`
+  twin checks against its reference. Two Kani harnesses (`reduce/fold.rs::proofs`) prove it
+  for one action at small bounds. Lemma 6's proof uses it in steps 6 and 9, for a fold with
+  a bit of its own; groups of folds sharing a bit and node folds are argued in the parts it does
+  not model. So A8 holds with folds, under its hypotheses, flat and nested as there. A count that reads `T` is never
   node-folded (counting-rules.md): `reduce/fold.rs::as_node` makes a node only of an existential (or an
   And/Or of them), and `strip_links` returns `None` on a `Pred::Count` in its body.
 - **A12** (counters on `T`): `split_at` seeds `T_v` with every counter, and `monotone_vars` marks
@@ -1279,8 +1534,11 @@ When every non-input variable of `X` is monotone, no class is marked (`of_graph`
 with `StopRule::Looping`: a state may stop when no fair instance is enabled and either no move leaves it
 or its class can loop.
 
-**Theorem A15.** Assume Theorem A8's hypotheses. If the run finds no counterexample and `R`'s graph is
-complete, then `C ⊨ P` under `WfNext`.
+**Theorem A15.** Assume Theorem A8's hypotheses, that `X` and `R` have finitely many reachable
+states, and that every block whose silent edges between two different states contain a cycle
+from a reachable state can loop (case 1 of Definition 5). If the run finds no counterexample
+and `R`'s graph is complete, then `C ⊨ P` under `WfNext`. The steps below name their Lean
+theorems in `Fairness.lean` (`a15`, `a15_image`).
 
 *Proof.* Suppose `σ` is a behavior of `C` that satisfies `Fair_P ∧ WF_vars(Next)`, has a state where
 `trig_b ∧ cause_b` holds, and never meets `goal_b` from there. Map each state to its `~`-image. By
@@ -1288,20 +1546,22 @@ points 2, 3, 5 of Theorem A8 each step of `σ` is a step of `R` or leaves the im
 is a path of `R`'s graph from an initial state, and it agrees with `σ` on `T_v ∪ obs`, hence on the
 trigger, the cause, the goal, and the enabledness of every fair instance (fair actions are `T_a`
 actions, Lemma 5e). A `T_a` step is the same step on both sides, so a fair instance is taken in `σ` iff
-its image is taken.
+its image is taken (`image_step`, `t_step_img`, `takes_fwd`, `enabled_back`).
 
 - *The image changes infinitely often.* From some point it stays in one strongly connected component
   `K` of the goal-free subgraph and uses only its edges. A fair instance is taken infinitely often in
   `σ`, hence labels an edge of `K`, or is disabled infinitely often, hence disabled at some state of
-  `K`. `K` has an edge, so it admits a fair cycle, which the search finds.
+  `K`. `K` has an edge, so it admits a fair cycle, which the search finds (the lasso of a fair
+  behaviour on a finite system, `Behaviour.lean::lasso_of_behaviour`; the search's verdict,
+  `Search.lean::a15_search`).
 - *The image changes finitely often, `σ` infinitely often.* From some point `T_v` is fixed at `t`, the
   block is fixed at `c`, and every state-changing step of `σ` is an `S_a` step inside `c`. `obs` is
   constant on `c` (B1), so each fair instance's enabledness is constant from that point; one that is
   enabled would be taken (`Fair_P`) and change `T_v`, so all are disabled. It remains to show that
   `c` can loop. (i) If infinitely many steps change the state of `X_n` (by Lemma 6, via the inner
   canonical form), they form an infinite walk inside `c` in a finite graph whose edges join different
-  states, so they contain a cycle: case 1 (or case 3 when the run of `S` was up to `H` and the walk
-  closes on an orbit). (ii) Otherwise, from some point every step changes only the inner sub-lifecycle,
+  states, so they contain a cycle: case 1 (`silentCycle_of_divergence`; or case 3 when the run
+  of `S` was up to `H` and the walk closes on an orbit, which the Lean proof does not model). (ii) Otherwise, from some point every step changes only the inner sub-lifecycle,
   and the same argument one level down gives case 2. (iii) If `obs = ∅`, `X` is not explored; an
   infinite path of silent steps changes some non-input variable infinitely often. Each change of a
   variable `v` is an edge of `v`'s write graph (every effect contributes its edges to
@@ -1311,7 +1571,8 @@ its image is taken.
 - *`σ` stays at `(t, s)` forever.* `WF_vars(Next)` says no step leaves `(t, s)` in `C`. A `T_a` move of
   `R` from `(t, ρ)` reads only `T_v ∪ obs` and would leave `(t, s)` too (point 2 or 5). A class move into
   `c' ≠ c` would, by (B2) and Lemma 6, be matched by a silent path from `x(t, s)` into `c'`, whose
-  first state-changing edge leaves `(t, s)`. So no move leaves `(t, ρ)`, and it may stop.
+  first state-changing edge leaves `(t, s)`. So no move leaves `(t, ρ)`, and it may stop
+  (`moves_back`).
 
 In every case a triggered image state reaches a fair end through goal-free states, which is a
 counterexample of the run. ∎
@@ -1327,8 +1588,14 @@ finds no S path behind a class move (`Succ::shortest_path` returns `None`). A pr
 counterexample of this run is therefore a lasso of
 `C` that the checker certified. Whether it is a counterexample of `T` is Theorem A5.2 (needs `W` exact).
 
-*Evidence.* P-full relative to (B1)–(B3), certified at run time, and Lemma 6, argued
-and not proved. M: `proofs/lean/RdraIsh/Fairness.lean::a15` proves the theorem in Lean for the
+*Evidence.* P-full for a flat reduction, relative to Theorem A8's hypotheses (each with how
+the code meets it, under Theorem A8 and Lemma 6), finitely many reachable states of `X` and `R`,
+and case 1 of Definition 5 for every block with a silent cycle (R, below). P-sketch for a
+nested reduction or one run up to `H`: (i) reads Lemma 6 through the inner canonical form, and (ii), with cases 2
+and 3 of Definition 5, applies "the same argument one level down", which is not written.
+P-sketch also for case 4 (`obs = ∅`): the proof's (iii) is the step-by-step argument of A10
+for `monotone_vars`, but the code's `R` there has one class for all input bytes, and its
+reading as the reduced cone of the partition by input bytes is not written (below). M: `proofs/lean/RdraIsh/Fairness.lean::a15` proves the theorem in Lean for the
 flat case, from Lemma 5 (a)(b), Lemma 6 both ways, the shape of `X` and (B1)–(B3) as
 hypotheses (as `a8_dbsb` does), finitely many reachable states of `X` and `R`, and the
 hypothesis that every block whose silent edges between different states contain a cycle can
@@ -1344,7 +1611,7 @@ follows one along the silent edges, no block of any partition has a silent cycle
 holds with no class marked, which is case 4 with `s_cycles` false (`Monotone.lean::no_silentCycle`,
 `Monotone.lean::a15_monotone`). The code's unobserved `S` is one class for all input bytes,
 which is not (B1); the reading of its `R` as the reduced cone of the partition by input bytes
-is argued.
+is not written.
 `ExampleFair.eventually_flag` discharges every hypothesis on a cone whose one block holds a
 silent cycle. R: every build checks that hypothesis, case 1, on each explored run of `X`
 (`reduce/hypotheses.rs::loop_faults`): it peels the silent edges between different states
@@ -1450,34 +1717,117 @@ image `g(s)` of a reachable `s`, which is what the quotient stores.
 that stores one member of each `≈`-class reaches exactly the classes of `Reach(T)` (or of the cone it
 runs on), each at its least depth.
 
+**The hypotheses as the proof reads them.** The proof reads (G1)–(G4) and (G6) as conditions on
+the syntax of guards and effects, in the form `explore/symmetry/breaks.rs::scan` checks them, and
+the Lean model `proofs/lean/RdraIsh/SymActions.lean` states them in that form (`Hyp`):
+
+- (G1) as above, and a term naming rows of a class that moves appears in no `In` (rule `OrderedId`).
+- (G2) as above, and a data column is not written from the slot of a parameter whose class moves
+  (rule `MixedIds`).
+- (G3): an identity start couples its child's class with its parent's, and the owner of a
+  pre-existing row that starts at its base names no row. That `I` is closed under every `G_s` is
+  then step 2 of the proof.
+- (G4): a creation writes every owner of the created row whose base names a row.
+- (G6): no guard reads, in the state before the step, an owner on a `New` parameter whose
+  parent's class moves. The scan leaves the parent's class out when a guard makes such a read.
+  The Lean model's `G6` is stronger: it forbids every such read, whatever the parent's class.
+
+(G1)–(G4) constrain only terms and effects naming rows of a class that moves, so they hold of a
+class the scan leaves out. The Lean model's `G6` does not mention the group. A guard that reads
+the pre-state owner of a `New` row whose parent's class does not move is outside the Lean model,
+and step 4 covers it on paper. Two more hypotheses enter. `WF`: a term reads, and an effect
+writes, a column or an owner on a row of its own entity, and every parameter it names exists.
+That the builder's typing gives `WF` is read from the code. `Built`: the two facts of the
+builder above. (G5) is the
+semantics of a delete: it resets the row's columns, not its run marks, and keeps its owners.
+
 Outside `W` the commutation can fail. Take an absent row whose optional owner names a row, and a
 step that creates the row without writing that owner, which (G4) allows for an owner whose base is
 `null`. `apply` keeps the value on the absent row, so the step from `g(s)` leaves it, while `g(t)`
 relabels it (`proofs/lean/RdraIsh/SymActionsExample.lean::off_W_counterexample`).
 
-*Proof.* Absent slots of `t` are absent in `s` (a slot leaves `absent` only), so `g` fixes them and
-`g ∈ G_t`; `G_s = G_{g(s)}` since `g` preserves the absent set, so `≈` is reflexive, symmetric, and
-transitive. *Bindings.* `New` takes the lowest absent slot, which `g` fixes; `Existing`, `Parent`, and
-`Triggered` admit a present slot, `Earlier` a slot by its run mark, and `g` preserves presence and moves
-marks with their slots. In `W` an absent row holds the base mark, which no run-mark conjunct accepts.
-So every bound row other than a `New` one is present or deleted in `s`, and a `New` row is created,
-so every bound row is present or deleted in `t`. *Predicates.* A column or mark of slot `i` in `s` is
-the same value at slot `g(i)` in `g(s)`. By (G1) a row id is compared only by `=`/`≠` with a row id of
-its class, which a bijection preserves, or an optional owner with `null`, which relabelling preserves.
-An owner read on a non-absent row is relabelled consistently with the row ids it is compared with
-(G5 for deleted rows). None is read on an absent row: (G6) forbids the pre-state owner of a `New` row,
-the other bound rows are not absent, and `Forall`, `Exists`, and `Count` range over the present slots,
-a set `g` permutes. So every guard of `a` has the same value at `(s, t, p)` and `(g(s), g(t), g(p))`.
-*Effects.* Each effect commutes with `g`: a literal write is unchanged; an owner written from a
-parameter's slot is relabelled with that slot (G2); a create or delete moves with its slot; a `Choose` on
-an owner ranges over all rows (G2), so its set of forks is closed under `g`. An owner the step does not
-write on a row it creates holds its base value in `s ∈ W`, which (G4) makes `null` (unchanged by
-relabelling) or rules out. So `g(t) ∈ Post_a(g(s), g(p))`. The converse is the same statement for
-`g⁻¹ ∈ G_{g(s)}` at `g(s) ∈ W`. With (G3) the initial classes are the classes of initial states. A
-bisimulation that relates states at equal depth (it maps each step to one step) preserves BFS depth. ∎
+*Proof.* Each step names the theorem of `proofs/lean/RdraIsh/SymActions.lean` that proves it over
+the slot model, where (G1)–(G6), `WF` and `Built` are the hypotheses above; steps 6 and 7 use
+`proofs/lean/RdraIsh/Symmetry.lean`.
 
-Leaving more classes out gives a subgroup of `G_s`, and the statement holds for every subgroup, so
-the scan can always leave a class out and lose only reduction (**A20**, P-full). A *witness*
+1. *The group* (`SymActions.lean::act_mul`, `SymActions.lean::mem_act`,
+   `SymActions.lean::mem_step`). `apply` composes: `(gh)(s) = g(h(s))`. A `g ∈ G_s` fixes the absent
+   slots of `s` and maps present and deleted slots to slots of the same existence, so `g(s)` has
+   the absent set of `s` and `G_{g(s)} = G_s`. Absent slots of `t` are absent in `s`, since a slot
+   leaves `absent` only, so `g` fixes them and `g ∈ G_t`. So `≈` is reflexive (the identity),
+   symmetric (`g⁻¹ ∈ G_s = G_{g(s)}`), and transitive (for `g ∈ G_s` and `h ∈ G_{g(s)} = G_s`,
+   `hg ∈ G_s`).
+2. *The set `W`* (`W_init`, `SymActions.lean::W_step`,
+   `SymActions.lean::W_act`, `SymActions.lean::init_act`). An initial state is in `W`: a created
+   entity starts absent at its base values. A step keeps `W`: it writes only rows its
+   parameters bind, and by `Built` (step 3) each is present or deleted after the step. `apply` keeps an
+   absent row's values, since it fixes the slot and relabels an owner only on a row that is not
+   absent, so `W` is closed under every `G_s`. By (G3), `I` is closed under every `G_s`: D4 gives
+   every `Start::Any` variable every value of its domain, an identity start moves the child's slot
+   with the parent's, and a pre-existing row's owner at its base names no row, which relabelling
+   leaves as it is.
+3. *Bindings* (part of `SymActions.lean::step_comm`). `New` takes the lowest absent slot, which `g`
+   fixes; `Existing`, `Parent`, and `Triggered` admit a present slot, `Earlier` a slot by its run
+   mark, and `g` preserves presence and moves marks with their slots. In `W` an absent row holds the
+   base mark, which no run-mark conjunct accepts (`Built`). So every bound row other than a `New`
+   one is present or deleted in `s`, and a `New` row is created (`Built`), so every bound row is
+   present or deleted in `t`. So `g(p)` binds `a` at `g(s)` exactly when `p` binds it at `s`.
+4. *Predicates* (`SymActions.lean::eval_mv`). A column or mark of slot `i` in `s` is the same value
+   at slot `g(i)` in `g(s)`. By (G1) a row id is compared only by `=`/`≠` with a row id of its
+   class, which a bijection preserves, or an optional owner with `null`, which relabelling
+   preserves, and appears in no `In`. An owner read on a non-absent row is relabelled consistently
+   with the row ids it is compared with (G5 for deleted rows). The other bound rows are not
+   absent (step 3), and `Forall`, `Exists`, and `Count` range over the present slots, a set `g`
+   permutes. The one read of an absent row's owner is the pre-state owner of a `New` row, which
+   (G6) allows only when the parent's class does not move. That row is absent, so in `s ∈ W` it
+   holds the owner's base, and `g` fixes its slot and keeps its values, so `g(s)` reads the same
+   base. As a row id of a class that does not move, it may be compared with any term that
+   names no row of a class that moves (G1), and the rest of this step gives such a term the same
+   value at `(g(s), g(t), g(p))` as at `(s, t, p)`. So the comparison is unchanged. This case is paper only: the Lean model's `G6`
+   excludes it. So every guard of `a` has the same value at `(s, t, p)` and
+   `(g(s), g(t), g(p))`.
+5. *Effects* (`SymActions.lean::post_comm`). For `s ∈ W`, the successor of `g(s)` under `g(p)` is
+   `g` of the successor of `s` under `p`, location by location: a literal write is unchanged; a
+   data column is written only from a literal or from the slot of a parameter whose class does not
+   move (G2), which `g` fixes; an owner written from a parameter's slot is relabelled with that slot
+   (G2); a create or delete moves with its slot, and a delete keeps the owners (G5); a `Choose` on
+   an owner ranges over all rows (G2), so its set of forks is closed under `g`, the pick moving
+   with `g`. An owner the step does not write on a row it creates holds its base value in `s ∈ W`,
+   which (G4) makes `null` (unchanged by relabelling) or rules out.
+6. *The step and the bisimulation* (`SymActions.lean::step_comm`, `SymActions.lean::symOn`,
+   `Symmetry.lean::a18_dbsb`). Steps 3 to 5 give `g(s) →_{a,g(p)} g(t)`, and step 1 gives
+   `g ∈ G_t`. The converse is the same statement for `g⁻¹ ∈ G_{g(s)}` at `g(s) ∈ W` (step 2). So
+   `≈` maps each step from a state of `W` to one step and back. `symOn` packages steps 1, 2 and
+   6 as a `SymOn` on `W`, and `a18_dbsb` proves that `≈` is then a bisimulation of the system
+   restricted to `W`, which has `T`'s steps from every state of `W`.
+7. *The quotient* (`Symmetry.lean::quotient_covers`, `Symmetry.lean::quotient_sound`,
+   `SymActions.lean::SymOn.quotient_reach_iff`). Let the run store `can(t) = π(t)(t)`,
+   `π(t) ∈ G_t`, for each initial state and each successor `t` of a stored state. By induction
+   on reachability, every reachable `s` has an image `g(s)`, `g ∈ G_s`, that the run stores: for
+   an initial `s`, `can(s)`; for a step `s → t` with `g(s)` stored, `g(s) → g(t)` is a step
+   (step 6), the run stores `can(g(t)) = π(g(t))(g(t))`, and `π(g(t)) g ∈ G_t` (step 1). By the
+   same induction on the run, every stored state is such an image of a reachable state: an
+   initial one is `can(c)` of an initial `c`, and a successor is one by step 6 read backwards.
+   (G3) makes each stored initial state an initial state itself, which the replay of a lifted
+   counterexample needs (`PinnedStart`). Both hold on the system restricted
+   to `W`, whose reachable states are `T`'s and whose stored states lie in `W` (step 2), and
+   `SymOn.quotient_reach_iff` transfers them to `T`. *Depth.* By induction on `d`, the classes
+   of the states at depth `≤ d` are the classes the search stores at depth `≤ d`, since `≈` maps
+   each step to one step in both directions; so each class is first stored at its least depth.
+   This step has no Lean theorem. ∎
+
+**Leaving a class out (A20).** Let `G'_s ⊆ G_s` be the group when the scan leaves out more
+classes: the permutations of the slots not absent in `s` of the classes it keeps. `G'_s` is
+closed under composition and inverse. `G'_{g(s)} = G'_s` for `g ∈ G'_s`, since `g` fixes the
+same slots. A step keeps `g ∈ G'_t`, since the slots of the classes left out stay fixed and
+step 1 of the proof keeps the rest. These are the hypotheses of
+`proofs/lean/RdraIsh/Symmetry.lean::Sym.sub`. It gives a symmetry with the same commutation,
+since every `g ∈ G'_s` is in `G_s`. Over the slot model, the hypotheses of A18 reach the same
+end another way. Each of (G1)–(G4) in `Hyp` holds of a class that does not move, and `G6` does
+not mention the group. So marking more classes as not moving keeps `Hyp`, and
+`SymActions.lean::symOn` holds of the system with the smaller group. That `Hyp` keeps under marking a class as not moving is read off its definition,
+case by case. No Lean theorem states it. So the scan can always leave a class out and lose only
+reduction (**A20**, P-full). A *witness*
 shows that a rule is needed. It is a model on which dropping the rule (`explore/symmetry/mod.rs::dropped`,
 set per test or by `RDRA_ISH_DROP_RULE` in a `shadow` build) breaks the bisimulation or the
 verdict. `explore/symmetry/mod.rs::Rule` has eleven variants, and the witnesses are as follows.
@@ -1511,9 +1861,15 @@ that. Theorem A18 needs only "some member": the run reaches every class, and a c
 under two forms only inflates the printed count, which `about` then marks as an upper bound. The
 argument is P-full given A18 for the checks whose value on a state is invariant under `G_s`.
 Those are the first group of the next paragraph: state rules, `always`, `after` assertions, view
-patterns, and `NeverRuns`. The checks that read the annotated quotient (deadlocks, liveness)
-follow a binding through the stored permutations. Their
-soundness past the cap is part of A23, which is a sketch. M: `Twin::Canonical` compares the canonical form with the least layout over every element of
+patterns, and `NeverRuns`. For invariants, `proofs/lean/RdraIsh/Symmetry.lean::quotient_holds_iff`
+proves it for any `can(s) = π(s)(s)`, `π(s) ∈ G_s`, from A18's commutation, and
+`proofs/lean/RdraIsh/SymActions.lean::a18_holds_iff` from A18's hypotheses. The checks that read
+the annotated quotient (deadlocks, liveness) follow a binding or a slot through the stored
+permutations. For liveness, Theorem A23 takes (Canon), any member of the orbit as a function of
+the state, which `Canon::canonical` still is past the cap: it keeps the first branch. So A23
+gives liveness past the cap, P-full relative to A23's hypotheses. Deadlocks are entity-cone
+findings, which A23 covers only by a sketch, so their soundness past the cap is P-sketch.
+M: `Twin::Canonical` compares the canonical form with the least layout over every element of
 `G_s` when `|G_s| ≤ 6^4 = 1,296`; D: `explore/symmetry/tests.rs::past_the_branch_cap_a_state_is_cut_and_stays_in_its_orbit`,
 `explore/symmetry/witnesses.rs::past_the_branch_cap_the_verdict_stands` (release jobs: `formal-verify`).
 
@@ -1535,85 +1891,303 @@ some rows.
 
 **Theorem A23 (liveness up to symmetry).** An *annotated run* of the quotient is a sequence of
 stored states `r_n`, concrete successors `t_n` (a step of `r_n`, or `t_n = r_n`, a stutter) and
-permutations `σ_n ∈ G_{t_n}` with `r_{n+1} = σ_n(t_n)`. The binding moves along it by the `σ_n`, and
-so does each fair instance; the instance's sequence is its *thread*. A thread's instance is taken by
-the step `r_n → t_n`, so an orbit self-edge (`t_n ≠ r_n`, `σ_n(t_n) = r_n`) is a move. Assume:
+permutations `σ_n ∈ G_{t_n}` with `r_{n+1} = σ_n(t_n)`, whose first state is an image `g(c)`,
+`g ∈ G_c`, of an initial state `c` (`proofs/lean/RdraIsh/SymmetryLiveness.lean::ARun`). The run
+the code stores has `r_0 = can(c)`, `r_{n+1} = can(t_n)` and `σ_n = π(t_n)` (`RunOf`). The binding
+moves along it by the `σ_n`, and so does each fair instance; the instance's sequence is its
+*thread*. A thread's instance is taken by the step `r_n → t_n` (D20 with τ: `t_n ≠ r_n` and the
+step has a label of the instance), so an orbit self-edge (`t_n ≠ r_n`, `σ_n(t_n) = r_n`) is a
+move. The run is *thread-fair* when every thread enabled at every `r_n` from some point on is
+taken infinitely often (`AFair`). It *stops only where the rule allows* when, from any point
+after which `t_n = r_n` forever, the stop rule holds at `r_n` (`AStops`). It *violates* the
+property for a binding `b` when the trigger of the moved binding holds at some `r_i` and the goal
+of the moved binding fails at every `r_j`, `j ≥ i` (`AViolates`). An *annotated lasso* repeats
+`(r_n, t_n, σ_n)` with a period `q > 0` from some `k` on (`ALasso`).
 
-- every step from a state of a set `W` commutes with every `g ∈ G_s` and keeps `g` in `G_t`, where
-  `W` holds the initial states and is closed under steps and under every `G_s` (Theorem A18 gives
-  this for the states whose absent rows hold base values), and (G3);
-- `g` maps a label of a fair instance to a label of its image;
-- the trigger and the stop rule read the same on `s` and on `g(s)`, with the binding moved by `g`,
-  for `g ∈ G_s`, and so does the goal on every state at or after a state where the trigger holds.
+Hypotheses, each named by the Lean structure that states it:
 
-Then a property holds for every binding under `Fair_P` and the stop rule iff no annotated run of
-the canonical quotient violates it for any binding while it is thread-fair and stutters forever
-only where the rule allows. The stop rule of `WfNext`, `¬Moves`, is one the group preserves. With
-finitely many reachable states and every `G_s` finite, the same holds with annotated runs replaced
-by annotated lassos.
+- (Sym) Theorem A18's commutation on a set `W`. Every step from a state of `W` commutes with every
+  `g ∈ G_s` and keeps `g ∈ G_t`. Also, `G_{g(s)} = G_s` for `g ∈ G_s`, each `G_s` is closed under
+  composition and inverse, the initial states are closed under every `G_s` (G3), and `W` holds
+  the initial states and is closed under steps and under every `G_s` (`SymOn`).
+  `proofs/lean/RdraIsh/SymActions.lean::symOn` derives it from A18's hypotheses, with `W` the
+  states whose absent rows hold base values.
+- (SymLive) `g` acts on fair instances and on bindings, with the composition and inverse laws,
+  and maps a label of a fair instance to a label of its image (`SymLive`).
+- (LiveEqui) For `g ∈ G_s`, with the binding moved by `g`, three parts hold (`LiveEqui`). The
+  trigger reads the same on `s` and `g(s)`. The goal reads the same on the states of a set
+  `after(b)` that holds wherever the trigger of `b` holds and that every step keeps. The stop
+  rule reads the same on `s` and `g(s)`.
+- (Canon) `can(s) = π(s)(s)` with `π(s) ∈ G_s`: any member of the orbit, as a function of `s`
+  (`SearchSym.lean::Canon`).
+- (Finite) The reachable states lie in a finite list, and every `G_s` is finite
+  (`FiniteGroups`).
 
-*Proof sketch.* A run lifts through the accumulated frame: `c_0` is an initial state with
-`r_0 = θ_0(c_0)`, `c_{n+1} = θ_n⁻¹(t_n)` and `θ_{n+1} = σ_n θ_n`. Then `c` is a behaviour, and each
-step `c_n → c_{n+1}` is the step `r_n → t_n` read through `θ_n⁻¹`. A behaviour projects to the
-canonical run through frames that store each `θ_n(c_{n+1})` as `can`'s member of its orbit: `θ_0`
-takes `c_0` to `can(c_0)`, and `θ_{n+1} = σ_n θ_n` with `σ_n` the permutation that takes
-`θ_n(c_{n+1})` to its canonical form. Each `g ∈ G_s` preserves D20's enabledness and taking, so
-the thread of `θ_0(f)` is fair iff `f` is fair on `c`. On a cycle of the quotient the group is
-constant: a step only enlarges `G_s` (a slot leaves `absent` only), a stored target has the group
-of its concrete successor, and the cycle returns to its start. So the composite `π` of the
-cycle's permutations lies in `G_r`, some power `π^d` with `d > 0` acts as the identity, and `d`
-copies of the cycle close the concrete lasso. On the cycle a thread is periodic. It is fair iff,
-within one period, it takes its instance on some edge or meets a stored state where the instance
-is not enabled. `can` need only pick a member of the orbit, so the theorem holds past
-`BRANCH_CAP` too. Commutation on reachable states alone is not enough: a stored state is an image
-`g(s)` of a reachable `s`, which need not be reachable when `g` was not in the group of an earlier
-state on the path to `s`.
+Then a property holds for every binding under `Fair_P` and the stop rule iff no annotated lasso
+of the canonical quotient violates it for any binding while it is thread-fair and stops only
+where the rule allows (`SymmetryLiveness.lean::a23_on`; `SymmetryLiveness.lean::a23` with (Sym) on
+every state). Without (Finite) the same holds with annotated runs in place of lassos
+(`SymmetryLiveness.lean::a23_iff`). The stop rule of `Plain` is `True`, and that of `WfNext`,
+`¬Moves`, is one the group preserves (`stop_moves_equi`).
 
-*The search.* `explore/orbit/liveness.rs` does not enumerate lassos. It accepts a strongly
-connected component of the goal-free (state, binding) pairs, reached from a failing trigger pair,
-when the component has a cycle, is expanded, and every piece of its threads takes its instance on
-some edge or meets a pair where it is not enabled. The pieces are the components of the thread
-graph over the whole component, with the direction of its edges forgotten. This is the analogue
-of N9 for the annotated quotient, and it decides the property:
+*Proof.* The theorems named are those of `proofs/lean/RdraIsh/SymmetryLiveness.lean` unless
+stated otherwise.
 
-- A thread edge inside a component can be walked back. The edge and a path of pairs back close a
-  walk whose composite permutation lies in the group of its first state, and some power of it
-  acts as the identity. So a piece is strongly connected, and from every node of a piece a path
-  of threads reaches its covered node.
-- (⇐) In an accepted component, a loop that walks the thread of each instance enabled at its
-  first pair to a covered node, one instance after another, covers every thread in each round.
-  The stored path, the path to the component and that loop repeated are a thread-fair violating
-  annotated run, and the lift carries it to a fair violating behaviour.
-- (⇒) A fair violating lasso, seen through frames that stay put on a stutter, is a sequence of
-  pairs that repeats. It settles at a stop pair, or its repeated pairs lie in one component with a
-  cycle. A piece of that component with no covered node has a node over each of its pairs, so the
-  thread of the lasso through it would be enabled forever and never taken.
+1. *Restriction to `W`* (`restrict_reach_iff`, `restrict_behaviour_iff`, `restrict_enabled_iff`,
+   `restrict_takes_iff`, `restrict_moves_iff`, `restrict_liveHolds_iff`, `SymOn.toSym`). Let
+   `T|W` have `T`'s initial states and `T`'s steps from the states of `W`. `W` holds the initial
+   states and is closed under steps, so `T|W` has `T`'s reachable states and behaviours. At a
+   state of `W` it has the same enabled instances, taken instances and moves. So each liveness
+   verdict of `T` is that of `T|W`, under a stop rule that agrees with `T`'s on `W`. On `T|W` the
+   commutation holds at every state, since a step of `T|W` starts in `W`. Steps 2 to 7 take it on
+   every state, on `T|W`.
+2. *The group preserves fairness* (`takes_act`, `enabled_act`, `moves_act`, `stop_moves_equi`).
+   Let `g ∈ G_s`. Then `s → s'` takes `f` iff `g(s) → g(s')` takes `g(f)`. Forward: `s' ≠ s`
+   gives `g(s') ≠ g(s)`, since `apply` is injective. A label `l` of `f` with `s →_l s'` gives
+   `g(s) →_{g(l)} g(s')` by (Sym), and `g(l)` is a label of `g(f)` by (SymLive). Backward: the
+   same for `g⁻¹ ∈ G_{g(s)}`. An instance is enabled where a step takes it, so `f` is enabled at
+   `s` iff `g(f)` is enabled at `g(s)`. For the same reason `Moves(s)` iff `Moves(g(s))`, so
+   `¬Moves` meets the stop part of (LiveEqui).
+3. *Frames* (`Framed`, `orbitSeq_frame`, `Framed.fair_iff`, `Framed.stutter_iff`,
+   `Framed.stops_iff`, `Framed.violates_iff`). Call `(Θ_n)` frames of an annotated run `(r, t, σ)`
+   over a sequence `c` when `Θ_n ∈ G_{c_n}`, `r_n = Θ_n(c_n)`, `t_n = Θ_n(c_{n+1})` and
+   `Θ_{n+1} = σ_n Θ_n`. Then the thread of `Θ_0(f)` is at `Θ_n(f)` at step `n`, and the moved
+   binding of `Θ_0(b)` is `Θ_n(b)`. Through step 2 at each `n`, three facts follow:
+   - The run is thread-fair iff `c` satisfies `Fair_P`. Each thread is the image under `Θ_0` of
+     an instance of `c`, and each instance of `c` has its image, `Θ_0` being a bijection.
+   - `t_n = r_n` iff `c_{n+1} = c_n`. So, as the group preserves the stop rule, the run stops
+     only where the rule allows iff `c` does.
+   - The run violates the property for `Θ_0(b)` iff `c` violates it for `b`. The trigger reads
+     the same by (LiveEqui). Every state of `c` at or after one where the trigger holds is in
+     `after(b)`, by (LiveEqui) along the steps of `c` (a stutter keeps the state). There the goal
+     reads the same.
+4. *Lift* (`liftSeq`, `ARun.lift`). An annotated run with `r_0 = Θ_0(c_0)`, `c_0` initial and
+   `Θ_0 ∈ G_{c_0}`, has frames over a behaviour: `c_{n+1} = Θ_n⁻¹(t_n)` and
+   `Θ_{n+1} = σ_n Θ_n`, as `explore/orbit.rs::lift_path` accumulates its frame. By induction on
+   `n`, `Θ_n ∈ G_{c_n}` and `r_n = Θ_n(c_n)`. Then `Θ_n⁻¹ ∈ G_{r_n}`, and (Sym) maps the step or
+   stutter `r_n → t_n` by `Θ_n⁻¹` to `c_n → c_{n+1}`. A step keeps `Θ_n` in the group, so
+   `Θ_n ∈ G_{c_{n+1}}`, and `σ_n ∈ G_{t_n} = G_{c_{n+1}}`, so `Θ_{n+1} ∈ G_{c_{n+1}}`. Last,
+   `r_{n+1} = σ_n(t_n) = Θ_{n+1}(c_{n+1})`.
+5. *Projection* (`projFrame`, `project`). A behaviour `c` has frames of a run the code stores:
+   `Θ_0 = π(c_0)`, `Θ_{n+1} = π(Θ_n(c_{n+1})) Θ_n`, `r_n = Θ_n(c_n)`, `t_n = Θ_n(c_{n+1})` and
+   `σ_n = π(t_n)`. `Θ_n ∈ G_{c_n}` by the induction of step 4, with `π(t_n) ∈ G_{t_n}`. `t_n` is
+   a step or a stutter of `r_n` by (Sym). By (Canon), `r_{n+1} = π(t_n)(t_n) = can(t_n)` and
+   `r_0 = can(c_0)`.
+6. *On runs* (`a23_lift`, `a23_project`, `a23_iff`). Take a thread-fair annotated run that stops
+   only where the rule allows and violates the property for `b'`. Step 4 lifts it to a behaviour,
+   and step 3 makes that behaviour satisfy `Fair_P`, stop only where the rule allows, and violate
+   the property for `Θ_0⁻¹(b')`. Conversely, step 5 projects a behaviour with those properties for
+   `b` to a run the code stores, and step 3 gives it those properties for `Θ_0(b)`.
+7. *Lassos* (`Behaviour.lean::lasso_of_behaviour`, `project_lasso`, `a23`, `a23_on`). Since a
+   lasso is a run, one direction is step 6. For the other, fold a behaviour `c` that satisfies
+   `Fair_P`, stops only where the rule allows and violates the property at index `i` into a
+   lasso with the same three properties. With finitely many reachable states, some segment
+   `[n_0, m)` with `n_0 ≥ i` and `c_m = c_{n_0}` holds every state and every step that `c`
+   takes after `n_0` (`Behaviour.lean::recurrent_segment`). The lasso runs `c` up to `m` and
+   then that segment forever.
+   - An instance enabled at every state of the segment is enabled at every state after `n_0`.
+     So `Fair_P` makes `c` take it after `n_0`, on a step that the segment holds.
+   - If the lasso stutters forever at `q`, the segment holds `q` alone, so `c` stays at `q`
+     after `n_0`, and the stop rule holds at `q`.
+   - Each state of the lasso after `i` is a state of `c` after `i`, where the goal fails.
 
-The code builds the pieces from the nodes of enabled instances only, with union-find, and marks a
-node that an edge joins to a node whose instance is not enabled; that is the same criterion. The
-rule per piece on a single cycle is `threadFair_iff_pieces`.
+   Step 5 projects that lasso to an annotated lasso. Let the lasso repeat with period `q` from
+   `k`. The frames `Θ_{k+jq}` lie in the finite `G_{c_k}`, so two of them are equal,
+   `Θ_{k+j_1q} = Θ_{k+j_2q}` with `j_1 < j_2` (`repeats_in`). `Θ_{n+1}` is a function of `Θ_n`
+   and of `c_{n+1}`, which is periodic. So the frames are periodic, with period `(j_2 − j_1)q`,
+   from `k + j_1q` (`periodic_of_recurrence`), and with them `r`, `t` and `σ`. Step 3 carries
+   the three properties to it. Step 1 gives `a23_on` from `a23`. ∎
 
-*Evidence for A23.* P-sketch. M:
-- The Lean proof `proofs/lean/RdraIsh/SymmetryLiveness.lean::a23` (`a23_iff` on runs, `a23_on`
-  for commutation on a set `W` as above), with `lasso_closure` and `threadFair_iff_pieces`.
-  - `ExampleSymLive` discharges every hypothesis on two interchangeable instances. Its quotient
-    cycle has the swap as its composite and closes after two copies.
+**The lemmas on a quotient cycle.** These lemmas serve the code's lasso lift and its per-cycle
+rule, which steps 1 to 7 do not use.
+
+- *The group is constant on a cycle* (`ARun.mem_succ`, `ARun.mem_const`). Along an annotated run,
+  `g ∈ G_{r_n}` gives `g ∈ G_{r_{n+1}}`: a step keeps `g`, and `G_{σ_n(t_n)} = G_{t_n}`. So the
+  groups only grow. On a lasso from `k` with period `q` they come back after `q` steps, so
+  `G_{r_n} = G_{r_k}` for `n ≥ k`, and each `σ_n ∈ G_{r_{n+1}} = G_{r_k}`.
+- *Finite order* (`order_exists`). The composite `P = σ_{k+q−1} ⋯ σ_k` lies in the finite
+  `G_{r_k}`, so two of its powers are equal, `P^{j_1} = P^{j_2}`. As `apply` is injective,
+  `P^d` with `d = j_2 − j_1 > 0` acts as the identity on states, instances and bindings.
+- *Lasso closure* (`lasso_closure`). Over `d` copies of the cycle, the lift of step 4 comes back
+  to its concrete state. So the lift of an annotated lasso is a concrete lasso of period `dq`.
+- *Thread pieces* (`threadFair_iff_pieces`). On an annotated lasso every thread is periodic, with
+  one period for all threads. A thread is fair iff, within one period, it takes its instance on
+  some edge or meets a stored state where the instance is not enabled.
+
+`can` need only pick a member of the orbit, as a function of the state, so the theorem holds
+past `BRANCH_CAP` too (A21). Commutation on reachable states alone is not enough: a stored state
+is an image `g(s)` of a reachable `s`, which need not be reachable when `g` was not in the group
+of an earlier state on the path to `s` (`SymmetryLivenessExample.lean::reach_only_counterexample`).
+
+*Discharging the hypotheses on the code's runs.* (Sym) is Theorem A18 (`symOn`). (SymLive):
+`Group::apply` moves a binding slot by slot. A fair instance `(a, κ)` restricts a binding to the
+slots of `a`'s non-`New` parameters (`types.rs::Property::fair_instance`), so when a step's
+binding `p` extends `κ`, `g(p)` extends `g(κ)`. This is read from the code. (LiveEqui): the
+trigger, `present ∧ link`, reads rows that are present. The scan applies (G1) to the predicates
+of properties as to guards (`explore/symmetry/breaks.rs::scan`). So step 4 of A18's proof,
+applied to the trigger, makes it read the same on `s` and `g(s)`. Take `after(b)` to be the
+states at which every row of `b` is present or deleted. The trigger implies it, and a step keeps
+it, since a slot never becomes absent again. The trigger of N9's search is D21's
+`trig_b ∧ cause_b`. `cause_b` is a predicate of the property too, so the scan applies (G1) to
+it, and it is read where the trigger holds, where the rows of `b` are present. On it, the goal reads owners only on rows that
+`apply` relabels (G5), so by (G1) it reads the same. (G6) above argues this for every read of a
+property. The stop rule of `Plain` is `True`; that of `WfNext` is step 2's `¬Moves`. This
+discharge is paper only: the Lean model has no properties, and
+`SymActSearch.lean::orbit_verdict` takes (LiveEqui) as a hypothesis. (Canon) is read from the
+code. `explore/symmetry/canon.rs::Canon::canonical` returns `apply(π, s)` for a `π ∈ G_s` that it
+computes from `s` alone; past `BRANCH_CAP` it keeps the first branch. `Twin::Canonical` checks
+the least layout when `|G_s| ≤ 1,296`. (Finite): the domains are bounded, and `G_s` is a product
+of permutation groups of finitely many slots. The fair instances enabled at a state are
+finitely many, since each is an action and a tuple of slots.
+
+*The search.* `explore/orbit/liveness.rs::Product::search` does not enumerate lassos. It searches
+pairs `(r, b)` of a stored state and a binding. `proofs/lean/RdraIsh/SearchSym.lean` defines what
+the search computes, and names the code that computes each part
+([proofs/lean/README.md](../../proofs/lean/README.md#the-liveness-searches)):
+
+- A real edge from `r` to a concrete successor `t ≠ r` takes `(r, b)` to `(can(t), π(t)(b))`
+  (`REdge`, `pn`). The goal-free pairs and the real edges between two of them form a graph
+  (`PN`, `PEdge`). Its components are the sets of mutually reachable pairs (`SameP`).
+- A thread node `(u, x)` is a pair `u` and a fair instance `x`. An edge along `t` inside the
+  component takes it to `(pn(t)(u), π(t)(x))` (`TEdge`). A *piece* is a component of that graph
+  with the direction of its edges forgotten (`Conn`). A node is *covered* when its instance is
+  not enabled at its stored state, or an edge of the component from it takes its instance
+  (`Covered`).
+- A component is *fair* when it has a cycle (a second pair, or a pair with an edge to itself,
+  `Candidate`) and every piece holds a covered node (`FairPComp`). A *stop pair* is goal-free,
+  has no fair instance enabled, and meets the stop rule (`PStop`).
+- The search *accepts* when a stored pair where the trigger holds and the goal fails reaches, by
+  pair edges, a stop pair or a pair of a fair component (`OAccepts`).
+
+**Theorem A23 for the search.** Assume the hypotheses of A23, a finite list of the fair instances
+enabled at each state, and a stored graph that is the complete run of the quotient. Then the
+search accepts iff some binding has a behaviour of `T` that satisfies `Fair_P`, stops only where
+the rule allows, and violates the property (`SearchSym.lean::oAccepts_on_iff`). That holds iff
+N9's search on `T` accepts for some binding (`SearchSym.lean::oAccepts_on_iff_accepts`). So the
+property holds for every binding iff the search does not accept
+(`SearchSym.lean::liveHolds_iff_not_oAccepts_on`), iff no annotated lasso as in A23 violates it
+(`SearchSym.lean::not_oAccepts_on_iff_lassos`). With A18 from (G1)–(G6), this is
+`SymActSearch.lean::orbit_verdict` (and `SymActSearch.lean::orbit_verdict_wfNext` under
+`WF_vars(Next)`).
+
+*Proof.* The theorems named are those of `proofs/lean/RdraIsh/SearchSym.lean` unless stated
+otherwise.
+
+1. *Restriction* (`quotient_restrict_W`, `restrict_rEdge_iff`, `restrict_lists`). The search runs
+   on `T|W`. Its stored states lie in `W`, since each is an image of a reachable state and `W` is
+   closed under every `G_s`. From a state of `W`, `T|W` has `T`'s real edges and `T`'s enabled and
+   taken instances (A23, step 1). The lists of reachable states and enabled instances given for
+   `T` serve `T|W`. Steps 2 to 5 take the commutation on every state, on `T|W`.
+2. *A thread edge can be walked back* (`TEdge.reverse`, `Conn.star`). Let a thread edge go from
+   `a` to `b` inside a component. The pairs of `a` and `b` lie in that component, so a path of
+   pair edges leads back from the pair of `b` to the pair of `a`. The edge and that path close a
+   walk at the pair of `a`. As on a quotient cycle, the composite permutation `P` of the walk lies
+   in the group of the stored state of `a`, and some `P^d`, `d > 0`, acts as the identity on
+   instances. So `d` rounds of the walk, followed from `b`, bring the thread back to `a`. A piece
+   is therefore strongly connected: from each node of a piece a path of thread edges reaches every
+   other node.
+3. *(⇐) An accepted pair gives a fair violating behaviour* (`Candidate.cycle`,
+   `FairPComp.cover_one`, `FairPComp.cover`, `run_of_parts`, `behaviour_of_oAccepts`). Let a
+   stored pair `s`, where the trigger holds and the goal fails, reach an end `e` by pair edges.
+   - If `e` is a stop pair: take the stored path to the state of `s`, the pair path to `e`, and
+     a stutter at `e` forever. The run violates the property, since the binding the trigger holds
+     for moves along goal-free pairs. It is thread-fair, since from some point it stays at `e`,
+     where no fair instance is enabled. It stops only at `e`, where the rule holds.
+   - If `e` lies in a fair component: for a pair `u` of the component and an instance `y`, the
+     piece of `(u, y)` holds a covered node. By step 2 a path of thread edges reaches that node.
+     A walk inside the component follows the path, then the covering edge or a closed walk (the
+     component has a cycle), then returns to `e` (`FairPComp.cover_one`). Take the finite list of
+     the instances enabled at the stored state of `e`. One such walk per instance on the list,
+     each starting where the previous walks left that instance's thread, is a closed walk at `e`
+     with at least one edge. On it the thread of every instance enabled at `e` is covered
+     (`FairPComp.cover`). This is the one use of the list of enabled instances. The run repeats
+     that loop forever. At the start of each round every thread is at `e`, with some instance. If
+     that instance is not enabled there, the thread is covered at once; if it is enabled, the
+     thread is covered within the round. So a thread enabled forever is taken infinitely often,
+     and the run is thread-fair. It never stutters forever, and it stays in goal-free pairs.
+   - The parts form an annotated run (`run_of_parts`). Step 6 of A23 lifts it to a fair violating
+     behaviour of `T` (`SymmetryLiveness.lean::a23_lift`).
+4. *(⇒) A fair violating behaviour makes the search accept* (`skipFrame`, `skipFrame_mem`,
+   `oAccepts_of_lasso`, `oAccepts_of_behaviour`). Fold the behaviour into a lasso `c` (A23,
+   step 7), violating for `b_0`. Take frames that stay put on a stutter: `Θ_0 = π(c_0)`;
+   `Θ_{n+1} = Θ_n` when `c_{n+1} = c_n`, else `π(Θ_n(c_{n+1})) Θ_n`. Then `Θ_n ∈ G_{c_n}`, as
+   in A23's step 5. The pairs `P_n = (Θ_n(c_n), Θ_n(b_0))` are stored pairs. They are equal
+   across a stutter, and joined by a pair edge across a move: the edge is real, by the
+   injectivity of `apply`. From the violation on they are goal-free, by (LiveEqui) on
+   `after(b_0)`. They repeat, since the frames at the base state of the lasso lie in one finite
+   group, as in A23's step 7. Two cases remain:
+   - If the lasso settles at `c_A`, then `P_A` is a stop pair. An instance enabled at `c_A` would
+     be enabled forever and never taken, since a stutter takes nothing, against `Fair_P`. The
+     stop rule holds at `c_A`, and so at its image.
+   - Otherwise the repeated pairs lie in one component, which has a cycle. Take a node `a_0` of a
+     piece. Its pair lies in the component, so a path of pair edges leads from it to `P_A`. That
+     path carries `a_0` by thread edges to a node `(P_A, Θ_A(f))` of the same piece. Along the
+     lasso from `A`, the thread of `f` moves by thread edges inside the component, so it stays in
+     the piece. If no node of the piece were covered, then by step 2 of A23 at each frame, `f`
+     would be enabled at every `c_m`, `m ≥ A`, and never taken, against `Fair_P`. So the
+     component is fair.
+
+   The pair at the violation reaches `P_A` by pair edges along the lasso.
+5. *Verdicts* (`oAccepts_iff`, `oAccepts_iff_accepts`, `not_oAccepts_iff_lassos`, and their `_on`
+   forms). Steps 3 and 4 give the first equivalence. `Search.lean::accepts_iff` (N9) gives the
+   second. Theorem A23 gives the last. ∎
+
+*The code's pieces* (`threadsCovered_iff`, `fairPComp_iff_code`).
+`explore/orbit/liveness.rs::Product::threads_covered` builds the pieces with union-find over the
+nodes of enabled instances only. It marks a node in three cases: an edge of the component takes
+its instance; an edge goes from it to a node whose instance is not enabled; or an edge comes into
+its pair from a pair where no enabled instance moves to its instance. This is the criterion of
+the search. Take an enabled node of a piece that holds a covered node. Either the path to that
+node stays among enabled nodes and ends at an edge that takes its instance, or the path leaves
+the enabled nodes at an edge whose enabled end the code marks in its second or third case.
+Conversely, each mark of the code is a covered node of the full thread graph, or one edge away
+from one.
+
+*Read from the code, not derived.* The theorem states the search's acceptance criterion on a
+complete graph. These steps from it to the code are read from the code:
+
+- Tarjan's algorithm (`explore/graph.rs::Adjacency::components`) computes the sets of mutually
+  reachable pairs.
+- The graph is complete. N10's cut at `expanded` on a capped graph is not modelled.
+- `OrbitRun::is_real` is `REdge`'s `t ≠ r`. `explore/probe.rs::Probe` classifies a move as a
+  stutter (`Loop`) exactly when its successor is its source, and as an orbit self-edge
+  (`OrbitSelf`) when its canonical form is the source.
+- The permutation the run stores for an edge is `π(t)` of the edge's concrete successor
+  (`RunOf`), and `Canon::canonical` is a function of the state.
+- The bit sets and sorted lists that hold `always`, `taken` and the enabled instances, and the
+  choice of binding and start, are not modelled: the verdicts quantify over all.
+- The counterexample the code builds (the walk, the fair loop, the lasso lift and its
+  `MOST_COPIES`) is not modelled. It certifies itself at run time (N11, N16).
+
+The orbit search on a reduced cone, and the run of `S` up to `H` (A22), are not modelled.
+
+**The entity-cone findings up to symmetry (P-sketch).**
+`explore/orbit/findings.rs::OrbitRun::state_model_findings` reads the witnesses, the runs and
+the never-runs off stored states and action labels, as a plain run does. A18 makes those the
+same on every member of an orbit. A `.when` arm compares a slot across an edge, so it reads the
+edge's concrete successor: the stored target taken back through the edge's permutation. The
+deadlock pass follows one slot along paths, so it runs on (stored state, slot) pairs, with the
+edge's permutation `σ` taking slot `j` of the concrete successor to slot `σ(j)` of the stored
+target. A slot is a binding of one row. Steps 3 to 5 of A23, with a slot in place of a binding,
+carry each pair of the plain pass to a pair of the stored graph through the frames, and back. One
+step is not derived: that the deadlock criterion of the pass (an instance stuck at a value, its
+exits and what blocks each) reads the same on `(s, j)` and `(g(s), g(j))`, as (LiveEqui) asks of a
+trigger and a goal, so that the pairs pass finds a deadlock exactly at the images of the plain
+pass's. No theorem states it, and the Lean model has no deadlock pass.
+
+*Evidence for A23.* For liveness, P-full relative to (Sym), (SymLive), (LiveEqui), (Canon),
+(Finite), the list of enabled instances and the complete graph, by the two proofs above. For the
+entity-cone findings, P-sketch. M:
+- The Lean proofs named in each step. `SymmetryLiveness.lean::a23_on` and
+  `SearchSym.lean::liveHolds_iff_not_oAccepts_on` take the commutation on `W` only, and
+  `SymActSearch.lean::orbit_verdict` composes them with A18 from (G1)–(G6), so no commutation
+  outside `W` is assumed.
+  - `ExampleSymLive` (`SymmetryLivenessExample.lean`) discharges every hypothesis on two
+    interchangeable instances. Its quotient cycle has the swap as its composite and closes after
+    two copies. `SearchExample.lean` runs the search on it.
   - `ExampleReachOnly` is a system with commutation on its reachable states whose canonical
     quotient reaches a state its plain run does not.
-  - `proofs/lean/RdraIsh/SearchSym.lean` proves the search above: it accepts iff some binding has
-    a fair violating behaviour (`oAccepts_iff`), iff N9's search on the plain system accepts
-    (`oAccepts_iff_accepts`), so its verdict is `a23`'s quotient side
-    (`not_oAccepts_iff_lassos`). It adds one hypothesis to `a23`'s: the fair instances enabled
-    at each state lie in a list. With the commutation only on the set `W`
-    (`SymOn`), the search runs on the system restricted to `W`, which holds every stored state
-    and has the plain system's edges there, and its verdict is the plain system's
-    (`liveHolds_iff_not_oAccepts_on`, `oAccepts_on_iff_accepts`).
-    `proofs/lean/RdraIsh/SymActSearch.lean::orbit_verdict` composes this with A18 from (G1)–(G6):
-    on the slot-level model the orbit search's verdict is the plain one, with no commutation
-    assumed outside `W`. `TEdge.reverse` walks a thread edge back, and `threadsCovered_iff`
-    equates the code's union-find with the pieces. `SearchExample.lean` runs the search on
-    `ExampleSymLive`.
-  - The proof covers liveness and not the entity-cone findings, and does not read the code.
+  - The proofs cover liveness, not the entity-cone findings, and do not read the code.
 - The twins `Twin::OrbitLiveness` and `Twin::OrbitStateModels`. `Twin::OrbitLiveness` compares
   with the plain run's search, so it checks the quotient, not the fair-component rule, as its
   description says.
@@ -1655,11 +2229,14 @@ self-edge stands for a concrete cycle inside its class and marks it (Definition 
 `core/tests/reduce.rs::reduced_cones_up_to_h_decide_what_the_cones_decide`,
 `cli/tests/engine_corpus.rs::each_h_reason_a_case_shows_has_a_witness` (shadow builds only).
 
-*Evidence for A18.* P-full given (G1)–(G6) and the two facts of the builder. M: the Lean proof
+*Evidence for A18.* P-full given (G1)–(G6) in the form `breaks.rs::scan` states them, `WF`,
+and the two facts of the builder (`Built`), by the proof above. Three of its parts are paper
+only: the step on least depth, (G6) outside guards, and a guard's read of a `New` row's owner
+whose parent's class does not move. M: the Lean proof
 `proofs/lean/RdraIsh/SymActions.lean::step_comm` derives the commutation on `W` over a slot-level
 model of the cone system. In that model (G1)–(G4) and (G6) are conditions on the syntax of guards
-and effects, as `breaks.rs::scan` states them, (G5) is the semantics of a delete, and the two
-facts of the builder are hypotheses. `symOn` gives the `SymOn` that A23 assumes, and
+and effects, as `breaks.rs::scan` states them, (G5) is the semantics of a delete, and `WF` and
+the two facts of the builder are hypotheses. `symOn` gives the `SymOn` that A23 assumes, and
 `a18_holds_iff` the verdict of an invariant `G_s` preserves on the canonical quotient. The same
 model, read as an action model (`proofs/lean/RdraIsh/SymActModel.lean::model`), meets the
 locality `Local` that Lemmas 5 and 6 assume (`local_`). The model
@@ -1844,9 +2421,11 @@ Evidence: none beyond the reading of `escalate` and the guide.
   every build certifies on the partition it uses (that the check gives (B1)–(B3) is proved in
   Lean over a model of it, `proofs/lean/RdraIsh/Sweep.lean::stable_of_cert`, given that the
   run is `X`'s reachable graph and that `stuttering_blocks` marks what the model marks); and
-  on Lemma 6, argued over a reading of
-  the code and proved in Lean only over an action model of the cone and `X`, from
-  hypotheses read from the code. Its fold half is checked against the cone's step relation on the
+  on Lemma 6, proved step by step and in Lean from the sixteen fields of `Lemma6Hyp`, of which
+  `kept_rd`, `rise_eff`, `folded_og`, `exact`, `folded_names`, `other_names`, `eff_names`,
+  `eff_s` and half of `cover` are read from the code and checked by no run, and the part of
+  `local_`, `shape` and `new_writes` that ties the slot model to the code's actions is read too.
+  The nested case of Lemma 6 and Theorem A8 is sketched. Its fold half is checked against the cone's step relation on the
   domain samples and the built models only; its parameter matrix is checked cell by cell on
   built models, with three reachable cells that no model fills; and its parameters on a stub
   also on two corpus cases. Among those verdicts are the printed `ok` of a property's `Plain` run (A5.1) and of a

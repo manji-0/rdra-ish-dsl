@@ -298,6 +298,25 @@ jobs:
           python3 -I scripts/reduction-diff.py lemma6 --profile ci-checked --min-reduced 300 \
             --seeds @scripts/reduction-diff-pr-seeds.txt
         timeout-minutes: 15
+      - id: elan
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: elan-4.3.0-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('proofs/lean/lean-toolchain') }}
+      - name: Install elan
+        if: steps.elan.outputs.cache-hit != 'true'
+        run: curl -sSfL https://raw.githubusercontent.com/leanprover/elan/v4.3.0/elan-init.sh | sh -s -- -y --default-toolchain none
+      - name: Every top-level split passes the Lean-checked Lemma 5, every flat run of X its partition check
+        # scripts/check-lean-certificates.sh dumps each split `split_with` returns (the ignored
+        # core test `dump_lemma5_certificates`, built with ci-checked as the Lemma 6 step built
+        # it), builds the checker whose soundness proofs/lean/RdraIsh/Lemma5Check.lean proves,
+        # runs it, and sees each planted fault rejected. It then runs
+        # scripts/check-lean-partitions.sh, the same for each flat run of X the reduction
+        # partitions (`dump_partition_certificates`; PartitionCheck.lean): (B1)-(B3), the
+        # representatives and X's shape. Only elan's wrappers go on PATH: the
+        # toolchain's own bin holds a clang and a linker that break cargo's link.
+        run: PATH="$HOME/.elan/bin:$PATH" scripts/check-lean-certificates.sh --profile ci-checked
+        timeout-minutes: 10
       - name: Reduced and unreduced verify agree on random models with params on a stub
         # `--stubs` draws models whose reduction binds a param on a stub to any slot
         # (`bind_stub_params`, claims A8 and T9): a folded S action's `Triggered` param, and a

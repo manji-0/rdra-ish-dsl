@@ -17,12 +17,16 @@ the cone by its actions
 commutation over a model of the cone by its slots
 ([Theorem A18 over slots](#theorem-a18-over-slots)). The action model of Lemmas 5 and 6 is
 read off that slot model, and `Local`, a hypothesis of both lemmas, is derived from its syntax
-([One model of the actions](#one-model-of-the-actions)). N9 of
+([One model of the actions](#one-model-of-the-actions)), and so are Lemma 6's other
+hypotheses but Lemma 5 (a)(b), the split's inputs and step (a)
+([Lemma 6's hypotheses from the syntax](#lemma-6s-hypotheses-from-the-syntax)). N9 of
 [native.md](../../docs/theory/native.md#the-check), the liveness search by fair components,
 and the same search on the pairs of a run up to symmetry are stated over abstract
 transition systems too ([The liveness searches](#the-liveness-searches)). None of them reads
-the Rust code. One executable, `lemma5-check`, checks the sets the code computes against
-Lemma 5 ([Checking the code's sets with Lean](#checking-the-codes-sets-with-lean)).
+the Rust code. Two executables check what the code computes
+([Checking the code's sets with Lean](#checking-the-codes-sets-with-lean)): `lemma5-check`
+checks the sets of each split against Lemma 5, and `partition-check` checks each partition
+of a flat run of `X` against (B1)–(B3) and the run against the shape of `X`.
 
 ## Building
 
@@ -227,8 +231,9 @@ The proofs assume the following hypotheses and do not derive them:
     finite and, at each state, the fair instances enabled there in a list (`hΦ`); the code
     keys a finite set of instances (`Product::keys`).
   - The canonical form is a `Canon`: `can s = π(s)(s)` with `π(s) ∈ G_s`.
-  - The orbit search takes the commutation on every state (`Sym`); no theorem states it over
-    `SymOn`, as `a23_on` does for `a23`.
+  - The orbit search's theorems take the commutation on every state (`Sym`); their `_on`
+    forms (`oAccepts_on_iff`, `not_oAccepts_on_iff_lassos`) take it on a closed set `W` only
+    (`SymOn`), as `a23_on` does for `a23`.
 - **The fairness model** (`Behaviour.lean`). A fair instance is a set of `T_a` labels (fair
   actions are `T_a` actions, Lemma 5 (e), assumed by giving instances on `Ta` only). A step
   takes an instance only when it changes the state (assumption τ of native.md). Behaviours
@@ -240,7 +245,10 @@ The proofs assume the following hypotheses and do not derive them:
   `quotient_blocks`, `Group::apply` or `Canon::canonical`.
   - Lemma 6 is proved over the action model, whose `X` is built as `Extended::build` builds
     it. The fields of `Lemma6Hyp` are read from the code, and the model leaves out what
-    [below](#what-the-lemma-6-model-leaves-out) lists. Reading the builder itself would need
+    [below](#what-the-lemma-6-model-leaves-out) lists. Over the slot model, `fold_of` and
+    the conjuncts `restrict_to` keeps are modelled on the syntax, and every field but
+    Lemma 5 (a)(b) and step (a) is derived ([below](#lemma-6s-hypotheses-from-the-syntax));
+    that those models are the code's is read from it. Reading the builder itself would need
     a deep embedding of it.
   - (G1)–(G6) are stated over a slot-level model of the code's syntax
     ([below](#theorem-a18-over-slots)). That the model's `act`, hypotheses and effects are
@@ -252,7 +260,10 @@ The proofs assume the following hypotheses and do not derive them:
     That the run the check reads is `X`'s reachable graph (`Sweep.Complete`), that the
     depth-first marking of `partition/reference.rs::stuttering_blocks` computes
     `Sweep.Marked`, and that the fallback partition of `partition/reference.rs::quotient_blocks`, used without the check,
-    meets `Sweep.Cert` when the sweeps stop are read from the code.
+    meets `Sweep.Cert` when the sweeps stop are read from the code. On the flat runs of the
+    samples, the domain samples and the corpus, `partition-check` checks the partition the
+    code uses, whichever of the two it is, and the shape of the run
+    ([below](#the-partitions-and-the-shape-of-x)).
 - **A8, the rest of the theorem.** The proofs leave out these parts:
   - The rises carry no `stands`. Consequences 2 to 4 read only the `T_a` labels of `C` and
     `R`, and `R`'s `T` move reads a rise only through the input bytes it ends at.
@@ -286,8 +297,10 @@ The proofs assume the following hypotheses and do not derive them:
   - The folds. Their effect is inside the step relations that Lemma 6 relates. Lemma 5
     (c)–(e) are derived over the action model with `FoldData`
     ([below](#definition-3-and-lemma-5-over-actions)). Lemma 6's model reads a param fold's
-    bit and takes `Fold::holds` computing it exactly as the hypothesis `Lemma6Hyp.exact`;
-    node folds and groups of folds that share a bit are not modelled. Lemma 5 (e) enters
+    bit and takes `Fold::holds` computing it exactly as the hypothesis `Lemma6Hyp.exact`.
+    Over the slot model `exact_holdsB` proves it for the bit `holdsB` that the fold's
+    conditions define, so what is read from the code is that `holds_fast` computes
+    `holdsB`. Node folds and groups of folds that share a bit are not modelled. Lemma 5 (e) enters
     `a15` and `a8_plain_iff` as fair instances given on `T_a` labels.
 - **A15, the rest of the theorem.**
   - The run's search is the abstract one of
@@ -365,8 +378,8 @@ Not modelled:
   edge's concrete successor; the code reads the permutation it stored for the edge
   (`perms.id(k)`), which the annotated run sets to `π(t)` (`RunOf`).
 - A real edge. `REdge` asks `t ≠ r`; `is_real` asks that the stored target differ from `r` or
-  that the edge be an orbit self-edge. The two agree when every stored state is its own
-  canonical form, which `Canon` does not assume.
+  that the edge be an orbit self-edge. No theorem here shows that the two agree; cones.md
+  lists their agreement among the facts read from the code.
 - The counterexample the code builds (`walk`, `fair_loop`, the lasso lift and its
   `MOST_COPIES`): the proofs build their own lasso, and the code's certifies itself at run
   time (N11).
@@ -490,9 +503,11 @@ with the inputs of `S` on and off (the walk of `every_split_passes_its_check`):
 
 The dump has about 500 distinct certificates, about half of them with an `S` side, at most
 34 variables and 46 actions each, about 200 KB in all. Once the Rust test binary and the
-Lean project are built, the script takes about 3 seconds, and `lemma5-check` itself takes
-0.03 s of CPU. A cold run adds the build of rdra-ish-core's test binary. CI does not run
-the script.
+Lean project are built, this part takes about 3 seconds, and `lemma5-check` itself takes
+0.03 s of CPU. A cold run adds the build of rdra-ish-core's test binary. The script then runs
+`scripts/check-lean-partitions.sh`
+([below](#the-partitions-and-the-shape-of-x)). CI's `formal-verify` job runs both, with the
+`ci-checked` test binary it has already built.
 
 | Lean (`RdraIsh.`) | File | Claim | Statement |
 |---|---|---|---|
@@ -520,35 +535,98 @@ An accepted dump does not establish these:
   input.
 - **The tools.** The Lean compiler, `Lean.Json` and the Rust dump are trusted.
 
-### The same pattern for (B1)–(B3) and the shape of `X`
+### The partitions and the shape of `X`
 
-No checker exists for these. The pattern carries over as follows.
+<!-- constrained-by #the-partition-certificate-and-monotone-variables -->
 
-- **The data.** The certificate would carry what `partition/reference.rs::stable` reads: the
-  number of states of `X`, its silent edges and its rises as pairs of state numbers, the
-  initial labels (`Partition::initial`, each state's `obs` and inputs, numbered), and the
-  blocks. It would add the representative of each block. For (B1) to be checked rather than
-  read from the numbering, and for `Extended`, it would also give each state's `obs` values,
-  `S` values and input bytes, so that a check can test that a block agrees on `obs` and the
-  input bytes, a silent edge keeps the input bytes, and a rise keeps `S`.
-- **The checker.** It would test four things: that the blocks refine the labels (B1); that
-  one sweep with every block a splitter splits nothing (B2); that the states of a block
-  enter the same set of blocks by a rise (B3); and that each representative lies in its
-  block.
-- **The Lean statement.** The targets are `Reduction.lean`'s `Stable` and `Extended`, over
-  the system whose states are `Fin n` and whose steps are the listed edges, with `Reach`
-  being reachability from the listed initial states.
-- **The bridge.** The unverified step becomes "the dumped graph is `X`'s reachable graph",
-  where for Lemma 5 it is "the dumped sets are the cone's reads and writes".
-- **The cost.** The certificate grows with the states of `X`, not with its variables and
-  actions. The largest quotient `verify` computes on the samples has about 2.2 million
-  states, so a certificate takes megabytes, and the checker needs arrays rather than the
-  lists `check` uses. The step from the check to `Stable` is proved
-  ([below](#the-partition-certificate-and-monotone-variables)): `Sweep.stable_of_cert` takes
-  the check over a numbered run, `Sweep.check_sound` proves a Boolean checker over lists sound
-  for it, and `Sweep.b2_of_marking` reduces (B2) for any marking a faster checker computes to
-  three facts: it lies inside `Sweep.Marked`, it is closed under the two rules, and it is all
-  or none on each block.
+```sh
+scripts/check-lean-partitions.sh
+```
+
+The script checks every partition `Classes::of_graph` computes on a flat run of `X` (no
+inner reduction, not up to `H`) while the cones of the samples, the domain samples and the
+engine corpus cases that build a model are reduced, at `Bounds::STATES` and
+`Bounds::VERIFY`. That is the walk of `every_quotient_passes_the_checks_of_its_hypotheses`,
+with each run of `X` capped at `RDRA_LEAN_RUNS_CAP` states (200,000 by default).
+
+1. The ignored Rust test `dump_partition_certificates` turns on a record that only a test
+   build compiles (`partition/dump.rs`), called from `Classes::of_graph` once the partition
+   is certified (or replaced by the sweeps' partition). It writes one record per distinct
+   run, in lines of numbers:
+   - each state's `obs` value, its `S` value (every variable of `X` outside the inputs) and
+     its input bytes, each value numbered as it first shows;
+   - each state's class, numbered as `of_graph` numbers the classes;
+   - each class's representative (`Classes::reps`);
+   - the initial states, the silent edges and the rises (`split_edges`).
+
+   It counts the runs it leaves out, by reason: a run of an `X` under its own inner
+   reduction, whose states are inner classes; a run up to `H`, whose states are orbits; a
+   partition that is the identity, which `of_graph` turns down before it numbers classes; a
+   run the cap stopped, which is never partitioned; and an unobserved `S`, which is never
+   explored.
+2. `lake build` checks the soundness proof below and builds the executable
+   `partition-check` (`PartitionCheckMain.lean`). It runs `PCert.Data.check`
+   (`RdraIsh/PartitionCert.lean`) on each record, over arrays, and fails unless it accepts
+   all of them. `check` computes a witness and tests it with `validate`. The witness code is
+   not trusted, because the theorems hold for any witness `validate` accepts. The parts are:
+   - **well-formed**: each class number and each state number in range;
+   - **rep**: each class's representative lies in the class;
+   - **b1**: each state has its representative's `obs` value and input bytes;
+   - **b2**: each silent edge between two classes enters an exit listed for its source's
+     class, and each state reaches each exit of its class through the class, by a successor
+     of lower rank for each state and exit;
+   - **b3**: the classes each state enters by a rise, each listed class witnessed by a rise
+     and each rise by a listed class, are its representative's;
+   - **silent keeps inputs** and **rise keeps S**: the shape of `X`;
+   - **reach**: every state has an edge from a state of lower rank, or is initial.
+3. Eight faults are planted in copies of the dump, one per part. Each must be rejected, and
+   the rejection must name its part:
+   - a state given an `obs` value of its own (b1);
+   - two classes with the same `obs` and input bytes merged where the merge splits (b2);
+   - a rise added into a class the rest of its class does not enter (b3);
+   - a representative moved into another class (rep);
+   - a silent edge sent to a state with other input bytes;
+   - a rise sent to a state of the same class with another `S`;
+   - the initial states dropped (reach);
+   - a class number out of range (well-formed).
+
+The walk partitions 182 flat runs, 60 of them distinct, 344,409 states in all, the largest
+85,154. It leaves out 78 nested runs, 24 identity partitions, 36 runs stopped at the cap and
+6 unobserved sub-lifecycles; no run is up to `H`. The dump is about 27 MB, most of it
+silent edges. `partition-check` takes 1.0 s of CPU on it. In a `ci-checked` build the dump
+takes about 7 s, and the walk peaks at about 2.9 GB of memory; a debug build is much slower
+(about 170 s), so `RDRA_LEAN_RUNS_CAP=50000` suits a quick local run.
+
+| Lean (`RdraIsh.`) | File | Claim | Statement |
+|---|---|---|---|
+| `PCert.cert_of_validate` | `PartitionCheck.lean` | A8, (B1)–(B3) | For any witness that `validate` accepts, the record's partition passes `Sweep.Cert` on the run `Data.run`, whose labels are the `obs` value and the input bytes. |
+| `PCert.marked_of_exit`, `PCert.b2_of_check` | `PartitionCheck.lean` | A8, (B2) | A state whose class lists the splitter as an exit is `Sweep.Marked`, by induction on the rank of its successor. The marking "the class lists the splitter" is closed and all or none on each class, so `Sweep.b2_of_marking` gives the certificate's (B2). |
+| `PCert.enters_rep` | `PartitionCheck.lean` | A8, (B3) | Each state enters by a rise exactly the classes its representative enters. |
+| `PCert.reach_of_check`, `PCert.complete_of_check` | `PartitionCheck.lean` | A8, `Sweep.Complete` | Given `Graph` and `Faithful`, every numbered state of an accepted record is reachable, and the record's run is `Sweep.Complete`. |
+| `PCert.stable_of_check` | `PartitionCheck.lean` | A8, (B1)–(B3) | Given `Graph` and `Faithful`, an accepted record's partition is `Stable`, with the dumped representatives. |
+| `PCert.extended_of_check`, `PCert.reach_onReach` | `PartitionCheck.lean` | A8, the shape of `X` | Given `Graph` and `Faithful`, the steps of `X` from its reachable states (`onReach`, which has the reachable states of `X`) are `Extended`: a silent edge keeps the input bytes, a rise keeps `S`. |
+| `PCert.graph_onReach`, `PCert.onReach_of_check` | `PartitionCheck.lean` | A8, (B1)–(B3) and the shape of `X` | An accepted record's run is a run of `onReach X` too, so `onReach X` has both a `Stable` partition, with the dumped representatives, and `Extended`, the two hypotheses of A8 the record bears on, for one system. Lemma 6 for `onReach X` is not derived here. |
+| `PCert.wf_of` | `PartitionCheck.lean` | none | The bounds the well-formed part checks. |
+
+An accepted dump does not establish these:
+
+- **`PCert.Graph`.** That the numbering is a bijection onto a set that holds every
+  reachable state of `X`, that the silent edges and the rises are exactly those of `X` from
+  reachable states, and that the listed initial states are initial, are read from the dump
+  code and the explorer: the dump writes the run's states in the order the run holds them,
+  and `split_edges` of the run's graph. That every numbered state is reachable is checked
+  (reach).
+- **`PCert.Faithful`.** That equal numbers in a record mean equal `obs` values, `S` values
+  and input bytes is read from the dump code, which numbers each projection as it first
+  shows.
+- **The runs left out.** Nested runs, runs up to `H`, runs past a cap, and every run outside
+  this walk, user runs among them, are not checked. The shape is checked on the reachable
+  part of `X` only: a step from a state no run reaches is not seen.
+- **The tools.** The Lean compiler, the Rust dump and the line parser of
+  `PartitionCheckMain.lean` are trusted. `check` is ordinary compiled code that the kernel
+  never evaluates on the dump. `PartitionCheckMain.lean`
+  imports `PartitionCert.lean`, and `PartitionCheck.lean` proves the theorems of the `check`
+  defined there.
 
 ## Definition 4 and Lemma 6 over actions
 
@@ -626,6 +704,10 @@ Each field is a fact about one action, read from the code:
   action, `Local` and Lemma 5 (c) give it.
 - `bind`: `bind_stub_params` runs.
 
+Over the slot model of [Theorem A18 over slots](#theorem-a18-over-slots), every field but
+`lemma5` and `exact` is derived from the syntax, and `exact` from a bit the syntax defines
+([Lemma 6's hypotheses from the syntax](#lemma-6s-hypotheses-from-the-syntax)).
+
 ### What the Lemma 6 model leaves out
 
 - **Initial states.** `X`'s initial states are the projections of the cone's. That
@@ -696,8 +778,11 @@ from (G1)–(G6). The model (`SymAct.Sys`):
   not written from the slot of a class that moves. (G3): an identity start couples its child
   and parent classes, and a pre-existing row's owner starting at its base names no row. (G4):
   a creation writes every owner of the created row whose base names a row. (G6): no guard
-  reads an owner on a `New` parameter in the pre-state. Each condition also holds when the
-  class it names does not move, which is how the scan's leaving a class out enters.
+  reads an owner on a `New` parameter in the pre-state. (G1)–(G4) also hold when the class
+  they name does not move, which is how the scan's leaving a class out enters them. (G6) does
+  not mention the group: the scan forbids the read only when the parent's class moves, so a
+  model whose parent class the scan leaves out is outside `Hyp`, and cones.md argues that case
+  on paper (Theorem A18, step 4).
 - **(G5)** is the semantics: a delete resets the row's columns (not its run marks) and keeps
   its owners.
 - **Guards only.** Invariants, `after` assertions and properties are not in the model, so
@@ -764,11 +849,89 @@ Lemmas 5 and 6 assume. What stays outside:
 - A `Triggered` parameter's existence counts as read. The code counts it only when the
   parameter's mark guard is found (`triggered_params`). A larger `rd` keeps `Local` and can
   only grow `T`.
-- The fields of `Lemma6Hyp` besides `local_`, `shape` and `new_writes` concern the split, the
-  folds and `X` (`Ext`), which the slot model does not build. They stay hypotheses, and so do
-  `FoldData` and `mono` for Lemma 5 (c)–(e).
+- `Lemma6Syntax.lean` builds the split's `X` (`Ext`) from the slot model and derives the
+  other fields of `Lemma6Hyp` but `lemma5` and `exact`
+  ([Lemma 6's hypotheses from the syntax](#lemma-6s-hypotheses-from-the-syntax)).
+  `FoldData` and `mono` for Lemma 5 (c)–(e) stay hypotheses.
 - `Local` is proved for the slot model as it stands, with the differences from
   `each_successor` that [Theorem A18 over slots](#theorem-a18-over-slots) lists.
+
+## Lemma 6's hypotheses from the syntax
+
+<!-- constrained-by #definition-4-and-lemma-6-over-actions -->
+<!-- constrained-by #one-model-of-the-actions -->
+
+`Lemma6Syntax.lean` builds the data `Ext` of Definition 4 from a slot system `SymAct.Sys`, its
+lists and a split (`SymAct.Sys.ext`), and derives the fields of `Lemma6Hyp` from the syntax
+(`SymAct.Sys.lemma6Hyp`). The model:
+
+- **What the syntax names** (`predPs`, `predNext`, `effPs`): the parameters a predicate's
+  terms name (`named_params`), whether a predicate reads the successor (`Pred::reads_next`),
+  and the parameters an effect names, its row and the row a column or an owner is set from
+  (the touched parameters of `fold_of`). A predicate depends on the binding only at the
+  parameters it names, and not on the successor when it reads none. The successor depends on
+  the binding only at the parameters the effects name, and on the choices.
+- **`fold_of`** (`foldKey`). An action with a `T` parameter folds when every guard that names
+  one reads no successor, and either reads `T_v` alone (a folded guard) or is a link
+  `v[k] = Index(p)`, with `v` in `S_v`, `k` not a `T` parameter and `p` one (`linkOf`). The
+  key is the first `T` parameter an effect or a link names, else the `S` parameter the folded
+  guards name, else the first `New` or `Existing` parameter. No effect or link names a `T`
+  parameter but the key, no folded guard names an `S` parameter but the key, and the key is
+  not `New` (`foldOk`). These are the code's tests: a touched or linked parameter is a `T`
+  one and an `S` key is not, so "each one is the key" is "at most one of each, and not a
+  link and an `S` key together".
+- **The folds the split keeps** (`keyOf`): an `S_a` action's fold that `fold_initial` gives
+  a start (`Cut.sel`, left open, as initial states are not modelled) and whose key
+  `restrict_to` keeps (`Fold::key_kept`, `keepsP`).
+- **A fold's conjuncts** (`foldedC`): the slot bounds of the `T` parameters and of the key,
+  and the folded guards. The key's bound makes the bit false past the key's slots.
+- **The kept conjuncts** (`keptOg`): the conjuncts of `og` that read only `S_v ∪ inputs` and
+  name no parameter the restriction drops. `keepsP` is `keeps_param` with havoc off: a `New`
+  parameter is kept when its existence is, any other when its entity's existence is or the
+  entity is a stub, the parent of a kept owner (`stubE`). The picks conjunct stands for the
+  choice effects and names what the effects name.
+- **The raw reads** (`rawRd`, `raw_reads`): an unfolded action's reads, and a folded action's
+  reads outside its `T` parameters' existences and its folded guards.
+
+`SymAct.Sys.Inputs` states what the split and its inputs give besides Lemma 5 (a)(b):
+
+- `col_side`: a column of an entity whose existence is in `T_v` is in `T_v`. This is the side
+  rule of Definition 3: `split_faults` checks it, and `Closed` gives it (`inputs_of_closed`).
+- `inputs_col`: the existence of a column's entity is an input when the column is.
+  `split_with` adds the existences of every input.
+- `raw`: the raw reads of an `S_a` action are in `S_v ∪ inputs`. `split_with` takes the raw
+  reads of `T_v` as inputs, and `split_faults` checks them. Lemma 5 (c) with the folds' reads
+  follows (`rd_split`).
+
+`split_faults` checks `col_side` and `raw` at run time; the certificate that `lemma5-check`
+reads holds neither, and `inputs_col` holds by the construction of the inputs alone.
+
+| Lean (`RdraIsh.`) | File | Claim | Statement |
+|---|---|---|---|
+| `SymAct.predPs`, `SymAct.predNext`, `SymAct.effPs`, `SymAct.Sys.eval_bind`, `SymAct.Sys.eval_succ`, `SymAct.Sys.post_bind`, `SymAct.Sys.picks_bind` | `Lemma6Syntax.lean` | none | What a predicate and an effect name, and whether a predicate reads the successor. A predicate's value depends on the binding only at what it names, and not on the successor when it reads none; the successor and the picks depend on the binding only at what the effects name and on the choices. |
+| `SymAct.linkOf`, `SymAct.linkOf_spec`, `SymAct.Sys.foldKey`, `SymAct.Sys.foldOk`, `SymAct.Sys.FoldSpec`, `SymAct.Sys.foldKey_spec` | `Lemma6Syntax.lean` | Lemma 6, "Parameters" | `fold_of` on the syntax. A fold it finds has no guard naming a `T` parameter that reads the successor, no folded guard naming an `S` parameter but the key, every other guard naming a `T` parameter a link of the key, no effect naming a `T` parameter but the key, and a key that is not `New`. |
+| `SymAct.Cut`, `SymAct.Sys.stubE`, `SymAct.Sys.keepsP`, `SymAct.Sys.keyOf`, `SymAct.Sys.foldedC`, `SymAct.Sys.keptOg`, `SymAct.Sys.rawRd`, `SymAct.Sys.ext` | `Lemma6Syntax.lean` | Definition 4 | The data of `Extended::build` from the syntax and a split: the stubs, the parameters `restrict_to` keeps, the folds the split keeps, each fold's conjuncts, the kept conjuncts and the raw reads. |
+| `SymAct.Sys.Inputs`, `SymAct.Sys.inputs_of_closed` | `Lemma6Syntax.lean` | Lemma 5 (c), Definition 3 | The side rule for columns and the code's inputs. A split closed under Definition 3 has the side rule. |
+| `SymAct.Sys.unfolded_keeps`, `SymAct.Sys.rd_split`, `SymAct.Sys.og_cover`, `SymAct.Sys.keptOg_rd`, `SymAct.Sys.foldedC_og`, `SymAct.Sys.foldedC_names`, `SymAct.Sys.og_names`, `SymAct.Sys.eff_bind`, `SymAct.Sys.eff_side`, `SymAct.Sys.eff_inputs` | `Lemma6Syntax.lean` | Lemma 6, "Parameters" | An unfolded `S_a` action drops no parameter: a role that reads its row reads it raw, a `New` row is created in `S_v`, and an `Earlier` row's mark (`Built.earlier_mark`) puts its entity in `S_v` or the inputs. Then `reads`, `cover`, `kept_rd`, `folded_og`, `folded_names`, `other_names`, `eff_names`, `eff_s` and `rise_eff` of `Lemma6Hyp` hold of `ext`. |
+| `SymAct.Sys.lemma6Hyp`, `SymAct.Sys.lemma6_of_syntax`, `SymAct.Sys.a8_of_syntax` | `Lemma6Syntax.lean` | Lemma 6, A8 | Under `Built`, Lemma 5 (a)(b), `Inputs` and step (a), `Lemma6Hyp` holds of `ext`. So do Lemma 6 with the code's stages and Theorem A8 with `recanon`, given (B1)–(B3) and the rise table. |
+| `Act.Ext.Exact`, `SymAct.Sys.holdsB`, `SymAct.Sys.exact_holdsB` | `Lemma6Syntax.lean` | Lemma 6, step (a) | Step (a) for the bit `holdsB`, one per action and slot below a bound `B` on every class's slots: some binding with the key at the slot meets the fold's conditions at the `T_v` valuation. |
+| `ExampleLemma6Syntax.hyp`, `lemma6`, `note_key`, `mark_unfolded`, `open_shop` | `Lemma6SyntaxExample.lean` | none | Desks, shops and orders: a folded `S_a` action keyed by an `S` parameter with a free `T` parameter on a stub, an unfolded `S_a` action whose read makes the desks an input, and a rise with a `Parent` parameter on the stub, which `X` rebinds. `Lemma6Hyp` and Lemma 6 follow from `lemma6Hyp` and `exact_holdsB`, with only `Built`, Lemma 5 (a)(b) and `Inputs` checked on the instance. |
+
+What stays a hypothesis: `lemma5`, Lemma 5 (a)(b), which Definition 3 gives
+(`lemma5ab_of_closed`) and `split_faults` checks; `Inputs`; and step (a), which
+`exact_holdsB` proves for `holdsB`, so what is read from the code is that `Fold::holds` is
+`holdsB`. `Built` is what the builder gives. `bind` holds as `ext` runs `bind_stub_params`,
+`keyOf` keeps only a fold whose key `restrict_to` keeps, and `StubCheck` is not read. `WF` is
+not used.
+
+What the model of the folds leaves out:
+
+- An action with no `T` parameter does not fold: node folds (`node_fold_of`) are not
+  modelled, nor groups of folds that share a bit.
+- The slot model has no copy guards (`copy_target`), which `fold_of` refuses to fold.
+- Which folds `fold_initial` keeps is left open (`Cut.sel`).
+- A `Triggered` parameter's existence counts as read, and as a raw read of an unfolded
+  action.
 
 ## The partition certificate and monotone variables
 
@@ -837,7 +1000,9 @@ in its own block of a marked state, self-loops dropped) are every state of a blo
   `monotone_vars` of the extended system. On an explored `X`, `of_graph` leaves every class
   unmarked when `s_cycles` is false, and `a15_monotone` applies as stated. For `obs = ∅`
   the code's one class covers every input byte, which is not (B1).
-- **What `check` does not do.** It checks no part of `Extended`, takes each block's first
-  state as its representative rather than reading one, and runs over lists; a checker over
-  arrays would reuse `Sweep.b2_of_marking` for its own marking. That `check` accepts every
-  partition that passes `Cert` is not proved.
+- **What `check` does not do.** `Sweep.check` checks no part of `Extended`, takes each
+  block's first state as its representative rather than reading one, and runs over lists.
+  `PCert.Data.check` ([above](#the-partitions-and-the-shape-of-x)) runs over arrays, reads
+  the dumped representatives, checks `Extended` on the reachable part of `X`, and reaches
+  (B2) through `Sweep.b2_of_marking`. That either accepts every partition that passes
+  `Cert` is not proved.

@@ -33,3 +33,7 @@ import RdraIsh.Sweep
 import RdraIsh.SweepExample
 import RdraIsh.Monotone
 import RdraIsh.MonotoneExample
+import RdraIsh.PartitionCert
+import RdraIsh.PartitionCheck
+import RdraIsh.Lemma6Syntax
+import RdraIsh.Lemma6SyntaxExample
