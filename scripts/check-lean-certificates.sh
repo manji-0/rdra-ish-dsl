@@ -14,6 +14,9 @@
 # 3. Faults planted in copies of the dump, one per clause, must each be rejected, with the
 #    clause named.
 #
+# 4. scripts/check-lean-partitions.sh, with the same profile: the partitions of the runs
+#    of the extended sub-lifecycle and the shape of those runs, with their own checker.
+#
 # Needs `lake` on PATH, as scripts/check-lean-proofs.sh does.
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
@@ -167,3 +170,4 @@ for planted in "$work"/planted-*.jsonl; do
   echo "planted ($part): $rejected"
 done
 echo "check-lean-certificates: every certificate accepted, every planted fault rejected"
+"$root/scripts/check-lean-partitions.sh" --profile "$profile"

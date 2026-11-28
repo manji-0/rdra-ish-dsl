@@ -10,3 +10,7 @@ name = "RdraIsh"
 [[lean_exe]]
 name = "lemma5-check"
 root = "Lemma5CheckMain"
+
+[[lean_exe]]
+name = "partition-check"
+root = "PartitionCheckMain"
