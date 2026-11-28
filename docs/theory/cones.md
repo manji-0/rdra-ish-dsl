@@ -991,7 +991,16 @@ counterexample of this run is therefore a lasso of
 `C` that the checker certified. Whether it is a counterexample of `T` is Theorem A5.2 (needs `W` exact).
 
 *Evidence.* P-full relative to (B1)–(B3), certified at run time, and Lemma 6, argued
-and not proved. R: lift, replay, and fairness check of each candidate. D: corpus cases `cone_reduced_class_loops`, `cone_reduced_inner_class_loops`,
+and not proved. M: `proofs/lean/RdraIsh/Fairness.lean::a15` proves the theorem in Lean for the
+flat case, from Lemma 5 (a)(b), Lemma 6 both ways, the shape of `X` and (B1)–(B3) as
+hypotheses (as `a8_dbsb` does), finitely many reachable states of `X` and `R`, and the
+hypothesis that every block whose silent edges between different states contain a cycle can
+loop (case 1 of Definition 5). The run's verdict is read as "no lasso of `R` that satisfies
+`Fair_P` and stops only where no move leaves or the class can loop violates `P`"; that the
+search over components finds such a lasso when one exists is N9, outside the Lean proof.
+Cases 2 to 4 of Definition 5 and the proof's (ii) and (iii) are not modelled.
+`ExampleFair.eventually_flag` discharges every hypothesis on a cone whose one block holds a
+silent cycle. R: lift, replay, and fairness check of each candidate. D: corpus cases `cone_reduced_class_loops`, `cone_reduced_inner_class_loops`,
 `cone_reduced_loop_fair_enabled`, `cone_reduced_loop_unreached`, `cone_reduced_no_loop_capped`;
 `cli/tests/engine_corpus.rs::a_reduced_wf_next_run_decides_what_the_unreduced_one_decides`;
 `reduce/partition.rs::an_unobserved_sub_lifecycle_can_loop_unless_every_var_only_rises`.

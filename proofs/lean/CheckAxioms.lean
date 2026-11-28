@@ -17,3 +17,16 @@ an axiom outside Lean's three standard ones (`propext`, `Classical.choice`, `Quo
 #print axioms RdraIsh.quotient_holds_iff
 #print axioms RdraIsh.Example.flag_after_s
 #print axioms RdraIsh.ExampleSym.sorted_quotient
+#print axioms RdraIsh.LTS.wfNext_iff
+#print axioms RdraIsh.recurrent_segment
+#print axioms RdraIsh.LTS.lasso_of_behaviour
+#print axioms RdraIsh.image_step
+#print axioms RdraIsh.takes_fwd
+#print axioms RdraIsh.enabled_back
+#print axioms RdraIsh.moves_back
+#print axioms RdraIsh.silentCycle_of_divergence
+#print axioms RdraIsh.a15_image
+#print axioms RdraIsh.a15_behaviour
+#print axioms RdraIsh.a15
+#print axioms RdraIsh.ExampleFair.silent_cycle
+#print axioms RdraIsh.ExampleFair.eventually_flag
