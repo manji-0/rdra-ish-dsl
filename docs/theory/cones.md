@@ -41,7 +41,11 @@ the `prove_cli.rs` tests it names are unchanged. How the document changed after 
 pinned commit ([claims inventory](./claims.md#how-to-read-a-row)). Paths are relative to
 `crates/rdra-ish-core/src/lifecycle/` unless they start with `cli/`
 (`crates/rdra-ish-cli/src/`) or `cli/tests/` (`crates/rdra-ish-cli/tests/`), as in
-[semantics.md](./semantics.md). No rdra-ish tool was run for this document; every statement
+[semantics.md](./semantics.md); `analysis/effect.rs` and `memory.rs` are under
+`crates/rdra-ish-core/src/`, and a path that starts with `verify/`, or is `property_cone.rs`,
+`refuted.rs` or `escalate.rs`, is under `cli/` (the last two under `cli/verify/`), where the
+`cli/` prefix is left out. Test marks, such as "(main only)" and "(release jobs)", are
+those of the [claims inventory](./claims.md#how-to-read-a-row). No rdra-ish tool was run for this document; every statement
 about behavior is a reading of the code, and every measured number is quoted from the note or
 pull request named beside it.
 
@@ -384,7 +388,8 @@ problem P1, read at all four sites), and `refuted.rs` and `escalate.rs` ignored 
 universal check neither yielded a wrong `ok`: a state rule, an `after` assertion, or a property
 passes on `C` only if it passes on `T` (Theorems A2 and A4.1). Evidence:
 `core/tests/trace.rs::a_candidate_counterexample_refines_its_cone_with_the_events_raisers`
-(one round adds the raiser and finds the vouched trace, on a cone smaller than the exact one),
+(the refined cone adds the raiser, finds the vouched trace, and lies inside the exact one;
+the test asserts neither the number of rounds nor that the cone is strictly smaller),
 `::a_recheck_that_counts_every_slot_finds_only_runs_within_the_bound`, and
 `core/tests/cone.rs::a_cone_that_leaves_a_mark_out_keeps_the_whole_systems_verdict_and_view`.
 
@@ -454,7 +459,7 @@ of (C2). Both halves are proved.
 **Proposition A27 (covered cones).** `ok (checked in Cone_X)` (D23) is printed for a safety cone
 `C_s = T|W_s` when `verify/tlc.rs::Covered::covers` holds against a cone `C_ℓ = T|W_ℓ` that
 passed: the checks of `C_s` are among those of `C_ℓ`, `W_s ⊆ W_ℓ`, `K_s ⊆ K_ℓ`, and every action
-of `C_s` keeps, in `C_ℓ`, as many guards and parameters as in `C_s` (`ConeSystem::steps`). Then
+of `C_s` keeps, in `C_ℓ`, as many guards and parameters as in `C_s` (the `steps` field of `ConeSystem`). Then
 `T ⊨ R` for every check `R` of `C_s`.
 
 *Proof.* `Covered::covers` requires every check of `C_s` to be among the checks of `C_ℓ`'s module,
@@ -466,7 +471,7 @@ kept sets of the targets that share `W_ℓ` into one `K_ℓ`. Lemma 2, which A2 
 for the merged set. ∎
 
 The step-shape condition is not needed for the verdict. It is what makes `covers`' own
-argument hold, `Reach(C_s) ⊆ π_{W_s}(Reach(C_ℓ))`. `ConeSystem::steps` maps each action of
+argument hold, `Reach(C_s) ⊆ π_{W_s}(Reach(C_ℓ))`. The `steps` field of `ConeSystem` maps each action of
 `restrict_to(W, K)` to the pair `(guards.len(), params.len())`. The guards and parameters
 `restrict_to` keeps are monotone in `W` (What `restrict_to` keeps), so `W_s ⊆ W_ℓ` makes the
 sets `C_s` keeps subsets of those `C_ℓ` keeps. Equal counts therefore mean equal sets. No guard
@@ -583,7 +588,7 @@ counterexample to `T` (P1).
 Lemmas 2 to 4. A5.1, A6, and A5.3 on a reduced cone: P-sketch, because the printed verdict is
 read on the reduced cone and rests on Theorems A8 and A15, whose Lemma 6 is argued, not proved
 (P31). A5.2: P-full. D:
-`cli/tests/engine_equivalence.rs::a_property_cone_decides_what_the_whole_model_decides`; corpus rules 1
+`cli/tests/engine_equivalence.rs::a_property_cone_decides_what_the_whole_model_decides` (release jobs); corpus rules 1
 to 3 (`cli/tests/engine_corpus.rs`); `core/tests/explored.rs::a_cone_that_frees_slots_decides_a_violation_on_the_whole_model`;
 the unit tests in `cli/src/property_cone.rs`.
 
@@ -810,7 +815,9 @@ leaves) and the random-graph test below, which also certifies every worklist par
 - **A13** (one reduction for both engines): `reduced_with` rejects a reduction past
   `TLA_CELL_BUDGET` (530,000 cells, `Reduction::tla_cells`) and an identity quotient
   (`Classified::Nothing`, `Reduction::shrinks`); the one `Reduction` value feeds the native checker and
-  the TLA+ printer. True by construction.
+  the TLA+ printer. True by construction; the rejection past the budget is read from the code:
+the tests count one cone's cells and keep a cone below the budget, and none makes
+`reduced_with` reject one past it.
 - **A14** (dropped checks have their own cones): by Lemma 5e a target's own check reads only `T_v ∪
   obs`, an `after` target's steps are kept and so in `T_a`, and a property's fair actions are kept. So
   `drop_unreadable_checks` drops only checks that ride along in the cone system and are not its
@@ -1041,7 +1048,7 @@ patterns, and `NeverRuns`. The checks that read the annotated quotient (deadlock
 follow a binding through the stored permutations. Their
 soundness past the cap is part of A23, which is a sketch. M: `Twin::Canonical` compares the canonical form with the least layout over every element of
 `G_s` when `|G_s| ≤ 6^4 = 1,296`; D: `explore/symmetry/tests.rs::past_the_branch_cap_a_state_is_cut_and_stays_in_its_orbit`,
-`explore/symmetry/witnesses.rs::past_the_branch_cap_the_verdict_stands` (main only).
+`explore/symmetry/witnesses.rs::past_the_branch_cap_the_verdict_stands` (release jobs: `formal-verify`).
 
 **Which checks read a run up to symmetry soundly.** A check whose value on a state is invariant under
 `G_s` (every state rule and `always`: they quantify over all bindings), a check of the concrete triple
@@ -1097,7 +1104,7 @@ so `quotient_blocks` on the orbit graph yields unions of orbits with the same bl
 self-edge stands for a concrete cycle inside its class and marks it (Definition 5, case 3). P-sketch; R:
 `assert!` that `H` moves no read variable; M: `Twin::SUpToH`, `Twin::ReducedOrbitRun`; D:
 `core/tests/reduce.rs::reduced_cones_up_to_h_decide_what_the_cones_decide`,
-`cli/tests/engine_corpus.rs::each_h_reason_a_case_shows_has_a_witness`.
+`cli/tests/engine_corpus.rs::each_h_reason_a_case_shows_has_a_witness` (shadow builds only).
 
 *Evidence for A18.* P-full given (G1)–(G6). M: the Kani harness
 `explore/symmetry/mod.rs::apply_of_a_composition_is_the_composition_of_applies` proves that `apply` is a group
@@ -1142,14 +1149,17 @@ trace's `over_bound` note said but the `escalated:` line did not (P11). Until #5
 one of them; it is now each entity's own count (`cli/tests/prove_cli.rs::escalation_names_each_entitys_instances_under_per_entity_bounds`).
 
 **Memory.** Each escalated run is charged to `pool.with_room(min(pool.left(), GROWTH × peak))`
-(`memory.rs::MemoryPool::with_room`), with `GROWTH = 10` and `peak` the store the rule's cone held at `β`;
+(`memory.rs::MemoryPool::with_room`, under `crates/rdra-ish-core/src/`), with `GROWTH = 10` and `peak` the store the rule's cone held at `β`;
 `verify` always gives BFS a pool (`cli/verify/mod.rs` charges its caps to `MemoryPool::share_of`), so the
-`None => caps` arm does not occur under `verify`. The bound is on the run's BFS state store, a child pool of
-BFS's share: the reduction's run of `S` and its partition, and the lift, are outside it (the caps "stay
-plain", per the comment in `escalate`). The factor 10 is measured: on the engine corpus's escalated cases one
+`None => caps` arm does not occur under `verify`. The bound is on the run's BFS state stores, a child pool of
+BFS's share: the reduction's run of `S` draws on the same child pool
+(`reduce/partition.rs` runs it under the caps it is given, with `without_views`, and checks it
+for `MemoryCapReached`); the partition and the lift are outside it. The factor 10 is measured: on the engine corpus's escalated cases one
 instance more multiplied the store by 1.1 to 6.4 and two more by 1.4 to 10.1 (`escalate.rs::GROWTH`'s doc,
 #421). The runs go one at a time after every other BFS and TLC run, so their stops do not depend on the
-schedule. P: none (the statement is a description of the code); D: one unit test of `grown`.
+schedule. P: none (the statement is a description of the code); D: one unit test of `grown`,
+and `cli/tests/prove_cli.rs::escalation_reports_no_counterexample_past_the_bound_it_prints` and
+`::escalation_names_each_entitys_instances_under_per_entity_bounds` (both with z3).
 
 ---
 
@@ -1178,8 +1188,9 @@ theme (c)'s claim that the run computes the one-thread result. ∎
 formal-verification.md said a stopped cone "leaves its invariants `not decided`", while
 `BfsCone::verdict` reports a counterexample found before the stop; #477 corrected the guide to say
 that only the cone's other checks stay `not decided`. P21 (a stopped native run recorded as `ok` for
-the per-run comparison, fixed in #469) is theme (c)'s and (d)'s. D: `cli/tests/engine_corpus.rs::a_capped_graph_decides_nothing_the_full_graph_contradicts` (main only)
-runs the whole model of every corpus case under caps from 1 to its size and decides each
+the per-run comparison, fixed in #469) is theme (c)'s and (d)'s. D: `cli/tests/engine_corpus.rs::a_capped_graph_decides_nothing_the_full_graph_contradicts` (release jobs)
+runs the whole model of every corpus case under every cap below 64 and at each twelfth of its
+size, and decides each
 `always`, `eventually` and `leads_to` there, never a state rule or `after` assertion, so
 it tests the claim for properties only. For safety cones,
 `cli/tests/prove_cli.rs::a_proof_leaves_an_after_assert_and_a_state_cap_undecided` (with z3)
@@ -1223,7 +1234,7 @@ the row; a fixed or closed one carries its pull request.
 | A20, A21 | subgroup; canonical form | full given A18 (A21: checks invariant under `G_s`; annotated-quotient checks are A23) | D | P33 (closed, #512, #516) |
 | A22, A23 | composition; annotated quotient | sketch | R, M, D | P9 (prose fixed, #475) |
 | A24 | Proposition A24 | sketch | D | P10 (prose fixed, #477) |
-| A25 | Proposition A25 | full given A28′, A8 | unit test | P1 (fixed, #477, #509), P11 (fixed, #477, #509, #532) |
+| A25 | Proposition A25 | full given A28′, A8 | D: unit test, two CLI tests (with z3) | P1 (fixed, #477, #509), P11 (fixed, #477, #509, #532) |
 | A26 | scope | none | none | |
 | A27 | Proposition A27 | full relative to the covering cone's `ok` (Theorem A2; A8 when that cone is reduced) | none | P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
 | A28 | Proposition A28 | full | D (via A2) | P11 (fixed, #477, #509, #532) |
@@ -1297,7 +1308,8 @@ the row; a fixed or closed one carries its pull request.
 
 - **Proofs about a reading of the code.** Every lemma models a Rust function by its doc comment and body as
   read at `fb6928c7`, and, for a function whose definition changed by more than a narrowing cast, as
-  re-read at `c97c88ef`, `41882b4f`, `5f59fae2` or `5ae62f2c`, where the change was (the first paragraph). The Lemma 6 evidence cites tests from #516 and #521, read
+  re-read at `c97c88ef`, `41882b4f`, `5f59fae2` or `5ae62f2c`, where the change was (the first paragraph);
+#544, the one change up to `9857092a`, touches nothing this document cites. The Lemma 6 evidence cites tests from #516 and #521, read
   at `c97c88ef`. A function read only through its doc (named in its proof: `Fold::holds` for Lemma 6)
   may differ from it. A function whose definition did not change can still behave differently through a
   callee that did; callees were not traced. No statement was checked by running the tools.
@@ -1320,8 +1332,11 @@ the row; a fixed or closed one carries its pull request.
   `cli/tests/engine_corpus.rs::PAST_A_TWIN_CAP` names the run). The corpus and sample
   comparisons check agreement with TLC on the cones the code chooses; a soundness bug in the cone or the
   reduction that TLC's module shares (one `Reduction` value feeds both, A13) is invisible to them. Only
-  `scripts/reduction-diff.py` and `core/tests/cone.rs` compare a reduced or restricted system with a less
-  reduced one.
+  `scripts/reduction-diff.py`, `core/tests/cone.rs`, `core/tests/reduce.rs` (`assert_reduction_exact_in`
+  and the tests that call it) and
+  `cli/tests/engine_corpus.rs::a_reduced_wf_next_run_decides_what_the_unreduced_one_decides` compare a
+  reduced or restricted system with a less reduced one; none of them compares with a module TLC
+  reads independently of the reduction.
 - **Hypotheses checked per trace and per cone.** A check's cone may leave a mark out: its `ok` is sound by
   Theorem A2, and its counterexample counts only once vouched for (Corollary A28′), after the refinement of
   `recheck_on` where needed (P1, fixed in #477 and #509). That `free_triggers` lists every step that runs an

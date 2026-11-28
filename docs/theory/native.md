@@ -112,7 +112,9 @@ state's depth as its length. Every reachable state is admitted because each admi
 is expanded before a complete run ends and `moves_into` lists every successor. The one
 step this sketch does not derive is that `moves_into` enumerates exactly the successors of
 D13 (every admissible binding of D7, every fork of D8); that is evidenced differentially
-(TLC on the same cone, `cli/tests/engine_equivalence.rs::a_bfs_and_tlc_reach_the_same_states_and_verdicts`)
+(TLC on the same cone, `cli/tests/engine_equivalence.rs::a_bfs_and_tlc_reach_the_same_states_and_verdicts`,
+which runs in the release jobs only and needs TLC; marks as in
+[claims.md](./claims.md#how-to-read-a-row))
 and by the twin `Twin::EachEnabled` (`explore/moves/reference.rs`), which compares the
 planned enumeration with a filter over all bindings. Two further premises are not part of
 this sketch: that the built `T` is `T_β(M)` of D13 (claim I1; problem P54, fixed in #470,
@@ -154,8 +156,9 @@ values (P54), and (ii), then an offset of at most 65,535 in a `u16`, failed for 
 states wider than 65,536 bits (P50). Every claim below that reads a stored state ("by N1",
 "by N2") holds under both.
 
-*Evidence.* Kani proves the round trip, the patch path, and the arena and table operations
-on small widths (4 or 11 cells, widths up to 8 bits; the harnesses are listed in row N2).
+*Evidence.* Kani proves the round trip, the patch path, that the arena and the segments
+read back what was pushed, and the table's tag match and growth rule (no harness inserts
+into the table and looks a row up), on small widths (4 or 11 cells, widths up to 8 bits; the harnesses are listed in row N2).
 The table lookup compares whole packed rows (`Seen::find_hashed`), so a hash collision costs
 time and never merges two states; the hash's quality does not bear on correctness. The
 seed is fixed and no table is iterated into the output (`fasthash.rs` states the rule for
@@ -293,7 +296,11 @@ and edges), the orbit self-edges and permutations, the bindings' bytes, and the 
 each from its length and capacity, plus the table. It is a function of the
 sequence of admissions and edges alone (`explore/store.rs` models it as `store_bytes`), so
 for a fixed sequence it is the same on every machine and thread count. Kani proves
-`store_bytes` never overflows, only grows, and is at most the model before #296; the unit
+`store_bytes` never overflows; that each of its terms only grows, from which `store_bytes`,
+a saturating sum of products of those terms, all at least 0, does too (the harness
+`store_bytes_only_grows` does not call `store_bytes` itself); and that without the lists of
+segments it is at most the model before #296 (the lists can make it count more at a power
+of two, as `store_bytes_is_at_most_the_model_before`'s comment says); the unit
 test `store_bytes_models_the_store_a_run_counts` (main only) holds the model above what a run counts.
 The charge covers the state store only: the passes over a finished graph (liveness,
 `can_reach`, deadlocks, the partition) and the workers' scratch are outside it, as
@@ -525,9 +532,13 @@ stuck. The guard is the match arm `Target::Reach(i) if !cones[at].run.complete` 
 undecided; `reach_failure` and `TransitionSystem::verdict` also `assert!` completeness in
 every build (they only `debug_assert!`ed it before P19 was fixed in #478). TLC cannot state
 `can_reach`; besides the unit tests, a naive oracle (`core/tests/oracle.rs`) with its own
-exploration and a forward search from every state agrees with the checker on the corpus
-and the samples (row N8; that comparison,
-`can_reach_and_deadlocks_agree_with_a_naive_oracle`, runs on main only).
+exploration and a forward search from every state agrees with the checker's verdicts, and
+on the whole system finds the state the checker reports among the failing ones, on every
+corpus case and formal-verification sample that builds without an error and whose whole
+system has at most 3,000 states (`MOST_STATES`; a larger one is skipped), at 1 and 2
+instances (row N8; that comparison, `can_reach_and_deadlocks_agree_with_a_naive_oracle`,
+runs on main only). That the reported state is the first in BFS order, so that the trace is
+shortest, rests on the proof above; no test checks it.
 
 ## Deadlocks
 
@@ -550,7 +561,12 @@ marked has no such path, which is the definition. The reported state is the mini
 `can_leave` and the trace read packed cells through `Packing::cell`, so P50 applied here
 until #479.
 TLC's deadlock check is one-sided (row T6); the naive oracle of `core/tests/oracle.rs`
-checks this one against a forward search on its own exploration, on main only (P19, fixed in #478).
+checks this one against a forward search on its own exploration, on main only (P19, fixed in #478),
+on the systems N8's comparison covers. It compares only stuck against not stuck, not the
+state reported, and it picks the open values with the checker's own filter (`exits`,
+`has_way_on`), so a fault in which values count as open passes it. A value no arm leaves is
+tested (`core/tests/deadlock.rs::an_end_value_is_no_deadlock`); no test has a value whose only
+way out is a delete.
 
 ## Vacuity
 
@@ -1018,8 +1034,7 @@ Read on the code here, with their status at the pin: P6 (decided as documented, 
 P19 (fixed in #478: a naive oracle, and `assert!` on completeness in every build); P20
 (fixed in #518 and #522: every printed trace replays, the table of
 [Counterexamples](#counterexamples-what-is-checked-before-printing), and #529 for the lifts'
-own look-ups, #531 for the symmetric lasso lift; the release `expect`s and `panic!`s it
-lists remain). Corrected: P18 (`SameAs` and `DenseBinding` are release paths
+own look-ups, #531 for the symmetric lasso lift; the release `expect`s and `panic!`s it lists remain). Corrected: P18 (`SameAs` and `DenseBinding` are release paths
 whose twins run in every `shadow` run; `Twin::SeenGrowth` runs on the release path since
 #473; the loom model and a Miri job still do not exist). The [index](./README.md#open-problems)
 holds the entries.

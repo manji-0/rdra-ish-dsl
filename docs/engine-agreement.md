@@ -61,7 +61,8 @@ case, whatever the case's header says.
 
 7. A graph a state cap stopped partway never gives `ok`, and a counterexample on it is one on
    the full graph. `a_capped_graph_decides_nothing_the_full_graph_contradicts` explores the
-   whole model of every case under every state cap from 1 up to its size, and decides each
+   whole model of every case under every state cap below 64 and at each twelfth of its size,
+   and decides each
    `always`, `eventually`, and `leads_to` under both fairness readings. Under `--prove`, an
    invariant cone the memory limit stopped prints `ok` when z3 proves every rule in it; that
    `ok` is z3's, held to rule 4.
@@ -109,15 +110,15 @@ and `z3_now_past_the_top` pin both sides.
 <!-- derived-from ./formal-verification.md#sample-expectations -->
 
 Each case is one `.rdra` file under `crates/rdra-ish-cli/tests/engine_corpus/`. The file name
-starts with the trap's family: `fair_`, `presence_`, `cone_`, `safety_`, `sym_`, `cap_`, or
-`z3_`. The harness reads every `*.rdra` file in the directory. `CASES` in the same directory
+starts with the trap's family: `fair_`, `presence_`, `cone_`, `safety_`, `sym_`, `cap_`,
+`width_`, or `z3_`. The harness reads every `*.rdra` file in the directory. `CASES` in the same directory
 lists every case's file stem, and `every_corpus_header_is_well_formed` fails when the two
 differ, so a deleted or renamed case does not go unnoticed.
 
 ### Header grammar
 
 The header is the run of `//` lines at the top of the file. A line that starts with `trap`,
-`flags`, `tlc`, `expect`, or `known` and does not parse fails the suite. Other `//` lines are
+`flags`, `tlc`, `rejects`, `expect`, or `known` and does not parse fails the suite. Other `//` lines are
 free text that explains the trap.
 
 ```
@@ -175,9 +176,13 @@ The test prints one line per case: `ok`, `FAIL` with each reason, or `known`. Wi
 `z3` on `PATH` it skips that engine's verdicts and says so; `RDRA_REQUIRE_TLC=1` and
 `RDRA_REQUIRE_Z3=1` make a missing engine a failure, as CI sets them.
 `RDRA_CORPUS_CASE=<text>` runs only the cases whose name contains `<text>`. The main test,
-`bfs_and_tlc_and_z3_agree_on_the_adversarial_corpus`, runs four cases at a time; its prefix
-keeps it out of CI's debug `test` step. The header check and the capped-graph test run in both
-steps.
+`bfs_and_tlc_and_z3_agree_on_the_adversarial_corpus`, runs up to four cases at a time; its
+prefix keeps it out of CI's debug `test` step, so it runs in release only, in the
+`engine-equivalence` and `shadow` jobs. The header check runs in the debug step and in those
+jobs. The capped-graph test is on the slow list of `.config/nextest.toml`, so the debug step
+runs it on main only; the two release jobs run the whole binary through `cargo test`, which
+reads no nextest filter, so they run it on every pull request that can change a verdict
+(`changes`' `verify` output) and on main.
 
 ### Adding a case
 
@@ -192,7 +197,8 @@ steps.
    verdict, and add a `known` line that links it.
 5. Check that the case discriminates: break the engine the way the trap describes, confirm the
    case fails, and revert.
-6. Add the file stem to `CASES`, in sorted order.
+6. Add the file stem to `CASES`, in sorted order (a convention: the check compares the two as
+   sets).
 
 ## Cases by trap
 
@@ -234,48 +240,50 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `presence_goal_present_both_ok` | `.present()` changes nothing where no delete can come before the goal |  | `ReviewApproved`, `ReviewApprovedPresent`, `EventuallyApproved`, `EventuallyApprovedPresent` ok |
 | `presence_goal_present_modifier` | `.present()` keeps a deleted row from meeting a goal its base values satisfy |  | `HeldReleased` ok; `HeldReleasedPresent` cex |
 | `presence_no_slot_reuse` | A deleted slot is never reused, so creating and deleting cannot go on forever |  | `PaidShips` ok |
-| `presence_per_entity_slots` | Per-entity slot counts give each entity its own slot set, in both directions | `--instance-count 1 --instances Loan=3 --instances Room=3` | `Unique_Loan_tag`, `Unique_Room_tag` cex, z3 unproved; `Unique_Member_tag`, `Unique_Booking_tag` ok, z3 unproved |
-| `safety_at_least_guard` | An `at_least` guard and the rule it keeps, against a delete |  | `Quantifier_Claim_0` cex, z3 unproved, BFS ok/cex/cex; `Quantifier_Order_1` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Claim_status_open`, `Deadlock_Order_status_open` cex |
+| `presence_per_entity_slots` | Per-entity slot counts give each entity its own slot set, in both directions | `--instance-count 1 --instances Loan=3 --instances Room=3` | `Unique_Loan_tag`, `Unique_Room_tag` cex, z3 refuted; `Unique_Member_tag`, `Unique_Booking_tag` ok, z3 unproved |
+| `safety_at_least_guard` | An `at_least` guard and the rule it keeps, against a delete |  | `Quantifier_Claim_0` cex, z3 refuted, BFS ok/cex/cex; `Quantifier_Order_1` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Claim_status_open`, `Deadlock_Order_status_open` cex |
 | `safety_at_most_bound` | A count bound the instance count hides: the rule needs four rows to fail |  | `Quantifier_Member_0` ok, z3 unproved, BFS ok/ok/ok/cex; `Quantifier_Shelf_1` ok, z3 proved, BFS ok/ok/ok/ok |
 | `safety_can_reach_frees_slots` | `can_reach` on a cone that would free slots |  | `OrderCanPay` cex, TLC none; `BillCanPay` ok, TLC none |
 | `safety_count_guard_order` | Two count guards that point opposite ways on one row |  | `Forbidden_Shelf_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Shelf_status_open` cex |
-| `safety_count_per_entity` | A count over an entity with its own slot count, in both directions | `--instances Loan=4 --instances Shelf=3` | `Quantifier_Member_0`, `Quantifier_Shelf_1` cex, z3 unproved |
-| `safety_counted_once_per_raise` | A counted handler runs once per raise, where the latch lets one raise drive two runs |  | `Forbidden_Box_0`, `EventOverflow_Box_EvShipped_Receive` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Crate_1` cex, z3 unproved; `BoxBothIn` ok |
+| `safety_count_per_entity` | A count over an entity with its own slot count, in both directions | `--instances Loan=4 --instances Shelf=3` | `Quantifier_Member_0`, `Quantifier_Shelf_1` cex, z3 refuted |
+| `safety_counted_once_per_raise` | A counted handler runs once per raise, where the latch lets one raise drive two runs |  | `Forbidden_Box_0`, `EventOverflow_Box_EvShipped_Receive` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Crate_1` cex, z3 refuted; `BoxBothIn` ok |
 | `safety_created_set_beside_transitions` | A guarded `sets` and `transitions` write one created row's lifecycle column in one use case, which the engines read differently (P24); the build rejects it |  | `ConflictingEffects_Order_Place_status` cex, TLC none; `Forbidden_Order_0` none |
-| `safety_delete_cascade` | `.on_delete(cascade)` keeps its one-row delete, with no guard and no `DanglingKey_*` |  | `Forbidden_OrderLine_0` cex, z3 unproved |
+| `safety_delete_cascade` | `.on_delete(cascade)` keeps its one-row delete, with no guard and no `DanglingKey_*` |  | `Forbidden_OrderLine_0` cex, z3 refuted |
 | `safety_delete_restrict` | A delete the key's children reject waits until no present child names the row |  | `DanglingKey_OrderLine_Order`, `DanglingKey_Payment_Order` ok, z3 proved, BFS ok/ok/ok |
-| `safety_delete_set_null` | `.on_delete(set_null)` keeps its one-row delete, with no guard and no `DanglingKey_*` |  | `Forbidden_OrderLine_0` cex, z3 unproved |
-| `safety_edge_free_cone` | A cone of checks alone keeps no edge list (#296 2.1) |  | `AfterAssert_Deliver_0`, `AfterAssert_Refund_1` ok; `Forbidden_Ticket_0` cex, z3 unproved; `Witness_Order_status_refunded` cex |
-| `safety_event_overflow` | A raise past `k` is `EventOverflow`, and the raiser never waits for it |  | `EventOverflow_Inbox_EvNoted_Read` cex, z3 unproved; `EventOverflow_Outbox_EvQueued_Send` ok, z3 proved, BFS ok/ok/ok |
+| `safety_delete_set_null` | `.on_delete(set_null)` keeps its one-row delete, with no guard and no `DanglingKey_*` |  | `Forbidden_OrderLine_0` cex, z3 refuted |
+| `safety_edge_free_cone` | A cone of checks alone keeps no edge list (#296 2.1) |  | `AfterAssert_Deliver_0`, `AfterAssert_Refund_1` ok; `Forbidden_Ticket_0` cex, z3 refuted; `Witness_Order_status_refunded` cex |
+| `safety_event_overflow` | A raise past `k` is `EventOverflow`, and the raiser never waits for it |  | `EventOverflow_Inbox_EvNoted_Read` cex, z3 refuted; `EventOverflow_Outbox_EvQueued_Send` ok, z3 proved, BFS ok/ok/ok |
 | `safety_exactly_along` | Counts along a path, and `exactly` in a guard and a rule |  | `Quantifier_Member_0` ok, z3 proved, BFS ok/ok/ok; `Quantifier_Member_1`, `Quantifier_Member_2` ok, z3 unproved, BFS ok/ok/cex; `Deadlock_Member_status_pending` cex |
 | `safety_max_card_range` | A card's high end above 1 (`0..2:1`) adds `MaxCard_Copy_Shelf` |  | `MaxCard_Copy_Shelf` ok, z3 unproved, BFS ok/ok/cex |
-| `safety_null_columns_cross` | A cross-entity comparison of two null columns (#355) |  | `MultiForbidden_Line_0` ok, z3 proved, BFS ok/ok/ok; `MultiForbidden_Line_1`, `MultiForbidden_Line_2` cex, z3 unproved |
-| `safety_null_columns_eq` | The reverse of #355: `==` on two null columns never holds, and `!=` always does |  | `Forbidden_Item_0`, `Required_Item_0`, `Forbidden_Item_2`, `Required_Item_1` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Item_1` cex, z3 unproved; `LimNeverMet` ok; `ABNeverMet` cex |
-| `safety_null_columns_ne` | Two `@null` columns that both hold null are not equal, so `!=` holds and `==` fails (#355) |  | `Forbidden_Item_0`, `Required_Item_0` cex, z3 unproved |
-| `safety_null_derived_in` | `in` / `not in` in a logical `@derived` are null while the column is; a list with `null` holds there; rules and guards read a null as in no list (#374) |  | `Forbidden_Item_0`, `Forbidden_Item_1`, `Forbidden_Item_3`, `Forbidden_Item_4`, `Required_Item_0`, `Forbidden_Box_6` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Item_2`, `Forbidden_Item_5`, `Forbidden_Box_7` cex, z3 unproved |
-| `safety_null_enum_bool_columns` | Two `@null` Enum or Bool columns that both hold null are not equal; a column with null and one without compare value by value (#359) |  | `Forbidden_Item_0`, `Forbidden_Item_1`, `Forbidden_Item_3`, `Forbidden_Item_4` cex, z3 unproved; `Forbidden_Item_2`, `Required_Item_0` ok, z3 proved, BFS ok/ok/ok |
-| `safety_null_enum_bool_literals` | A `@null` Enum or Bool column starts null and holds null as a value (#359) |  | `Forbidden_Item_0`, `Forbidden_Item_3`, `Required_Item_3` cex, z3 unproved; `Forbidden_Item_1`, `Forbidden_Item_2`, `Forbidden_Item_4`, `Forbidden_Item_5`, `Required_Item_0`, `Required_Item_1`, `Required_Item_2`, `Unique_Tag_color` ok, z3 proved, BFS ok/ok/ok |
+| `safety_null_columns_cross` | A cross-entity comparison of two null columns (#355) |  | `MultiForbidden_Line_0` ok, z3 proved, BFS ok/ok/ok; `MultiForbidden_Line_1`, `MultiForbidden_Line_2` cex, z3 refuted |
+| `safety_null_columns_eq` | The reverse of #355: `==` on two null columns never holds, and `!=` always does |  | `Forbidden_Item_0`, `Required_Item_0`, `Forbidden_Item_2`, `Required_Item_1` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Item_1` cex, z3 refuted; `LimNeverMet` ok; `ABNeverMet` cex |
+| `safety_null_columns_ne` | Two `@null` columns that both hold null are not equal, so `!=` holds and `==` fails (#355) |  | `Forbidden_Item_0`, `Required_Item_0` cex, z3 refuted |
+| `safety_null_derived_in` | `in` / `not in` in a logical `@derived` are null while the column is; a list with `null` holds there; rules and guards read a null as in no list (#374) |  | `Forbidden_Item_0`, `Forbidden_Item_1`, `Forbidden_Item_3`, `Forbidden_Item_4`, `Required_Item_0`, `Forbidden_Box_6` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Item_2`, `Forbidden_Item_5`, `Forbidden_Box_7` cex, z3 refuted |
+| `safety_null_enum_bool_columns` | Two `@null` Enum or Bool columns that both hold null are not equal; a column with null and one without compare value by value (#359) |  | `Forbidden_Item_0`, `Forbidden_Item_1`, `Forbidden_Item_3`, `Forbidden_Item_4` cex, z3 refuted; `Forbidden_Item_2`, `Required_Item_0` ok, z3 proved, BFS ok/ok/ok |
+| `safety_null_enum_bool_literals` | A `@null` Enum or Bool column starts null and holds null as a value (#359) |  | `Forbidden_Item_0`, `Forbidden_Item_3`, `Required_Item_3` cex, z3 refuted; `Forbidden_Item_1`, `Forbidden_Item_2`, `Forbidden_Item_4`, `Forbidden_Item_5`, `Required_Item_0`, `Required_Item_1`, `Required_Item_2`, `Unique_Tag_color` ok, z3 proved, BFS ok/ok/ok |
 | `safety_precedes_latch` | `precedes` reads a latch, not the current state |  | `ShippedAfterPaid` ok; `ShippedAfterAudit` cex |
 | `safety_stable_across_delete` | `stable` and `unchanged` across delete and create |  | `CapturedStays`, `AmountKept` ok; `PendingStays` cex |
 | `safety_stable_frees_slots` | `stable` and `unchanged` on a cone that frees slots |  | `StaysBeforeD`, `CKept` ok |
-| `safety_unique_sets` | A unique column set over column vars and owner vars, nulls apart |  | `Unique_Badge_color`, `Unique_Enrollment_course_id_student_id` cex, z3 unproved, BFS ok/cex/cex; `Unique_Booking_room_id_slot`, `Unique_Pass_seat`, `Forbidden_Pass_0` ok, z3 proved, BFS ok/ok/ok |
+| `safety_unique_sets` | A unique column set over column vars and owner vars, nulls apart |  | `Unique_Badge_color`, `Unique_Enrollment_course_id_student_id` cex, z3 refuted, BFS ok/cex/cex; `Unique_Booking_room_id_slot`, `Unique_Pass_seat`, `Forbidden_Pass_0` ok, z3 proved, BFS ok/ok/ok |
 | `safety_vacuity` | A property whose trigger never holds passes on every engine |  | `DoneOpenCloses` ok; `AlwaysDone` cex |
 | `sym_arm_reorders` | A guarded arm whose every move swaps the stored rows | `--instances Board=1` | `Forbidden_Job_0` ok, z3 proved, BFS ok/ok/ok |
-| `sym_deleted_row_owner` | A deleted row keeps its key, and a later step reads it, so the key must move with its parent's row | `--instances Mall=1` | `Quantifier_Mall_0` cex, z3 unproved; `DanglingKey_Item_Shop` ok, z3 proved, BFS ok/ok/ok |
+| `sym_deleted_row_owner` | A deleted row keeps its key, and a later step reads it, so the key must move with its parent's row | `--instances Mall=1` | `Quantifier_Mall_0` cex, z3 refuted; `DanglingKey_Item_Shop` ok, z3 proved, BFS ok/ok/ok |
 | `sym_first_absent` | A created row takes the first absent slot, and the group fixes absent slots |  | `Forbidden_Ticket_0` ok, z3 proved, BFS ok/ok/ok |
-| `sym_identity_pair` | A pre-existing 1:1 child starts at its parent's slot, so the two permute together |  | `MultiForbidden_Account_0` cex, z3 unproved; `Unique_Balance_Account` ok, z3 proved, BFS ok/ok/ok |
-| `sym_lift_compose` | A counterexample whose rows the canonical form reorders at several steps | `--instances Queue=1` | `Quantifier_Queue_0` cex, z3 unproved, BFS ok/cex/cex |
-| `sym_master_ties` | Identical pre-existing rows, some named by children and some not |  | `MultiForbidden_Visit_0` cex, z3 unproved; `Deadlock_Visit_status_booked` cex |
+| `sym_identity_pair` | A pre-existing 1:1 child starts at its parent's slot, so the two permute together |  | `MultiForbidden_Account_0` cex, z3 refuted; `Unique_Balance_Account` ok, z3 proved, BFS ok/ok/ok |
+| `sym_lift_compose` | A counterexample whose rows the canonical form reorders at several steps | `--instances Queue=1` | `Quantifier_Queue_0` cex, z3 refuted, BFS ok/cex/cex |
+| `sym_master_ties` | Identical pre-existing rows, some named by children and some not |  | `MultiForbidden_Visit_0` cex, z3 refuted; `Deadlock_Visit_status_booked` cex |
 | `sym_owner_coupled` | A rule that holds only because a child's key moves with its parent's row |  | `MultiForbidden_Order_0` ok, z3 proved, BFS ok/ok/ok |
 | `sym_per_entity_bounds` | Per-entity bounds give two classes different slot counts | `--instances Room=3 --instances Booking=2` | `MultiForbidden_Booking_0` ok, z3 proved, BFS ok/ok/ok |
 | `sym_relink_loop` | A move into the class of its own source, a loop the stored graph keeps as a loop | `--instances Ticket=1` | `TicketCloses`, `TicketClosesFair` cex |
 | `sym_self_owned` | An entity whose key names its own rows |  | `Forbidden_Task_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Task_status_open` cex |
+| `width_nullable_enum_256` | A nullable Enum of 256 values is one value past a byte with its null (P54); the build rejects it |  | `DomainTooLarge_Row_s` cex, TLC none; `Forbidden_Row_0` none |
+| `width_nullable_int_top` | The top value of a nullable Int at `--int-range-max 255` is one value past a byte (P40); the build rejects it | `--int-range-max 255 --instance-count 1` | `DomainTooLarge_Item_n` cex, TLC none; `Forbidden_Item_0` none |
 | `z3_cti_true_rule` | A true rule that is not inductive alone; no mined lemma relates its rows, and z3 proves it with a lemma generalized from its CTI (#428) |  | `MultiForbidden_Light_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Door_state_closed`, `Deadlock_Light_state_on` cex |
 | `z3_enum_bool_default_outside_values` | An Enum or Bool default outside its values; the model does not load |  | `Forbidden_Item_0` none |
 | `z3_guarded_null_beside_present` | A `.when`-guarded `null` write beside a `.when`-guarded `present` of one nullable Int; its guard holds of no row at 0..5, but at 6 it does, and z3 must encode the null step (P66) | `--int-range-max 5 --instance-count 1` | `Forbidden_Item_0` ok, z3 unproved |
 | `z3_guarded_present_past_the_top` | A `.when`-guarded `present` write to a nullable Int; no state has `n > 5` at 0..5, but at 0..6 the write reaches 6, and z3 must not read it as capped at the run's top (P43, #481) | `--int-range-max 5 --instance-count 1` | `Forbidden_Item_0` ok, z3 unproved |
-| `z3_inductive` | An invariant z3 proves by induction, beside a real violation |  | `Forbidden_Order_0` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Order_1` cex, z3 unproved, BFS cex/cex/cex |
-| `z3_int_and_now_boundary` | Int columns and `now` at the top of the range |  | `Forbidden_Item_0`, `Forbidden_Coupon_3` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Item_1` cex, z3 unproved, BFS cex/cex/cex; `Forbidden_Coupon_2` ok, z3 unproved, BFS ok/ok/ok |
+| `z3_inductive` | An invariant z3 proves by induction, beside a real violation |  | `Forbidden_Order_0` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Order_1` cex, z3 refuted, BFS cex/cex/cex |
+| `z3_int_and_now_boundary` | Int columns and `now` at the top of the range |  | `Forbidden_Item_0`, `Forbidden_Coupon_3` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Item_1` cex, z3 refuted, BFS cex/cex/cex; `Forbidden_Coupon_2` ok, z3 unproved, BFS ok/ok/ok |
 | `z3_int_default_out_of_range` | An Int default outside the range, which every engine would read the same wrong way |  | `IntLiteralOutOfBounds_Item_7` cex, TLC none; `Forbidden_Item_0` none |
 | `z3_int_listing_guard` | A guard that lists every Int value up to the top holds of no row at 0..5, but z3 has no top (#425) |  | `Forbidden_Item_0` ok, z3 unproved, BFS ok/ok/ok; `Deadlock_Item_status_open` cex, TLC none; `Witness_Item_status_flagged` cex |
 | `z3_int_listing_past_the_top` | The rule of `z3_int_listing_whole_range` with two more values of range | `--int-range-max 7` | `Forbidden_Item_0` cex, z3 refuted, BFS cex/cex/cex |
@@ -286,7 +294,7 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `z3_needs_exists` | A true rule whose proof needs a ∀∃ lemma over a key ("every ready order has a sent shipment"), mined as a count of at least one from Prepare's guard (#428) |  | `Quantifier_Order_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Order_status_open` cex |
 | `z3_needs_exists_global` | A true rule whose proof needs a ∀∃ lemma over rows no key links ("while a gate is ajar, some guard is on duty"), mined from what every reached state shows (#428) |  | `Quantifier_Gate_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Gate_state_shut`, `Deadlock_Guard_state_on` cex |
 | `z3_needs_run_mark` | A true rule whose proof needs a lemma that reads a run mark and relates rows no key links, which no mined lemma states; `z3_lemma_run_mark` adds it as a `.lemma()` (#428) |  | `MultiForbidden_Light_0` ok, z3 unproved, BFS ok/ok/ok; `Deadlock_Light_state_on`, `Deadlock_Sign_state_dark` cex |
-| `z3_now_past_the_top` | The `now` rule of `z3_int_and_now_boundary` with one more value of range | `--int-range-max 6` | `Forbidden_Coupon_0` cex, z3 unproved, BFS cex/cex/cex |
+| `z3_now_past_the_top` | The `now` rule of `z3_int_and_now_boundary` with one more value of range | `--int-range-max 6` | `Forbidden_Coupon_0` cex, z3 refuted, BFS cex/cex/cex |
 | `z3_two_ok_three_fails` | An invariant true at 2 instances and false at 3 |  | `Forbidden_Order_0` ok, z3 unproved, BFS ok/ok/cex; `Deadlock_Order_status_c`, `Witness_Order_status_d` cex |
 
 The state-cap trap has no file of its own: it is rule 7, which the capped-graph test checks on
@@ -463,9 +471,10 @@ and holds 14 runners.
 
 The `summary` job lists the `missed` and `timeout` mutants, and each shard's `mutants.out` is an
 artifact with each mutant's diff and log. Kill a missed mutant with a corpus case it gets wrong,
-or record why it is equivalent. A timeout is a mutant whose corpus ran past 60 seconds, a hang,
-which needs no new case. Each test process runs under a 2 GiB address-space cap, so a mutant
-that allocates without end fails at the cap. A shard that uploads no results is named at the top
+or record why it is equivalent. In the liveness run, a timeout is a mutant whose corpus ran past 60 seconds, a hang,
+which needs no new case, and each test process runs under a 2 GiB address-space cap, so a
+mutant that allocates without end fails at the cap. The TLC-side run's limits are the
+15 minutes and no cap above. A shard that uploads no results is named at the top
 of the summary.
 
 **Kill rate.** The kill rate is the caught and timed-out mutants over the viable ones (all
@@ -490,8 +499,8 @@ TLA+ printer and the TLC reading code are the TLC-side run's:
 ## Kani harnesses
 
 Kani checks a few leaf functions of the checker on every input up to a bound, on the Rust code
-as written. Each harness is a `#[kani::proof]` in a `#[cfg(kani)] mod proofs` at the end of the
-file it proves, so builds and tests never compile it.
+as written. Each harness is a `#[kani::proof]` in a `#[cfg(kani)] mod proofs` of the file it proves, so
+builds and tests never compile it.
 
 | Harness | File under `lifecycle/` | Statement | Bound |
 |---|---|---|---|
@@ -502,8 +511,8 @@ file it proves, so builds and tests never compile it.
 | `rows_take_what_bytes_with_said_and_never_move` | `explore/segments.rs` | a buffer of segments reads each row back and keeps it at its address, and `bytes_with(1)` before a push is `bytes_with(0)` after it | rows of one byte, up to 9 pushes |
 | `segments_hold_every_row_and_no_more_than_a_doubling_vec` | `explore/segments.rs` | the segments that hold `n` rows hold room for all of them and never more than a doubling `Vec` | every `n` up to 2^40, segments of 4 |
 | `store_bytes_never_overflows` | `explore/store.rs` | `store_bytes` neither overflows nor panics | every input, every shape |
-| `store_bytes_only_grows` | `explore/store.rs` | each term of the memory model only grows with more or wider states and edges, saturating at `u64::MAX` | every count up to `u64::MAX`, segments of 4 and of 2^14 |
-| `store_bytes_is_at_most_the_model_before` | `explore/store.rs` | at segments of 2^14 rows, the model never counts more than the one before #296 | every input, every shape |
+| `store_bytes_only_grows` | `explore/store.rs` | each term of the memory model only grows with more or wider states and edges, saturating at `u64::MAX`; the harness does not call `store_bytes`, whose growth follows because it adds and multiplies these terms, all at least 0 | every count up to `u64::MAX`, segments of 4 and of 2^14 |
+| `store_bytes_is_at_most_the_model_before` | `explore/store.rs` | at segments of 2^14 rows and without the lists of segments, the model never counts more than the one before #296 (the lists, 24 bytes a slot past `2 * SEG` rows, can make `store_bytes` count more at a power of two) | every input, every shape |
 | `a_push_takes_the_bytes_bytes_with_said_and_reads_back` | `explore/arena.rs` | a pushed state reads back at the address it was pushed to, and `bytes_with` predicts the push | states of one byte, up to 9 pushes |
 | `pack_then_unpack_is_the_state` | `explore/packing.rs` | packing by 64-bit words and one cell at a time give the same bytes, and a state that fits reads back whole, so two states pack alike only when equal (#296 2.3) | 4 cells, every width from 0 to 8 bits, every value |
 | `a_cell_across_a_word_reads_back` | `explore/packing.rs` | the same, with a cell starting, ending, or straddling bit 64 | seven 8-bit cells and four of every width up to 8 bits |
@@ -537,8 +546,9 @@ under a minute.
 
 ### In CI
 
-The `kani` job runs every harness on each run on `main` (scheduled every three hours, or
-started by hand). On a pull request it runs when a
+The `kani` job runs every harness on each run on `main` started by hand, and on each
+scheduled run (every three hours) whose commit is not the one the last finished run on
+`main` checked; a scheduled run on an unchanged `main` skips every job. On a pull request it runs when a
 changed file is on the list in `scripts/kani-relevant.sh`: the files that hold a harness, the
 files whose code the harnesses run, the manifests and the lockfile, and the workflow that pins
 Kani. A harness in a new file adds that file to the list.
