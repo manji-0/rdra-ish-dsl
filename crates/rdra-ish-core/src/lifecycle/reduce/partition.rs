@@ -14,7 +14,7 @@ use crate::lifecycle::types::{ActId, Domain, EntId, VarId};
 use crate::lifecycle::{StateDiag, TransitionSystem};
 use crate::memory::Watched;
 
-mod reference;
+pub(super) mod reference;
 #[cfg(any(test, feature = "shadow"))]
 mod up_to_h;
 

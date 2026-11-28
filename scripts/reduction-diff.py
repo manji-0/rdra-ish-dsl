@@ -37,6 +37,7 @@ build). `--min-stub-fold`, `--min-stub-rise` and `--min-up-to-h` fail a run with
   python3 -I scripts/reduction-diff.py compare BIN MODEL.rdra [--instance-count N] [--with-tlc]
   python3 -I scripts/reduction-diff.py minimize BIN MODEL.rdra OUT.rdra [--instance-count N] [--with-tlc]
   python3 -I scripts/reduction-diff.py selfcheck
+  python3 -I scripts/reduction-diff.py lemma6 --seeds 0:40 [--counted] [--min-reduced N] [--profile P]
 
 `run --with-tlc` needs `tlc` on PATH (run it under `nix develop`); without it no run starts
 TLC. It writes each seed's model and outputs under `--work` (default target/reduction-diff),
@@ -48,6 +49,13 @@ dropped silently. The exit code is 1 when any seed diverges or disagrees, times 
 a syntax change), and when fewer seeds than `--min-compared` (default 1) were compared or
 fewer than `--min-reduced` (default 0) reduced a cone: a run that compared nothing, or
 reduced nothing, is not a pass.
+
+`lemma6` checks Lemma 6 of docs/theory/cones.md step by step on each seed's model, at its
+instance count, on every reduced cone whose unreduced cone completes (`reduce/lemma6.rs`).
+It writes the models to `<work>/lemma6/` and runs the ignored core test
+`generated_models_step_as_their_cones_step` on them (`cargo test --profile P`, `release` by
+default, from this tree), which prints a line per seed. The exit code is 1 when a seed fails the check, and when
+fewer seeds than `--min-reduced` (default 1) reduced a cone.
 
 `minimize` shrinks a diverging or disagreeing model by deleting lines (ddmin) while it
 still does. `selfcheck` runs the comparison on the saved output pairs under
@@ -738,6 +746,34 @@ def cmd_run(args):
     return 1 if failed or (args.fail_on_timeout and summary["timed_out"]) else 0
 
 
+def cmd_lemma6(args):
+    work = Path(args.work) / "lemma6"
+    shutil.rmtree(work, ignore_errors=True)
+    work.mkdir(parents=True)
+    seeds = seed_list(args.seeds)
+    for seed in seeds:
+        text, instances = gen(seed, args.counted)
+        (work / f"seed{seed:05}.rdra").write_text(f"// flags: --instance-count {instances}\n{text}")
+    test = "lifecycle::tests::reduce_steps::generated_models_step_as_their_cones_step"
+    cmd = ["cargo", "test", "--profile", args.profile, "-p", "rdra-ish-core", "--lib", "--", "--ignored", "--exact", test, "--nocapture"]
+    env = dict(os.environ, RDRA_LEMMA6_MODELS=str(work))
+    root = Path(__file__).resolve().parent.parent
+    p = subprocess.run(cmd, env=env, cwd=root, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    (work / "test.out").write_text(p.stdout)
+    lines = [l for l in p.stdout.splitlines() if l.startswith("lemma6 seed")]
+    by = lambda st: [l for l in lines if l.split(": ", 1)[1].startswith(st)]
+    for line in by("FAIL"):
+        print(line)
+    reduced = [l for l in by("ok") if not re.search(r"reductions=0\b", l)]
+    summary = dict(generated=len(seeds), checked=len(by("ok")) + len(by("FAIL")), load_error=len(by("load_error")),
+                   reduced=len(reduced), failed=len(by("FAIL")))
+    print(json.dumps(summary))
+    if len(lines) != len(seeds):
+        print(p.stdout[-4000:], file=sys.stderr)
+        sys.exit(f"the test printed {len(lines)} lines for {len(seeds)} seeds; see {work / 'test.out'}")
+    return 1 if by("FAIL") or p.returncode != 0 or len(reduced) < args.min_reduced else 0
+
+
 def cmd_gen(args):
     text, instances = (gen_stubs if args.stubs else gen)(args.seed, args.counted)
     sys.stdout.write(f"// instance count {instances}\n{text}")
@@ -832,6 +868,11 @@ def main():
     p.add_argument("--counted", action="store_true", help="count the raises of every triggers line (#220)")
     p.add_argument("--stubs", action="store_true", help="draw models whose reduction binds params on a stub (gen_stubs)")
     sub.add_parser("selfcheck")
+    p = sub.add_parser("lemma6")
+    p.add_argument("--seeds", required=True, help="as for run")
+    p.add_argument("--counted", action="store_true", help="count the raises of every triggers line (#220)")
+    p.add_argument("--min-reduced", type=int, default=1, help="exit 1 when fewer seeds reduced a cone")
+    p.add_argument("--profile", default="release", help="the cargo profile the test builds with")
     for name in ("compare", "minimize"):
         p = sub.add_parser(name)
         p.add_argument("bin")
@@ -844,7 +885,7 @@ def main():
     args.work = str(Path(args.work).resolve())
     global SYMMETRY
     SYMMETRY = args.symmetry
-    cmds = dict(run=cmd_run, gen=cmd_gen, compare=cmd_compare, minimize=cmd_minimize, selfcheck=cmd_selfcheck)
+    cmds = dict(run=cmd_run, gen=cmd_gen, lemma6=cmd_lemma6, compare=cmd_compare, minimize=cmd_minimize, selfcheck=cmd_selfcheck)
     return cmds[args.cmd](args)
 
 

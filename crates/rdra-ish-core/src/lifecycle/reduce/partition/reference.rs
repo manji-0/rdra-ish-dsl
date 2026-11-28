@@ -116,7 +116,7 @@ pub(super) fn check(
 /// same blocks by a rise. The blocks refine the inputs, so the block a rise enters names the
 /// inputs it set, and the second condition says that two equivalent states stay equivalent
 /// under every rise. Returns each state's block.
-pub(super) fn quotient_blocks(
+pub(in crate::lifecycle::reduce) fn quotient_blocks(
     n: usize,
     silent: &[(u32, u32)],
     rises: &[(u32, u32)],

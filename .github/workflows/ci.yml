@@ -240,6 +240,7 @@ jobs:
           cargo test --profile ci-checked -p rdra-ish-core --lib reduced_domain_cones_hold_each_fold_bit_where_its_action_runs
           cargo test --profile ci-checked -p rdra-ish-core --lib reduced_domain_cones_step_by_a_true_fold_bit_only_where_the_cone_steps
           cargo test --profile ci-checked -p rdra-ish-core --lib case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0
+          cargo test --profile ci-checked -p rdra-ish-core --lib reduced_cones_step_as_their_cones_step
       - name: Each group rule has a witness, and the cost caps keep the verdict
         # The witnesses run in the debug test step too, but for the one that enumerates up
         # to BRANCH_CAP arrangements a state, which takes minutes there. The snapshot of the
@@ -273,6 +274,14 @@ jobs:
               --seeds 0,2,4,7,8,13,15,18,22,23,27,31,32,38,39,41,45,46,47,49,52,53,55,57,59,188,244,417,419,459,496,78,79,86,88,89,92,95,99,100,109,113,114,125,127
           fi
         timeout-minutes: 20
+      - name: Every reduced cone of the random models steps as its cone steps (Lemma 6)
+        # The 522 PR seeds, on both events: each seed's reduced cones whose unreduced cone
+        # completes, checked step by step against it (core/reduce/lemma6.rs) by the ignored
+        # core test the script drives; about 2 minutes locally, 361 of the seeds reduce a cone.
+        run: |
+          python3 -I scripts/reduction-diff.py lemma6 --profile ci-checked --min-reduced 300 \
+            --seeds @scripts/reduction-diff-pr-seeds.txt
+        timeout-minutes: 15
       - name: Reduced and unreduced verify agree on random models with params on a stub
         # `--stubs` draws models whose reduction binds a param on a stub to any slot
         # (`bind_stub_params`, claims A8 and T9): a folded S action's `Triggered` param, and a
