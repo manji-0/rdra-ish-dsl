@@ -1221,4 +1221,133 @@ theorem not_oAccepts_iff_lassos (he : LiveEqui h L trig goal stop after) (hG : F
 
 end Decide
 
+/-! ## The orbit search with commutation on `W`
+
+Theorem A18 gives the commutation only on a closed set `W` (`SymOn`). The search is then
+stated on `M` restricted to `W`, with the symmetry `SymOn.toSym`. Its stored states lie in `W`
+(`quotient_restrict_W`), and from a state of `W` the restriction has `M`'s real edges and
+`M`'s enabled and taken instances (`restrict_rEdge_iff`, `restrict_enabled_iff`,
+`restrict_takes_iff`), so the graph it searches is the one a run up to symmetry stores for
+`M`. The verdicts it is compared with are `M`'s. -/
+
+section DecideOn
+
+variable {W : σ → Prop}
+
+/-- Every stored state of the canonical quotient of `M` restricted to `W` lies in `W`. -/
+theorem quotient_restrict_W (h : SymOn M G W) (can : σ → σ) (π : σ → G)
+    (hcan : ∀ s, can s = h.act (π s) s) (hπ : ∀ s, h.mem s (π s)) :
+    ∀ r, (quotient (M.restrict W) can).Reach r → W r := by
+  intro r hr
+  induction hr with
+  | @init r hi =>
+    obtain ⟨s, hs, rfl⟩ := hi
+    rw [hcan]; exact h.W_act (h.W_init hs) (hπ s)
+  | @step r a r' _ hst _ =>
+    obtain ⟨t, ⟨hW, hrt⟩, rfl⟩ := hst
+    rw [hcan]; exact h.W_act (h.W_step hW hrt) (hπ t)
+
+/-- From a state of `W`, the real edges of the restriction are those of `M`. -/
+theorem restrict_rEdge_iff {r t : σ} (hr : W r) : REdge (M.restrict W) r t ↔ REdge M r t :=
+  ⟨fun ⟨hne, a, _, hs⟩ => ⟨hne, a, hs⟩, fun ⟨hne, a, hs⟩ => ⟨hne, a, hr, hs⟩⟩
+
+variable (h : SymOn M G W) {L : SymLive h.toSym Φ β} {K : Canon h.toSym}
+  {goal trig : β → σ → Prop} {stop stop' : σ → Prop} {after : β → σ → Prop}
+
+/-- The lists the search needs, given on `M`, serve its restriction: the two reach the same
+states, and an instance enabled in the restriction is enabled in `M`. -/
+theorem restrict_lists (hΦ : ∀ r, ∃ LΦ : List Φ, ∀ x, M.Enabled L.inst x r → x ∈ LΦ)
+    (LM : List σ) (hLM : ∀ s, M.Reach s → s ∈ LM) :
+    (∀ r, ∃ LΦ : List Φ, ∀ x, (M.restrict W).Enabled L.inst x r → x ∈ LΦ) ∧
+      (∀ s, (M.restrict W).Reach s → s ∈ LM) := by
+  refine ⟨fun r => ?_, fun s hs => hLM s ((restrict_reach_iff h.W_init h.W_step s).1 hs)⟩
+  obtain ⟨LΦ, hL⟩ := hΦ r
+  exact ⟨LΦ, fun x ⟨s', hne, a, hi, _, hs⟩ => hL x ⟨s', hne, a, hi, hs⟩⟩
+
+/-- **The orbit verdict with commutation on `W`.** The property holds on `M` for every
+binding under `Fair_P` and `stop` iff the orbit search, run with a stop rule `stop'` that
+agrees with `stop` on `W`, does not accept. -/
+theorem liveHolds_iff_not_oAccepts_on (he : LiveEqui h.toSym L trig goal stop' after)
+    (hstop : ∀ s, W s → (stop' s ↔ stop s)) (hG : FiniteGroups h.toSym)
+    (hΦ : ∀ r, ∃ LΦ : List Φ, ∀ x, M.Enabled L.inst x r → x ∈ LΦ)
+    (LM : List σ) (hLM : ∀ s, M.Reach s → s ∈ LM) :
+    (∀ b, M.LiveHolds (fun ρ => M.FairP L.inst ρ ∧ StopsOnly stop ρ) (trig b) (goal b)) ↔
+      ¬ OAccepts L K goal stop' trig := by
+  obtain ⟨hΦ', hLM'⟩ := restrict_lists h hΦ LM hLM
+  rw [← liveHolds_iff_not_oAccepts he hG hΦ' LM hLM']
+  exact forall_congr' fun b =>
+    (restrict_liveHolds_iff h.W_init h.W_step L.inst stop stop' hstop (trig b) (goal b)).symm
+
+/-- `oAccepts_iff` with commutation on `W`: the orbit search accepts iff some binding has a
+behaviour of `M` that satisfies `Fair_P`, stays forever only where `stop` holds, and violates
+the property. -/
+theorem oAccepts_on_iff (he : LiveEqui h.toSym L trig goal stop' after)
+    (hstop : ∀ s, W s → (stop' s ↔ stop s)) (hG : FiniteGroups h.toSym)
+    (hΦ : ∀ r, ∃ LΦ : List Φ, ∀ x, M.Enabled L.inst x r → x ∈ LΦ)
+    (LM : List σ) (hLM : ∀ s, M.Reach s → s ∈ LM) :
+    OAccepts L K goal stop' trig ↔
+      ∃ b c, M.Behaviour c ∧ M.FairP L.inst c ∧ StopsOnly stop c ∧
+        Violates (trig b) (goal b) c := by
+  have e := liveHolds_iff_not_oAccepts_on h (K := K) he hstop hG hΦ LM hLM
+  constructor
+  · intro hacc
+    refine Classical.byContradiction fun hno => ?_
+    exact (e.1 fun b c hb hf hv => hno ⟨b, c, hb, hf.1, hf.2, hv⟩) hacc
+  · rintro ⟨b, c, hb, hf, hs, hv⟩
+    exact Classical.byContradiction fun hn => e.2 hn b c hb ⟨hf, hs⟩ hv
+
+/-- **The orbit search and N9's search on `M` agree, with commutation on `W`.** The orbit
+search accepts iff N9's search on `M` accepts for some binding. -/
+theorem oAccepts_on_iff_accepts (he : LiveEqui h.toSym L trig goal stop' after)
+    (hstop : ∀ s, W s → (stop' s ↔ stop s)) (hG : FiniteGroups h.toSym)
+    (hΦ : ∀ r, ∃ LΦ : List Φ, ∀ x, M.Enabled L.inst x r → x ∈ LΦ)
+    (LM : List σ) (hLM : ∀ s, M.Reach s → s ∈ LM) :
+    OAccepts L K goal stop' trig ↔ ∃ b, M.Accepts L.inst stop (trig b) (goal b) := by
+  rw [oAccepts_on_iff h he hstop hG hΦ LM hLM]
+  constructor
+  · rintro ⟨b, c, hb, hf, hs, hv⟩
+    exact ⟨b, (accepts_iff LM hLM).2 ⟨c, hb, hf, hs, hv⟩⟩
+  · rintro ⟨b, hacc⟩
+    obtain ⟨c, hb, hf, hs, hv⟩ := (accepts_iff LM hLM).1 hacc
+    exact ⟨b, c, hb, hf, hs, hv⟩
+
+/-- `not_oAccepts_iff_lassos` with commutation on `W`: the orbit search does not accept iff
+no thread-fair violating annotated lasso of the canonical quotient of `M` restricted to `W`
+exists, the quotient side of `a23_on`. -/
+theorem not_oAccepts_on_iff_lassos (he : LiveEqui h.toSym L trig goal stop' after)
+    (hG : FiniteGroups h.toSym)
+    (hΦ : ∀ r, ∃ LΦ : List Φ, ∀ x, M.Enabled L.inst x r → x ∈ LΦ)
+    (LM : List σ) (hLM : ∀ s, M.Reach s → s ∈ LM) :
+    ¬ OAccepts L K goal stop' trig ↔
+      ∀ r t p b', RunOf h.toSym K.can K.π r t p → ALasso r t p → AFair L r t p →
+        AStops stop' r t → ¬ AViolates L trig goal r p b' := by
+  obtain ⟨hΦ', hLM'⟩ := restrict_lists h hΦ LM hLM
+  exact not_oAccepts_iff_lassos he hG hΦ' LM hLM'
+
+omit h in
+/-- `LiveEqui` with another stop rule that the group preserves. -/
+theorem LiveEqui.withStop {h : Sym M G} {L : SymLive h Φ β} (he : LiveEqui h L trig goal stop after)
+    (hs : ∀ {s g}, h.mem s g → (stop' (h.act g s) ↔ stop' s)) :
+    LiveEqui h L trig goal stop' after :=
+  ⟨he.trig_act, he.trig_after, he.after_next, he.goal_act, hs⟩
+
+/-- **The orbit verdict under `WF_vars(Next)`, with commutation on `W`.** The search's stop
+rule is `¬ Moves` of the restriction, which agrees with `¬ Moves` of `M` on `W` and which
+the group preserves. Only the trigger and goal parts of `he` are used. -/
+theorem liveHolds_wfNext_iff_not_oAccepts_on (he : LiveEqui h.toSym L trig goal stop' after)
+    (hG : FiniteGroups h.toSym)
+    (hΦ : ∀ r, ∃ LΦ : List Φ, ∀ x, M.Enabled L.inst x r → x ∈ LΦ)
+    (LM : List σ) (hLM : ∀ s, M.Reach s → s ∈ LM) :
+    (∀ b, M.LiveHolds (fun ρ => M.FairP L.inst ρ ∧ M.WFNext ρ) (trig b) (goal b)) ↔
+      ¬ OAccepts L K goal (fun q => ¬ (M.restrict W).Moves q) trig := by
+  have he' := he.withStop (stop' := fun q => ¬ (M.restrict W).Moves q)
+    fun hg => not_congr (h.toSym.moves_act hg)
+  rw [← liveHolds_iff_not_oAccepts_on h he' (stop := fun q => ¬ M.Moves q)
+    (fun s hs => not_congr (restrict_moves_iff hs)) hG hΦ LM hLM]
+  exact forall_congr' fun b =>
+    ⟨fun hH ρ hb hf => hH ρ hb ⟨hf.1, (M.wfNext_iff ρ).2 hf.2⟩,
+     fun hH ρ hb hf => hH ρ hb ⟨hf.1, (M.wfNext_iff ρ).1 hf.2⟩⟩
+
+end DecideOn
+
 end RdraIsh

@@ -260,3 +260,15 @@ an axiom outside Lean's three standard ones (`propext`, `Classical.choice`, `Quo
 #print axioms RdraIsh.ThreadsCovered
 #print axioms RdraIsh.PStop
 #print axioms RdraIsh.OAccepts
+#print axioms RdraIsh.quotient_restrict_W
+#print axioms RdraIsh.restrict_rEdge_iff
+#print axioms RdraIsh.restrict_lists
+#print axioms RdraIsh.liveHolds_iff_not_oAccepts_on
+#print axioms RdraIsh.oAccepts_on_iff
+#print axioms RdraIsh.oAccepts_on_iff_accepts
+#print axioms RdraIsh.not_oAccepts_on_iff_lassos
+#print axioms RdraIsh.LiveEqui.withStop
+#print axioms RdraIsh.liveHolds_wfNext_iff_not_oAccepts_on
+#print axioms RdraIsh.SymAct.Sys.orbit_verdict
+#print axioms RdraIsh.SymAct.Sys.orbit_accepts_iff
+#print axioms RdraIsh.SymAct.Sys.orbit_verdict_wfNext
