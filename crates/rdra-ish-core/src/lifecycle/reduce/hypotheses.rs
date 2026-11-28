@@ -362,15 +362,17 @@ pub(super) mod tests {
     use std::cell::Cell;
     use std::collections::{BTreeMap, BTreeSet};
 
-    use super::{loop_faults, rise_faults, stages, Hypothesis};
+    use super::{layout_faults, loop_faults, raw_width, rise_faults, stages, Hypothesis};
     use crate::lifecycle::explore::symmetry::witnesses::dropping;
     use crate::lifecycle::explore::Caps;
+    use crate::lifecycle::reduce::extended::Extended;
     use crate::lifecycle::tests::model_from;
-    use crate::lifecycle::{Bounds, Scope, Target, TransitionSystem};
+    use crate::lifecycle::{Bounds, Scope, Seed, Target, TransitionSystem};
 
-    /// What the certificates checked on this thread, for the walk over the samples: rise
-    /// edges, runs whose loop marks were checked, of them those with a marked class, inner
-    /// reductions, and unobserved sub-lifecycles whose run was checked.
+    /// What the certificates checked on this thread, for the walk over the samples and the
+    /// planted faults: rise edges, runs whose loop marks were checked, of them those with a
+    /// marked class, inner reductions, unobserved sub-lifecycles whose run was checked, and
+    /// the faults that decided a cone unreduced.
     #[derive(Clone, Copy, Debug, Default)]
     pub(crate) struct Checked {
         pub(crate) rises: usize,
@@ -378,6 +380,8 @@ pub(super) mod tests {
         pub(crate) looping: usize,
         pub(crate) inner: usize,
         pub(crate) unobserved: usize,
+        /// The faults found, by `Hypothesis`.
+        pub(crate) faults: [usize; 4],
     }
 
     thread_local! {
@@ -474,24 +478,28 @@ pub(super) mod tests {
     /// `loop_faults` on a run of six states: class 0 holds the cycle 0 → 1 → 0, class 1 the
     /// path 2 → 3 and a self-loop at 3, and 4 → 5 → 4 crosses from class 2 to class 3. Only
     /// class 0 must be marked; with its mark dropped, as `divergence_back_edges` and
-    /// `s_cycles` plant, the check names it.
+    /// `s_cycles` plant, the check names it. The edges come sorted by source, as a run lists
+    /// them, and unsorted, which the check copies and sorts.
     #[test]
     fn a_planted_loop_mark_fails_its_check() {
-        let silent = [(0, 1), (1, 0), (2, 3), (3, 3), (4, 5), (5, 4), (1, 2)];
+        let sorted = [(0, 1), (1, 0), (1, 2), (2, 3), (3, 3), (4, 5), (5, 4)];
+        let unsorted = [(0, 1), (1, 0), (2, 3), (3, 3), (4, 5), (5, 4), (1, 2)];
         let class = [0, 0, 1, 1, 2, 3];
-        let classes = |loops: &[bool]| -> Vec<String> {
-            let faults = loop_faults(6, &silent, &class, loops);
-            assert!(faults.iter().all(|f| f.hypothesis == Hypothesis::Loop));
-            faults.iter().map(ToString::to_string).collect()
-        };
-        assert!(classes(&[true, false, false, false]).is_empty());
-        assert!(
-            classes(&[true, true, true, true]).is_empty(),
-            "an over-approximation"
-        );
-        let got = classes(&[false; 4]);
-        assert_eq!(got.len(), 1, "{got:?}");
-        assert!(got[0].contains("class 0"), "{got:?}");
+        for silent in [&sorted[..], &unsorted[..]] {
+            let classes = |loops: &[bool]| -> Vec<String> {
+                let faults = loop_faults(6, silent, &class, loops);
+                assert!(faults.iter().all(|f| f.hypothesis == Hypothesis::Loop));
+                faults.iter().map(ToString::to_string).collect()
+            };
+            assert!(classes(&[true, false, false, false]).is_empty());
+            assert!(
+                classes(&[true, true, true, true]).is_empty(),
+                "an over-approximation"
+            );
+            let got = classes(&[false; 4]);
+            assert_eq!(got.len(), 1, "{got:?}");
+            assert!(got[0].contains("class 0"), "{got:?}");
+        }
     }
 
     /// The corpus cases the planted faults below are seen on: rises (inputs and bits), silent
@@ -505,11 +513,10 @@ pub(super) mod tests {
         ),
     ];
 
-    /// Of the cones of `PLANT_CASES` that reduce, how many `plant` (a `dropped` switch) makes
-    /// decide unreduced: the planted run is the cone system itself.
-    fn fall_backs(plant: &str) -> usize {
-        let caps = Caps::new(usize::MAX, 200_000);
-        let mut fell_back = 0;
+    /// Every target and property cone of `PLANT_CASES` at `Bounds::VERIFY`, as cone systems
+    /// with their seeds.
+    fn plant_cones() -> Vec<(TransitionSystem, Vec<Seed>)> {
+        let mut out = Vec::new();
         for src in PLANT_CASES {
             let ts = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::ALL).ts;
             let targets = (ts.targets().into_iter())
@@ -518,34 +525,77 @@ pub(super) mod tests {
             let properties =
                 (0..ts.properties().len()).map(|i| (ts.property_cone(i), ts.property_seed(i)));
             for (cone, seed) in targets.chain(properties).collect::<Vec<_>>() {
-                let (sys, seeds) = ts.cone_system(&cone, [seed]);
-                if sys.reduced(&seeds, caps).reduction().is_none() {
-                    continue;
-                }
-                let planted = dropping(plant, || sys.reduced(&seeds, caps));
-                fell_back += usize::from(planted == sys);
+                out.push(ts.cone_system(&cone, [seed]));
             }
+        }
+        out
+    }
+
+    /// `layout_faults` on the extended sub-lifecycle of every cone of `PLANT_CASES` with an S
+    /// side: the widths `X` lays out pass, and a raw width or a length off by one fails.
+    #[test]
+    fn a_planted_input_layout_fails_its_check() {
+        let mut checked = 0;
+        for (sys, seeds) in plant_cones() {
+            let split = sys.split_with(&seeds, true);
+            if split.s.is_empty() || split.s.is_subset(&split.obs) {
+                continue;
+            }
+            let ext = Extended::of(&sys, &split);
+            let x = &ext.system;
+            let len: usize = (ext.inputs_local.iter())
+                .map(|v| x.slots_of(&x.var(*v).kind))
+                .sum();
+            let raw = raw_width(&ext);
+            assert!(layout_faults(&ext, raw, len).is_empty());
+            for (r, l) in [(raw + 1, len + 1), (raw, len + 1)] {
+                let faults = layout_faults(&ext, r, l);
+                assert!(faults.iter().any(|f| f.hypothesis == Hypothesis::Stage));
+            }
+            checked += 1;
+        }
+        assert!(checked > 0, "a cone of the cases has an S side");
+    }
+
+    /// Of the cones of `PLANT_CASES` that reduce, how many `plant` (a `dropped` switch) makes
+    /// decide unreduced (the planted run is the cone system itself) with a fault of `want`
+    /// found on the way.
+    fn fall_backs(plant: &str, want: Hypothesis) -> usize {
+        let caps = Caps::new(usize::MAX, 200_000);
+        let faults = || CHECKED.with(|c| c.get().faults[want as usize]);
+        let mut fell_back = 0;
+        for (sys, seeds) in plant_cones() {
+            if sys.reduced(&seeds, caps).reduction().is_none() {
+                continue;
+            }
+            let before = faults();
+            let planted = dropping(plant, || sys.reduced(&seeds, caps));
+            fell_back += usize::from(planted == sys && faults() > before);
         }
         fell_back
     }
 
-    /// Each planted fault reaches `of_graph` or `Classes::of` on a real run: the check fails,
-    /// which a debug build lets through only because the fault is planted, and the cone is
-    /// decided unreduced. The rise table keyed by the inputs a rise leaves
+    /// Each planted fault reaches `of_graph` or `Classes::of` on a real run: the check of its
+    /// hypothesis fails, which a debug build lets through only because the fault is planted,
+    /// and the cone is decided unreduced. The rise table keyed by the inputs a rise leaves
     /// (`rise_table_by_source`), the raw inputs listed as a stage on every rise
     /// (`stages_raw_always`), a back edge of `divergence` that marks nothing
     /// (`divergence_back_edges`), `s_cycles` that says nothing loops (`s_cycles`), and an inner
     /// seed that reads and keeps nothing (`inner_seed_empty`).
     #[test]
     fn a_planted_fault_makes_a_reduced_cone_decide_unreduced() {
-        for plant in [
-            "rise_table_by_source",
-            "stages_raw_always",
-            "divergence_back_edges",
-            "s_cycles",
-            "inner_seed_empty",
+        for (plant, want) in [
+            ("rise_table_by_source", Hypothesis::Table),
+            ("stages_raw_always", Hypothesis::Stage),
+            ("divergence_back_edges", Hypothesis::Loop),
+            ("s_cycles", Hypothesis::Loop),
+            ("inner_seed_empty", Hypothesis::Inner),
         ] {
-            assert!(fall_backs(plant) > 0, "{plant}: no reduced cone falls back");
+            let n = fall_backs(plant, want);
+            assert!(
+                n > 0,
+                "{plant}: no reduced cone falls back on a {want:?} fault"
+            );
         }
     }
 }

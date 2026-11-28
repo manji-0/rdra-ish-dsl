@@ -2690,12 +2690,19 @@ fn every_quotient_passes_the_checks_of_its_hypotheses() {
         looping: after.looping - before.looping,
         inner: after.inner - before.inner,
         unobserved: after.unobserved - before.unobserved,
+        faults: [0; 4],
     };
     eprintln!("{reduced} cones reduced; checked {got:?}");
     assert!(
-        reduced > 0 && got.rises > 0 && got.loop_runs > 0 && got.looping > 0 && got.inner > 0,
+        reduced > 0
+            && got.rises > 0
+            && got.loop_runs > 0
+            && got.looping > 0
+            && got.inner > 0
+            && got.unobserved > 0,
         "{reduced} cones reduced; checked {got:?}"
     );
+    assert_eq!(after.faults, before.faults, "no check fails");
 }
 
 /// The reduction is a divergence-blind stuttering bisimulation, and `Deadlock` reads "no

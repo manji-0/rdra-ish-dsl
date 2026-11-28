@@ -1076,17 +1076,23 @@ representative is a reachable state of `X` and its outer class moves and rises a
 `X`, where the code takes an inner representative and reads them on the inner run.
 R: every build checks, on each run of `X` before the reduction uses it, three hypotheses the
 Lean proof takes (`reduce/hypotheses.rs`). On a fault the cone is decided unreduced, with a
-warning; a debug or `shadow` build panics.
+warning; a debug or `shadow` build panics. The run is `X`'s own when `X` has no inner
+reduction and is not run up to `H`, and there the checks are the Lean hypotheses literally.
+Otherwise they read the graph `of_graph` reads, the inner run or the orbit graph, and the step
+from it to `X` stays argued. An unobserved `S` has no rise table to check.
 
 - `rise_faults` checks the rise table (`RiseTable`) and `X`'s side of the stages
   (`Lemma6Staged`). Each rise of a class's representative sets the raw inputs or flips one
-  bit slot, and `stages` lists it as exactly one stage. The table holds exactly the rises of each class's
-  first state, the representative, under the input bytes they end at and with the class they
-  enter. That every other state of the class rises as the representative does is (B3), which
-  the stability certificate below checks.
+  bit slot, and `stages` lists it as exactly one stage. The table holds exactly the rises of
+  each class's first state, the representative, under the input bytes they end at and with
+  the class they enter. That every other state of the class rises as the representative does
+  is (B3), which the stability certificate below checks.
 - `layout_faults` checks that the engines read the input bytes with `X`'s raw width and length.
 - `inner_faults` checks the inner split of a nested reduction. Every rise is in its `T_a`, and
-  every `obs` variable and input of `X` is on its `T` side or in its `obs`.
+  every `obs` variable and input of `X` is on its `T` side or in its `obs`. With the inner
+  partition's (B1) and Lemma 5 (b) of the inner split, this fixes on the inner class the
+  representative's `obs` and input bytes, which rises it takes, and the input bytes they end
+  at. It does not fix the block a rise enters, which the code reads on the inner run.
 
 The checks recompute what they check from the run's edges, the state bytes and the split's
 sets. They do not show that a `T_a` step of `C` has rises through every stage it lists: a
@@ -1265,10 +1271,13 @@ silent cycle. R: every build checks that hypothesis, case 1, on each explored ru
 (`reduce/hypotheses.rs::loop_faults`): it peels the silent edges between different states
 inside the unmarked classes, and a state left over lies on or after a cycle of its class. The
 marks it checks are `divergence`'s, or all false when `s_cycles` says nothing loops. On a fault
-the cone is decided unreduced, with a warning; a debug or `shadow` build panics. An unobserved
-`S` is not explored in a release build. There, `s_cycles` is checked only in a test build, on
-a plain run of `X` (`partition.rs::unobserved_loops`). `reduce/hypotheses.rs::tests::a_planted_loop_mark_fails_its_check`
-and `::a_planted_fault_makes_a_reduced_cone_decide_unreduced` (a back edge that marks nothing, and
+the cone is decided unreduced, with a warning; a debug or `shadow` build panics. On a flat `X`
+not run up to `H` this is case 1 literally; otherwise the check reads the stored graph, and
+cases 2 and 3 stay argued. An unobserved `S` is not explored in a release build. There,
+`s_cycles` is checked only in a test build, on a plain run of `X` under the test's own caps; a
+run past them is skipped (`partition.rs::unobserved_loops`).
+`reduce/hypotheses.rs::tests::a_planted_loop_mark_fails_its_check` and
+`::a_planted_fault_makes_a_reduced_cone_decide_unreduced` (a back edge that marks nothing, and
 `s_cycles` false) plant the fault. R also: lift, replay, and fairness check of each candidate. D: corpus cases `cone_reduced_class_loops`, `cone_reduced_inner_class_loops`,
 `cone_reduced_loop_fair_enabled`, `cone_reduced_loop_unreached`, `cone_reduced_no_loop_capped`;
 `cli/tests/engine_corpus.rs::a_reduced_wf_next_run_decides_what_the_unreduced_one_decides`;

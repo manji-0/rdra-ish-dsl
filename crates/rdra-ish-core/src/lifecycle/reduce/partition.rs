@@ -200,7 +200,7 @@ impl Quotient {
         if ext.obs_local.is_empty() {
             let classes = Arc::new(Classes::unobserved(ext));
             #[cfg(test)]
-            unobserved_loops(ext, caps, classes.loops[0]);
+            unobserved_loops(ext, classes.loops[0]);
             let moves = vec![Vec::new()];
             return (Ok(Quotient { classes, moves }), true);
         }
@@ -283,6 +283,8 @@ impl Classes {
                 eprintln!(
                     "warning: the nested reduction of a sub-lifecycle failed its check ({fault}); deciding the cone unreduced (a tool bug)"
                 );
+                #[cfg(test)]
+                hypotheses::tests::count(|c| c.faults[fault.hypothesis as usize] += 1);
                 let ended = match clean {
                     true => Ended::Clean,
                     false => Ended::Stopped,
@@ -549,6 +551,8 @@ impl Classes {
             eprintln!(
                 "warning: the rise table of a sub-lifecycle ({n} states) failed its check ({fault}); deciding the cone unreduced (a tool bug)"
             );
+            #[cfg(test)]
+            hypotheses::tests::count(|c| c.faults[fault.hypothesis as usize] += 1);
             return (Classified::Untrusted, ended, Vec::new());
         }
         drop(faults);
@@ -600,6 +604,8 @@ impl Classes {
             eprintln!(
                 "warning: the loop marks of a sub-lifecycle ({n} states) failed their check ({fault}); deciding the cone unreduced (a tool bug)"
             );
+            #[cfg(test)]
+            hypotheses::tests::count(|c| c.faults[fault.hypothesis as usize] += 1);
             return (Classified::Untrusted, ended, Vec::new());
         }
         drop(faults);
@@ -646,12 +652,14 @@ fn s_cycles(ext: &Extended) -> bool {
 /// `hloop` on an unobserved S, one class that is never explored, in a test build: when
 /// `s_cycles` leaves the class unmarked (`marked`), the silent edges of a plain run of S hold
 /// no cycle between two different states. A release build explores nothing here, so the
-/// check runs only in tests; a run past `caps` is not checked.
+/// check runs only in tests. The run has caps of its own, not the caller's pool or deadline,
+/// and one past them is not checked.
 #[cfg(test)]
-fn unobserved_loops(ext: &Extended, caps: Caps, marked: bool) {
+fn unobserved_loops(ext: &Extended, marked: bool) {
     if marked {
         return;
     }
+    let caps = Caps::new(usize::MAX, 200_000);
     let run = ext
         .system
         .clone()

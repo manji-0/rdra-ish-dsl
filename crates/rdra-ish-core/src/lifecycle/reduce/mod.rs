@@ -866,6 +866,8 @@ impl TransitionSystem {
             eprintln!(
                 "warning: the input bytes of a reduced cone failed their check ({fault}); deciding the cone unreduced (a tool bug)"
             );
+            #[cfg(test)]
+            hypotheses::tests::count(|c| c.faults[fault.hypothesis as usize] += 1);
             return Err(Unreduced::Untrusted);
         }
         let mut skip = vec![false; self.actions.len()];
