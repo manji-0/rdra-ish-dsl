@@ -229,8 +229,9 @@ The proofs assume the following hypotheses and do not derive them:
     finite and, at each state, the fair instances enabled there in a list (`hΦ`); the code
     keys a finite set of instances (`Product::keys`).
   - The canonical form is a `Canon`: `can s = π(s)(s)` with `π(s) ∈ G_s`.
-  - The orbit search takes the commutation on every state (`Sym`); no theorem states it over
-    `SymOn`, as `a23_on` does for `a23`.
+  - The orbit search's theorems take the commutation on every state (`Sym`); their `_on`
+    forms (`oAccepts_on_iff`, `not_oAccepts_on_iff_lassos`) take it on a closed set `W` only
+    (`SymOn`), as `a23_on` does for `a23`.
 - **The fairness model** (`Behaviour.lean`). A fair instance is a set of `T_a` labels (fair
   actions are `T_a` actions, Lemma 5 (e), assumed by giving instances on `Ta` only). A step
   takes an instance only when it changes the state (assumption τ of native.md). Behaviours
@@ -372,8 +373,8 @@ Not modelled:
   edge's concrete successor; the code reads the permutation it stored for the edge
   (`perms.id(k)`), which the annotated run sets to `π(t)` (`RunOf`).
 - A real edge. `REdge` asks `t ≠ r`; `is_real` asks that the stored target differ from `r` or
-  that the edge be an orbit self-edge. The two agree when every stored state is its own
-  canonical form, which `Canon` does not assume.
+  that the edge be an orbit self-edge. No theorem here shows that the two agree; cones.md
+  lists their agreement among the facts read from the code.
 - The counterexample the code builds (`walk`, `fair_loop`, the lasso lift and its
   `MOST_COPIES`): the proofs build their own lasso, and the code's certifies itself at run
   time (N11).
@@ -498,8 +499,8 @@ with the inputs of `S` on and off (the walk of `every_split_passes_its_check`):
 The dump has about 500 distinct certificates, about half of them with an `S` side, at most
 34 variables and 46 actions each, about 200 KB in all. Once the Rust test binary and the
 Lean project are built, the script takes about 3 seconds, and `lemma5-check` itself takes
-0.03 s of CPU. A cold run adds the build of rdra-ish-core's test binary. CI does not run
-the script.
+0.03 s of CPU. A cold run adds the build of rdra-ish-core's test binary. CI's `formal-verify` job runs
+the script with the `ci-checked` profile.
 
 | Lean (`RdraIsh.`) | File | Claim | Statement |
 |---|---|---|---|
@@ -707,8 +708,11 @@ from (G1)–(G6). The model (`SymAct.Sys`):
   not written from the slot of a class that moves. (G3): an identity start couples its child
   and parent classes, and a pre-existing row's owner starting at its base names no row. (G4):
   a creation writes every owner of the created row whose base names a row. (G6): no guard
-  reads an owner on a `New` parameter in the pre-state. Each condition also holds when the
-  class it names does not move, which is how the scan's leaving a class out enters.
+  reads an owner on a `New` parameter in the pre-state. (G1)–(G4) also hold when the class
+  they name does not move, which is how the scan's leaving a class out enters them. (G6) does
+  not mention the group: the scan forbids the read only when the parent's class moves, so a
+  model whose parent class the scan leaves out is outside `Hyp`, and cones.md argues that case
+  on paper (Theorem A18, step 4).
 - **(G5)** is the semantics: a delete resets the row's columns (not its run marks) and keeps
   its owners.
 - **Guards only.** Invariants, `after` assertions and properties are not in the model, so

@@ -533,6 +533,15 @@ move; that this is sound is theme (a).
 included), the property fails for `b` under `F` (⇐). Under assumption τ the converse holds
 too (⇒), so the property fails iff such an `s` exists.
 
+The hypotheses are N1 (the graph is `T`'s reachable states and all their edges, finitely many)
+and D20's reading of a taken instance, τ included. `proofs/lean/RdraIsh/Search.lean` states the
+check over them: the reachable states lie in a list, a component is mutual reachability by
+`E_N` (`SameComp`), a fair component is `FairComp`, and a stop is a state of `N_b` with no fair
+instance enabled where the stop rule holds (`IsStop`). Under `Plain` the rule is `True`
+(`isStop_true_iff`). Under `WfNext` it is `¬Moves`, and a state with no move has no fair
+instance enabled, so `¬Moves` alone is the stop defined above (`isStop_moves_iff`). The steps
+below name the theorem of `Search.lean` that proves each.
+
 *Proof.* (⇐) This direction does not use τ: it needs only that a step to another state
 takes the instances that label it, which D20 states. Let `s` reach an end `e` inside `N_b`. Take the parent path to `s` (N1), then
 the path to `e`. If `e` is a stop, stutter at `e` forever: under `Plain` no fair instance is
@@ -540,11 +549,12 @@ enabled at `e`, so `Fair_P` holds; under `WfNext` no step to another state exist
 so `WF_vars(Next)` holds. If `e` is in a fair component `C`, follow a closed walk of `E_N`
 inside `C` that visits every state of `C` and, for each fair instance enabled at every state
 of `C`, an edge of `C` labelled by it (it exists by fairness of `C` and strong connectivity),
-and repeat it forever. An instance not enabled everywhere in `C` is disabled infinitely
+and repeat it forever (`FairComp.cycle`; `lasso_of_cycle` folds the path to `s`, the path to
+`e` and that walk into a lasso). An instance not enabled everywhere in `C` is disabled infinitely
 often, so weak fairness does not constrain it; the others are taken infinitely often. The
 walk changes state infinitely often (`|C| ≥ 2`), so `WF_vars(Next)` holds. The behavior
 reaches `s`, where the trigger and cause hold, and from there stays in `N_b`, so the goal
-never holds at or after `s`; it violates D21.
+never holds at or after `s`; it violates D21 (`lasso_of_accepts`).
 
 (⇒) This direction uses τ twice, marked below. Let `σ` be a behavior satisfying `F` and
 `i` a position with `trig_b ∧ cause_b` at
@@ -560,7 +570,8 @@ fair instance enabled at every state of `C` is enabled at every state of `σ` fr
 point on, so `Fair_P` makes `σ` take it infinitely often, on a step inside `I ⊆ C`, and by
 τ on a step that changes the state, an edge of `E_N`; so it is in `Tk(C)`, and `C` is fair. In
 both cases `σ_i` reaches the end by the non-stuttering steps of `σ`, which are edges of
-`E_N`. ∎
+`E_N` (`accepts_of_behaviour`; with (⇐), `accepts_iff`, and read as D21's verdict,
+`liveHolds_iff_not_accepts`). ∎
 
 *Code.* `explore/liveness.rs::ComponentRun::liveness_search` runs `ComponentRun::avoid` per binding:
 the components by iterative Tarjan (`explore/graph.rs::Adjacency::components`), the `always` and
@@ -586,6 +597,20 @@ exact there, and the (⇐) direction of N9 goes through unchanged on the recorde
 counterexample found is one of `T`. The (⇒) direction does not, so no counterexample gives
 `Undecided`. The cut at `expanded(G)` is conservative: a stop can land at the first move of
 a state, after states with no moves, and those are treated as unexpanded too.
+
+*Proof.* Let the search on a stopped `G` accept: some `s` reaches an end `e` by edges of `E_N`
+that `G` records. Each state on that path is reached in `T` by its recorded edges, since a
+recorded edge is a step of `T`, and N1's parent path reaches `s`. If `e` is a stop, it is
+expanded, so every move of `e` in `T` is recorded: `En(e)` and `Moves(e)` read on `G` are those
+of `T`, and `e` is a stop of `T`. If `e` lies in a fair component `C` of the recorded graph,
+every state of `C` is expanded. So `En` at each state of `C` is that of `T`, and the edges of
+`C`, recorded steps between states of `C`, are steps of `T`. `C` is then strongly connected by
+steps of `T` between goal-free states, holds at least two states, and takes every instance
+enabled at all of its states. That is what N9's (⇐) uses of a fair component: it needs neither
+that `C` is a maximal component of `T`'s graph nor that `T` has no other edges. So the
+construction of N9's (⇐) gives a behaviour of `T` that satisfies `F` and violates the property.
+It does not use τ. No Lean theorem states this: `Search.lean` takes the graph complete, and the
+cut at `expanded` (`avoid`'s `open` and the `s < expanded` test) is read from the code.
 
 **N11 (Self-certification).** Before a native lasso prints, `decide_liveness` replays it
 through the step relation (`lasso.rs::TransitionSystem::replay_lasso`: the first state must
