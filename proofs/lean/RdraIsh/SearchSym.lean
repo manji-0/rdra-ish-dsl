@@ -1052,4 +1052,173 @@ theorem behaviour_of_oAccepts (he : LiveEqui h L trig goal stop after) (hG : Fin
 
 end Sound
 
+/-! ## The code's reading of the pieces -/
+
+section Code
+
+variable (L : SymLive h Φ β) (K : Canon h) (goal : β → σ → Prop)
+
+/-- The instance of a thread node is enabled at its stored state: a node of the code's
+thread graph (`Product::enabled`, `thread`). -/
+def En (a : (σ × β) × Φ) : Prop := M.Enabled L.inst a.2 a.1.1
+
+/-- A thread edge between two nodes of the code's graph (`union`). -/
+def TEdgeE (e : σ × β) (a b : (σ × β) × Φ) : Prop :=
+  TEdge L K goal e a b ∧ En L a ∧ En L b
+
+/-- The code's mark on a node (`covered[...] = true`): an edge of the component takes its
+instance; or an edge of the component goes from it to a node whose instance is not enabled;
+or an edge of the component comes into its pair from a pair where no enabled instance moves
+to its instance. -/
+def CoveredE (e : σ × β) (a : (σ × β) × Φ) : Prop :=
+  En L a ∧ ((∃ t, ZOk L K goal e a.1 t ∧ M.Takes L.inst a.2 a.1.1 t) ∨
+    (∃ b, TEdge L K goal e a b ∧ ¬ En L b) ∨
+    (∃ w t, ZOk L K goal e w t ∧ pn L K t w = a.1 ∧
+      ¬ ∃ z, En L (w, z) ∧ L.actF (K.π t) z = a.2))
+
+/-- The code's criterion (`threads_covered`): every root of the union-find over the enabled
+nodes of the component is joined to a marked node. -/
+def ThreadsCovered (e : σ × β) : Prop :=
+  ∀ a : (σ × β) × Φ, SameP L K goal e a.1 → En L a →
+    ∃ z, Conn (TEdgeE L K goal e) a z ∧ CoveredE L K goal e z
+
+variable {L K goal}
+
+theorem Conn.mono {γ : Type} {R R' : γ → γ → Prop} (hR : ∀ a b, R a b → R' a b) {a c : γ}
+    (h : Conn R a c) : Conn R' a c := by
+  induction h with
+  | refl => exact .refl _
+  | fwd he _ ih => exact .fwd (hR _ _ he) ih
+  | bwd he _ ih => exact .bwd (hR _ _ he) ih
+
+theorem actF_inj (L : SymLive h Φ β) {g : G} {y z : Φ} (e : L.actF g y = L.actF g z) : y = z := by
+  have := congrArg (L.actF (h.inv g)) e; rwa [L.actF_inv, L.actF_inv] at this
+
+/-- A chain of thread edges from an enabled node stays among enabled nodes up to its end, or
+meets the code's mark on the way. -/
+theorem Conn.enabled {e : σ × β} {a c : (σ × β) × Φ} (hc : Conn (TEdge L K goal e) a c)
+    (ha : En L a) : (Conn (TEdgeE L K goal e) a c ∧ En L c) ∨
+      ∃ d, Conn (TEdgeE L K goal e) a d ∧ CoveredE L K goal e d := by
+  induction hc with
+  | refl => exact .inl ⟨.refl _, ha⟩
+  | @fwd a b c hab _ ih =>
+    by_cases hb : En L b
+    · rcases ih hb with ⟨h1, h2⟩ | ⟨d, h1, h2⟩
+      · exact .inl ⟨.fwd ⟨hab, ha, hb⟩ h1, h2⟩
+      · exact .inr ⟨d, .fwd ⟨hab, ha, hb⟩ h1, h2⟩
+    · exact .inr ⟨a, .refl _, ha, .inr (.inl ⟨b, hab, hb⟩)⟩
+  | @bwd a b c hba _ ih =>
+    by_cases hb : En L b
+    · rcases ih hb with ⟨h1, h2⟩ | ⟨d, h1, h2⟩
+      · exact .inl ⟨.bwd ⟨hba, hb, ha⟩ h1, h2⟩
+      · exact .inr ⟨d, .bwd ⟨hba, hb, ha⟩ h1, h2⟩
+    · obtain ⟨t, hok, rfl⟩ := hba
+      refine .inr ⟨_, .refl _, ha, .inr (.inr ⟨b.1, t, hok, rfl, ?_⟩)⟩
+      rintro ⟨z, hz, hzb⟩
+      exact hb (by rw [show b = (b.1, z) from Prod.ext rfl (actF_inj L hzb).symm]; exact hz)
+
+/-- **The code's criterion is the pieces criterion.** Every piece of the threads over the
+component holds a covered node iff, in the code's graph of enabled nodes, every node is
+joined to a marked one. -/
+theorem threadsCovered_iff (e : σ × β) :
+    (∀ a : (σ × β) × Φ, SameP L K goal e a.1 →
+      ∃ z, Conn (TEdge L K goal e) a z ∧ Covered L K goal e z) ↔
+    ThreadsCovered L K goal e := by
+  constructor
+  · intro hfull a hs ha
+    obtain ⟨z, hc, hcov⟩ := hfull a hs
+    rcases hc.enabled ha with ⟨h1, h2⟩ | hd
+    · rcases hcov with hdis | htk
+      · exact absurd h2 hdis
+      · exact ⟨z, h1, h2, .inl htk⟩
+    · exact hd
+  · intro hcode a hs
+    by_cases ha : En L a
+    · obtain ⟨z, hc, hen, hcov⟩ := hcode a hs ha
+      have hc' : Conn (TEdge L K goal e) a z := hc.mono fun _ _ h => h.1
+      rcases hcov with htk | ⟨b, hzb, hb⟩ | ⟨w, t, hok, hw, hno⟩
+      · exact ⟨z, hc', .inr htk⟩
+      · exact ⟨b, hc'.trans (.fwd hzb (.refl _)), .inl hb⟩
+      · let b : (σ × β) × Φ := (w, L.actF (h.inv (K.π t)) z.2)
+        have hbz : TEdge L K goal e b z :=
+          ⟨t, hok, Prod.ext hw.symm (L.actF_inv' _ _).symm⟩
+        refine ⟨b, hc'.trans (.bwd hbz (.refl _)), .inl fun hen' => hno ⟨_, hen', ?_⟩⟩
+        exact L.actF_inv' _ _
+    · exact ⟨a, .refl _, .inl ha⟩
+
+/-- `FairPComp` with the pieces read as the code reads them. -/
+theorem fairPComp_iff_code (e : σ × β) :
+    FairPComp L K goal e ↔ (quotient M K.can).Reach e.1 ∧ PN goal e ∧ Candidate L K goal e ∧
+      ThreadsCovered L K goal e := by
+  unfold FairPComp
+  rw [threadsCovered_iff]
+
+end Code
+
+/-! ## The orbit search decides the property -/
+
+section Decide
+
+variable {L : SymLive h Φ β} {K : Canon h} {goal trig : β → σ → Prop} {stop : σ → Prop}
+  {after : β → σ → Prop}
+
+/-- **N9 up to symmetry.** Under A23's hypotheses (`Sym`, `SymLive`, `LiveEqui` with a stop
+rule the group preserves, the canonical form `can = π(·)(·)`), with the reachable states of
+`M` in a list, every `G_s` finite and the fair instances enabled at each state in a list,
+the orbit search accepts iff some binding has a behaviour of `M` that satisfies `Fair_P`,
+stays forever only where `stop` holds, and violates the property. -/
+theorem oAccepts_iff (he : LiveEqui h L trig goal stop after) (hG : FiniteGroups h)
+    (hΦ : ∀ r, ∃ LΦ : List Φ, ∀ x, M.Enabled L.inst x r → x ∈ LΦ)
+    (LM : List σ) (hLM : ∀ s, M.Reach s → s ∈ LM) :
+    OAccepts L K goal stop trig ↔
+      ∃ b c, M.Behaviour c ∧ M.FairP L.inst c ∧ StopsOnly stop c ∧
+        Violates (trig b) (goal b) c := by
+  constructor
+  · exact behaviour_of_oAccepts he hG hΦ
+  · rintro ⟨b, c, hb, hf, hs, hv⟩
+    exact oAccepts_of_behaviour he hG LM hLM hb hf hs hv
+
+/-- **The orbit verdict.** The property holds for every binding under `Fair_P` and the stop
+rule iff the orbit search does not accept. -/
+theorem liveHolds_iff_not_oAccepts (he : LiveEqui h L trig goal stop after)
+    (hG : FiniteGroups h) (hΦ : ∀ r, ∃ LΦ : List Φ, ∀ x, M.Enabled L.inst x r → x ∈ LΦ)
+    (LM : List σ) (hLM : ∀ s, M.Reach s → s ∈ LM) :
+    (∀ b, M.LiveHolds (fun ρ => M.FairP L.inst ρ ∧ StopsOnly stop ρ) (trig b) (goal b)) ↔
+      ¬ OAccepts L K goal stop trig := by
+  rw [oAccepts_iff he hG hΦ LM hLM]
+  constructor
+  · rintro hH ⟨b, c, hb, hf, hs, hv⟩
+    exact hH b c hb ⟨hf, hs⟩ hv
+  · intro hN b c hb ⟨hf, hs⟩ hv
+    exact hN ⟨b, c, hb, hf, hs, hv⟩
+
+/-- **The orbit search and the plain search agree.** The orbit search accepts iff N9's search
+on `M` accepts for some binding. -/
+theorem oAccepts_iff_accepts (he : LiveEqui h L trig goal stop after) (hG : FiniteGroups h)
+    (hΦ : ∀ r, ∃ LΦ : List Φ, ∀ x, M.Enabled L.inst x r → x ∈ LΦ)
+    (LM : List σ) (hLM : ∀ s, M.Reach s → s ∈ LM) :
+    OAccepts L K goal stop trig ↔ ∃ b, M.Accepts L.inst stop (trig b) (goal b) := by
+  rw [oAccepts_iff he hG hΦ LM hLM]
+  constructor
+  · rintro ⟨b, c, hb, hf, hs, hv⟩
+    exact ⟨b, accepts_of_behaviour LM hLM hb hf hs hv⟩
+  · rintro ⟨b, hacc⟩
+    obtain ⟨c, hb, hf, hs, hv⟩ := (accepts_iff LM hLM).1 hacc
+    exact ⟨b, c, hb, hf, hs, hv⟩
+
+/-- **Theorem A23 with the run's search.** The orbit search does not accept iff no annotated
+lasso of the canonical quotient that is thread-fair and stops only where the rule allows
+violates the property for any binding: the hypothesis of `a23`'s quotient side is the
+search's verdict. -/
+theorem not_oAccepts_iff_lassos (he : LiveEqui h L trig goal stop after) (hG : FiniteGroups h)
+    (hΦ : ∀ r, ∃ LΦ : List Φ, ∀ x, M.Enabled L.inst x r → x ∈ LΦ)
+    (LM : List σ) (hLM : ∀ s, M.Reach s → s ∈ LM) :
+    ¬ OAccepts L K goal stop trig ↔
+      ∀ r t p b', RunOf h K.can K.π r t p → ALasso r t p → AFair L r t p →
+        AStops stop r t → ¬ AViolates L trig goal r p b' := by
+  rw [← liveHolds_iff_not_oAccepts he hG hΦ LM hLM]
+  exact a23 L he K.can K.π K.hcan K.hπ LM hLM hG
+
+end Decide
+
 end RdraIsh
