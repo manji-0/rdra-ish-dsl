@@ -236,12 +236,13 @@ impl TransitionSystem {
         let exists = |e: EntId| self.entity(e).exists;
         let on_t = |e: EntId| !split.s.contains(&exists(e));
         // `stubE`: an entity outside `S_v ∪ inputs` that an owner var there names.
-        let stub = |e: EntId| {
-            !in_x(&exists(e))
-                && all.iter().any(
-                    |v| matches!(self.var(*v).kind, VarKind::Owner { parent, .. } if parent == e),
-                )
-        };
+        let mut stubs = vec![false; self.entities.len()];
+        for v in &all {
+            if let VarKind::Owner { parent, .. } = self.var(*v).kind {
+                stubs[parent.index()] = !in_x(&exists(parent));
+            }
+        }
+        let stub = |e: EntId| stubs[e.index()];
         // `keepsP`: a `New` param when its existence is kept, any other when its entity's is
         // or the entity is a stub.
         let keeps =

@@ -189,46 +189,52 @@ impl Extended {
         None
     }
 
-    /// A digest of what the reduction reads of this sub-lifecycle: `system`'s vars, entities,
-    /// actions, clock and layout (not its checks, which `drop_unreadable_checks` changes on the
-    /// cone after the build and no run of `X` evaluates) and the maps of `Extended`. `Debug`
-    /// output is fed to a hasher with fixed keys, the one `HashMap` sorted first, so equal
-    /// builds give equal digests in every process.
+    /// A digest of what the reduction reads of this sub-lifecycle: of `system`, each var's
+    /// base, start and domain size, the layout, each entity's existence and slots, each
+    /// action's name, params, guard predicates and effects, and the clock (not its checks,
+    /// which `drop_unreadable_checks` changes on the cone after the build and no run of `X`
+    /// evaluates); and the maps of `Extended`, the one `HashMap` sorted first. The hasher
+    /// (`FastHasher`) has no random key, so equal builds give equal digests in every process.
     pub(super) fn digest(&self) -> u64 {
-        use std::fmt::Write as _;
-        use std::hash::Hasher;
-        struct Feed(std::collections::hash_map::DefaultHasher);
-        impl std::fmt::Write for Feed {
-            fn write_str(&mut self, s: &str) -> std::fmt::Result {
-                self.0.write(s.as_bytes());
-                Ok(())
+        use std::hash::{Hash, Hasher};
+        let mut h = crate::fasthash::FastHasher::default();
+        let x = &self.system;
+        for v in &x.vars {
+            (v.base, std::mem::discriminant(&v.start), v.domain.size(x)).hash(&mut h);
+        }
+        (&x.offsets, x.width, x.now).hash(&mut h);
+        for e in &x.entities {
+            (e.exists, e.slots).hash(&mut h);
+        }
+        for a in &x.actions {
+            (&a.name, &a.params, &a.effects).hash(&mut h);
+            a.guards.iter().for_each(|g| g.pred.hash(&mut h));
+        }
+        (
+            &self.acts,
+            &self.rise,
+            &self.obs_local,
+            &self.inputs_local,
+            &self.bit_vars,
+        )
+            .hash(&mut h);
+        for f in self.bits.iter().flatten() {
+            (f.act, &f.t_params, &f.guards).hash(&mut h);
+            match &f.key {
+                FoldKey::Param(key) => (0u8, *key).hash(&mut h),
+                FoldKey::Linked {
+                    guard,
+                    entity,
+                    link_var,
+                    s_param,
+                    body,
+                } => (1u8, guard, entity, link_var, s_param, body).hash(&mut h),
             }
         }
-        let mut feed = Feed(std::collections::hash_map::DefaultHasher::new());
-        let x = &self.system;
         let mut variants: Vec<_> = self.variants.iter().collect();
         variants.sort();
-        write!(
-            feed,
-            "{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}",
-            x.vars,
-            x.entities,
-            x.actions,
-            x.now,
-            x.offsets,
-            x.width,
-            self.acts,
-            self.rise,
-            self.obs_local,
-            self.inputs_local,
-            self.bit_vars,
-            self.bits,
-            variants,
-            self.params,
-            self.fixed_why,
-        )
-        .expect("a digest is written to a hasher");
-        feed.0.finish()
+        (variants, &self.params, &self.fixed_why).hash(&mut h);
+        h.finish()
     }
 
     /// `restrict_to(S ∪ inputs)` with one bit var per group of folded S actions, each such
