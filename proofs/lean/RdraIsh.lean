@@ -17,3 +17,5 @@ import RdraIsh.Split
 import RdraIsh.SplitExample
 import RdraIsh.SymmetryLiveness
 import RdraIsh.SymmetryLivenessExample
+import RdraIsh.SymActions
+import RdraIsh.SymActionsExample

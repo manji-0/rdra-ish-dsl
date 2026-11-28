@@ -170,3 +170,16 @@ an axiom outside Lean's three standard ones (`propext`, `Classical.choice`, `Quo
 #print axioms RdraIsh.ExampleSymLive.one_copy_open
 #print axioms RdraIsh.ExampleSymLive.two_copies_close
 #print axioms RdraIsh.ExampleReachOnly.reach_only_counterexample
+#print axioms RdraIsh.SymAct.Sys.act_mul
+#print axioms RdraIsh.SymAct.Sys.mem_act
+#print axioms RdraIsh.SymAct.Sys.eval_mv
+#print axioms RdraIsh.SymAct.Sys.post_comm
+#print axioms RdraIsh.SymAct.Sys.step_comm
+#print axioms RdraIsh.SymAct.Sys.mem_step
+#print axioms RdraIsh.SymAct.Sys.W_step
+#print axioms RdraIsh.SymAct.Sys.W_act
+#print axioms RdraIsh.SymAct.Sys.init_act
+#print axioms RdraIsh.SymAct.Sys.symOn
+#print axioms RdraIsh.SymOn.quotient_reach_iff
+#print axioms RdraIsh.SymAct.Sys.a18_holds_iff
+#print axioms RdraIsh.ExampleOffW.off_W_counterexample

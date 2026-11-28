@@ -1310,26 +1310,51 @@ binding `p` to `g(p)`.
   goal given a read of an order's key by hand differs on rows never created and changes none
   of them.
 
-**Theorem A18.** Under (G1)–(G6), for every reachable `s`, every `g ∈ G_s`, and every step `s →_{a,p} t`:
-`g(s) →_{a,g(p)} g(t)` is a step and `g ∈ G_t`. Hence `≈ = {(s, g(s)) : g ∈ G_s}` is an equivalence and a
-bisimulation, and a breadth-first search that stores one member of each `≈`-class reaches exactly the
-classes of `Reach(T)` (or of the cone it runs on), each at its least depth.
+Two facts of the builder enter the theorem besides (G1)–(G6), and the scan checks neither: every
+`New` parameter is created by its action (`build/actions.rs`), and every `Earlier` parameter carries
+the run-mark conjunct `mark = k` of `run_marks`, with `k ≥ 1` and the mark's base `none`.
+`restrict_to` keeps both. A run-mark guard is a plain read (`cone.rs::plain_reads`), so its mark is
+in the cone of every action the cone keeps, and a `New` parameter stays only with its existence, and
+so with its `Create`. The
+`Earlier { step: 0 }` parameters of the extended sub-lifecycle (`reduce/extended.rs`) do not carry
+such a conjunct; they bind entities that `H` leaves out (A22).
+
+Let `W` be the states in which every absent row holds the base value of each of its variables, its
+owners among them. `W` holds the initial states, since a created row starts absent at its base
+values. It is closed under steps, since a step writes only rows that are present or deleted after
+it. It is closed under every `G_s`, since `apply` keeps an absent row's values. So it holds every
+image `g(s)` of a reachable `s`, which is what the quotient stores.
+
+**Theorem A18.** Under (G1)–(G6) and the two facts of the builder, for every `s ∈ W`, every
+`g ∈ G_s`, and every step `s →_{a,p} t`: `g(s) →_{a,g(p)} g(t)` is a step and `g ∈ G_t`. Hence
+`≈ = {(s, g(s)) : g ∈ G_s}` is an equivalence and a bisimulation on `W`, and a breadth-first search
+that stores one member of each `≈`-class reaches exactly the classes of `Reach(T)` (or of the cone it
+runs on), each at its least depth.
+
+Outside `W` the commutation can fail. Take an absent row whose optional owner names a row, and a
+step that creates the row without writing that owner, which (G4) allows for an owner whose base is
+`null`. `apply` keeps the value on the absent row, so the step from `g(s)` leaves it, while `g(t)`
+relabels it (`proofs/lean/RdraIsh/SymActionsExample.lean::off_W_counterexample`).
 
 *Proof.* Absent slots of `t` are absent in `s` (a slot leaves `absent` only), so `g` fixes them and
 `g ∈ G_t`; `G_s = G_{g(s)}` since `g` preserves the absent set, so `≈` is reflexive, symmetric, and
 transitive. *Bindings.* `New` takes the lowest absent slot, which `g` fixes; `Existing`, `Parent`, and
 `Triggered` admit a present slot, `Earlier` a slot by its run mark, and `g` preserves presence and moves
-marks with their slots. *Predicates.* A column or mark of slot `i` in `s` is the same value at slot
-`g(i)` in `g(s)`. By (G1) a row id is compared only by `=`/`≠` with a row id of its class, which a
-bijection preserves, or an optional owner with `null`, which relabelling preserves; an owner read on a
-non-absent row is relabelled consistently with the row ids it is compared with (G5 for deleted rows),
-and by (G6) none is read on an absent row. `Forall`, `Exists`, and `Count` range over the present slots,
+marks with their slots. In `W` an absent row holds the base mark, which no run-mark conjunct accepts.
+So every bound row other than a `New` one is present or deleted in `s`, and a `New` row is created,
+so every bound row is present or deleted in `t`. *Predicates.* A column or mark of slot `i` in `s` is
+the same value at slot `g(i)` in `g(s)`. By (G1) a row id is compared only by `=`/`≠` with a row id of
+its class, which a bijection preserves, or an optional owner with `null`, which relabelling preserves.
+An owner read on a non-absent row is relabelled consistently with the row ids it is compared with
+(G5 for deleted rows). None is read on an absent row: (G6) forbids the pre-state owner of a `New` row,
+the other bound rows are not absent, and `Forall`, `Exists`, and `Count` range over the present slots,
 a set `g` permutes. So every guard of `a` has the same value at `(s, t, p)` and `(g(s), g(t), g(p))`.
 *Effects.* Each effect commutes with `g`: a literal write is unchanged; an owner written from a
-parameter's slot is relabelled with that slot (G2); a create or delete moves with its slot; a `Choose` or
-`Transition` on an owner ranges over all rows (G2), so its set of forks is closed under `g`; (G4) keeps
-an unrelabelled base owner off non-absent rows. So `g(t) ∈ Post_a(g(s), g(p))`. The converse is the
-same statement for `g⁻¹ ∈ G_s`. With (G3) the initial classes are the classes of initial states. A
+parameter's slot is relabelled with that slot (G2); a create or delete moves with its slot; a `Choose` on
+an owner ranges over all rows (G2), so its set of forks is closed under `g`. An owner the step does not
+write on a row it creates holds its base value in `s ∈ W`, which (G4) makes `null` (unchanged by
+relabelling) or rules out. So `g(t) ∈ Post_a(g(s), g(p))`. The converse is the same statement for
+`g⁻¹ ∈ G_{g(s)}` at `g(s) ∈ W`. With (G3) the initial classes are the classes of initial states. A
 bisimulation that relates states at equal depth (it maps each step to one step) preserves BFS depth. ∎
 
 Leaving more classes out gives a subgroup of `G_s`, and the statement holds for every subgroup, so
@@ -1396,8 +1421,8 @@ so does each fair instance; the instance's sequence is its *thread*. A thread's 
 the step `r_n → t_n`, so an orbit self-edge (`t_n ≠ r_n`, `σ_n(t_n) = r_n`) is a move. Assume:
 
 - every step from a state of a set `W` commutes with every `g ∈ G_s` and keeps `g` in `G_t`, where
-  `W` holds the initial states and is closed under steps and under every `G_s` (Theorem A18's
-  commutation, on the images of reachable states and not only on reachable states), and (G3);
+  `W` holds the initial states and is closed under steps and under every `G_s` (Theorem A18 gives
+  this for the states whose absent rows hold base values), and (G3);
 - `g` maps a label of a fair instance to a label of its image;
 - the trigger and the stop rule read the same on `s` and on `g(s)`, with the binding moved by `g`,
   for `g ∈ G_s`, and so does the goal on every state at or after a state where the trigger holds.
@@ -1485,7 +1510,15 @@ self-edge stands for a concrete cycle inside its class and marks it (Definition 
 `core/tests/reduce.rs::reduced_cones_up_to_h_decide_what_the_cones_decide`,
 `cli/tests/engine_corpus.rs::each_h_reason_a_case_shows_has_a_witness` (shadow builds only).
 
-*Evidence for A18.* P-full given (G1)–(G6). M: the Kani harness
+*Evidence for A18.* P-full given (G1)–(G6) and the two facts of the builder. M: the Lean proof
+`proofs/lean/RdraIsh/SymActions.lean::step_comm` derives the commutation on `W` over a slot-level
+model of the cone system. In that model (G1)–(G4) and (G6) are conditions on the syntax of guards
+and effects, as `breaks.rs::scan` states them, (G5) is the semantics of a delete, and the two
+facts of the builder are hypotheses. `symOn` gives the `SymOn` that A23 assumes, and
+`a18_holds_iff` the verdict of an invariant `G_s` preserves on the canonical quotient. The model
+reads an action's effects in list order, where `each_successor` applies the deletes and then the
+choices last. It does not model owner `Transition`s, which the scan leaves out with `OwnerChoice`.
+It covers neither the reduced cone nor the extended sub-lifecycle (A22). Kani: the harness
 `explore/symmetry/mod.rs::apply_of_a_composition_is_the_composition_of_applies` proves that `apply` is a group
 action on a 2-slot parent and a 2-slot child; it does not call `canonical`, and no Kani harness
 covers the canonical form. `Twin::Canonical`,

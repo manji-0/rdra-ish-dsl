@@ -40,7 +40,8 @@ The hypotheses are those of `Sym` (Theorem A18's commutation on every state) and
 label of the moved instance), with `LiveEqui` (the trigger and the stop rule read
 the same on `s` and `g(s)` for `g ∈ G_s`, and the goal does on the states after a trigger). `SymOn` weakens the commutation to an invariant
 `W` that holds on every reachable state and is closed under steps and under `G_s`;
-`SymOn.toSym` and `restrict_liveHolds_iff` carry the theorems over to it.
+`SymOn.toSym` and `restrict_liveHolds_iff` carry the theorems over to it. `SymActions.lean`
+derives a `SymOn` from (G1)–(G6) (`SymAct.Sys.symOn`).
 -/
 
 namespace RdraIsh
@@ -805,8 +806,8 @@ end Closure
 
 /-! ## Commutation on an invariant instead of on every state
 
-Theorem A18 states the commutation for reachable states; `Sym` assumes it on every state.
-Reachable states alone are not enough for the quotient: a stored state is an image `g(s)`
+Theorem A18 states the commutation on the states whose absent rows hold base values;
+`Sym` assumes it on every state. Reachable states alone are not enough for the quotient: a stored state is an image `g(s)`
 of a reachable `s`, which need not be reachable when `g ∈ G_s` was not in the group of an
 earlier state of the path to `s` (`ExampleReachOnly.reach_only_counterexample`). What the
 proofs use is commutation on a set `W` that holds on the initial states and is closed under
