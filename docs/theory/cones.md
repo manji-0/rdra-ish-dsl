@@ -633,6 +633,27 @@ is in `T_a`.
 only monotone variables, which become inputs unless a fold takes them. (d) is checked at run time:
 `split_with` asserts `inputs.iter().all(monotone)`. ∎
 
+*Evidence.* M: `proofs/lean/RdraIsh/Split.lean` proves the lemma in Lean over an action-level
+model of `C` (`Actions.lean`: variables with their entities' existences, valuations, actions
+with `Rd`, `Wr`, guard conjuncts and an effect). Definition 3 for one anchor is the least set
+`Mem` closed under its conditions, with `split_at`'s skip of an action that writes nothing and
+is not kept. A pass of all conditions at once, repeated `|V| + |A| + 1` times, computes it
+(`computed_iff`), and any closed pair whose members the conditions derive, in whatever order,
+is that least set (`mem_eq_of_sound`). Lemma 5 (a)–(e) holds of every closed pair, with `obs`
+and `inputs` as defined above (`lemma5_of_closed`), so of the split of every anchor and of the
+one `split_with` picks. (a), (b) and (e) follow from the closure conditions and the definition
+of `obs`. (c) follows from the hypothesis `FoldData.cover`: every `T_v` read of an `S_a` action
+is a raw read (`raw_reads`), an existence of one, or a read its fold covers. (d) follows from
+the closure, `raw_reads ⊆ Rd`, and the hypothesis that an existence of a monotone variable is
+monotone (`FoldData.ex_mono`); `monotone_vars` itself is a parameter. With the locality of `Rd`
+and `Wr` (`Local`: a guard conjunct depends only on `Rd ∪ Wr`, an effect changes only `Wr`,
+and its value there depends only on `Rd ∪ Wr`), (a) and (b) give the hypothesis `Split` of
+the Lean proof of Theorem A8 (`split_of_lemma5`, `split_computed`), which needs nothing of
+the folds; the cone system over `T_v × S_v` reaches a pair iff the action-level system reaches
+its valuation (`cone_reach_iff`). The proof does not read
+the code: that `action_reads`, `copy_reads` and `action_writes` meet `Local`, and that
+`raw_reads` and the folds meet `FoldData`, are hypotheses.
+
 **Definition 4 (extended sub-lifecycle and quotient).** `X` is
 `reduce/extended.rs::Extended::build`: `restrict_to(S_v ∪ inputs)` without the havoc of `Triggered`
 parameters, with one bit variable per fold group in place of the folded guards, and a free `Rise` and
@@ -1067,13 +1088,16 @@ leaves) and the random-graph test below, which also certifies every worklist par
   so a worklist that returned another stable partition would cost states, not soundness, and an
   unstable one falls back to the sweeps.
 - **A10** (monotone inputs): Lemma 5c–d and point 5 of Theorem A8. Monotonicity is not used in A8; it
-  keeps `X` finite and small. It is used in A15 (case 3 and `s_cycles`).
+  keeps `X` finite and small. It is used in A15 (case 3 and `s_cycles`). M: Lean proves Lemma 5
+  (c)(d) (`proofs/lean/RdraIsh/Split.lean::lemma5_of_closed`, Lemma 5's evidence above).
 - **A11** (folds): Lemma 6, whose step (a) derives the fold equivalence from `fold_of` and
   `Fold::holds`, which the `Twin::FoldHolds` twin checks against its reference. A count that reads `T` is never
   node-folded (counting-rules.md): `reduce/fold.rs::as_node` makes a node only of an existential (or an
   And/Or of them), and `strip_links` returns `None` on a `Pred::Count` in its body.
 - **A12** (counters on `T`): `split_at` seeds `T_v` with every counter, and `monotone_vars` marks
-  counters cyclic, so no counter is an input. P-full by reading.
+  counters cyclic, so no counter is an input. P-full by reading. M: Lean,
+  `proofs/lean/RdraIsh/Split.lean::no_counter_input` (every input is monotone, so a counter that
+  `monotone_vars` marks non-monotone is none).
 - **A13** (one reduction for both engines): `reduced_with` rejects a reduction past
   `TLA_CELL_BUDGET` (530,000 cells, `Reduction::tla_cells`) and an identity quotient
   (`Classified::Nothing`, `Reduction::shrinks`); the one `Reduction` value feeds the native checker and
