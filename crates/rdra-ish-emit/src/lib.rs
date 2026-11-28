@@ -1,4 +1,10 @@
 //! rdra-emit: RDRA output emitters (Mermaid, CSV, and the contract exports).
+// The TLA+ module, the Verus model and the conformance tests spell the lifecycle's slots,
+// params, binders and state numbers. A narrowing `as` there would wrap onto another one
+// (claims N1 and N2 of docs/theory/claims.md, as in `rdra-ish-core`'s lifecycle layer), so
+// it goes through `try_from`, or carries an `#[allow]` whose comment proves its bound.
+// Tests build their inputs with plain casts.
+#![cfg_attr(not(test), deny(clippy::cast_possible_truncation))]
 
 pub mod asyncapi;
 pub mod codegen;

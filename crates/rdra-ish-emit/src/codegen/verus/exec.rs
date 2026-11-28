@@ -209,7 +209,7 @@ impl Ctx<'_> {
         let id = |j: u8| self.spec_row(sig, j).1;
         let mut parts = Vec::new();
         for o in &f.outputs {
-            let k = o.param as u8;
+            let k = u8::try_from(o.param).expect("a param index is a `u8`, as `Effect`'s are");
             match &o.kind {
                 OutKind::Row { ty, .. } => {
                     let pre = match a.params[o.param].role {
