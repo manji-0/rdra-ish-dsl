@@ -540,7 +540,7 @@ The script checks every partition `Classes::of_graph` computes on a flat run of 
 inner reduction, not up to `H`) while the cones of the samples, the domain samples and the
 engine corpus cases that build a model are reduced, at `Bounds::STATES` and
 `Bounds::VERIFY`. That is the walk of `every_quotient_passes_the_checks_of_its_hypotheses`,
-with its cap of 50,000 states on a run of `X`.
+with each run of `X` capped at `RDRA_LEAN_RUNS_CAP` states (200,000 by default).
 
 1. The ignored Rust test `dump_partition_certificates` turns on a record that only a test
    build compiles (`partition/dump.rs`), called from `Classes::of_graph` once the partition
@@ -555,8 +555,8 @@ with its cap of 50,000 states on a run of `X`.
    It counts the runs it leaves out, by reason: a run of an `X` under its own inner
    reduction, whose states are inner classes; a run up to `H`, whose states are orbits; a
    partition that is the identity, which `of_graph` turns down before it numbers classes; a
-   run a cap stopped, which is never partitioned; an unobserved `S`, which is never explored;
-   and a run past `RDRA_LEAN_RUNS_CAP` states (200,000 by default).
+   run the cap stopped, which is never partitioned; and an unobserved `S`, which is never
+   explored.
 2. `lake build` checks the soundness proof below and builds the executable
    `partition-check` (`PartitionCheckMain.lean`). It runs `PCert.Data.check`
    (`RdraIsh/PartitionCert.lean`) on each record, over arrays, and fails unless it accepts
@@ -583,12 +583,12 @@ with its cap of 50,000 states on a run of `X`.
    - the initial states dropped (reach);
    - a class number out of range (well-formed).
 
-The walk partitions 174 flat runs, 56 of them distinct, 57,488 states in all, the largest
-15,374. It leaves out 75 nested runs, 24 identity partitions, 47 runs stopped at the cap
-and 6 unobserved sub-lifecycles; no run is up to `H` or past the dump's cap. The dump is
-about 3.7 MB, three quarters of it silent edges. `partition-check` takes 0.14 s of CPU on
-it. The dump takes about 50 s in a debug test build and about 2.5 s, with the Lemma 5 dump,
-in a `ci-checked` one.
+The walk partitions 182 flat runs, 60 of them distinct, 344,409 states in all, the largest
+85,154. It leaves out 78 nested runs, 24 identity partitions, 36 runs stopped at the cap and
+6 unobserved sub-lifecycles; no run is up to `H`. The dump is about 27 MB, most of it
+silent edges. `partition-check` takes 1.0 s of CPU on it. In a `ci-checked` build the dump
+takes about 7 s, and the walk peaks at about 2.9 GB of memory; a debug build is much slower
+(about 170 s), so `RDRA_LEAN_RUNS_CAP=50000` suits a quick local run.
 
 | Lean (`RdraIsh.`) | File | Claim | Statement |
 |---|---|---|---|
