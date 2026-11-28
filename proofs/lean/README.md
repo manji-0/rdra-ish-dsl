@@ -372,8 +372,11 @@ an instance is a bijection, so this is the pair where the instance's preimage is
 Not modelled:
 
 - Tarjan's algorithm (`graph.rs::Adjacency::components`): a component is mutual
-  reachability.
+  reachability. Each run checks the plain search's components, fair flags, stops and
+  backward walk against the criterion instead (`liveness/certify.rs::ComponentRun::search_faults`,
+  N9's certificate), an argument on paper only.
 - N10, the cut at `expanded` of a capped graph (`open`, `s < expanded`): the graph is complete.
+  The certificate recomputes the cut from `expanded`.
 - The choice of binding (the first triggered state in BFS order) and of start: the
   verdicts quantify over all.
 - The bit sets and sorted lists that hold `always`, `taken` and the enabled instances.
