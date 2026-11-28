@@ -21,7 +21,8 @@ read off that slot model, and `Local`, a hypothesis of both lemmas, is derived f
 [native.md](../../docs/theory/native.md#the-check), the liveness search by fair components,
 and the same search on the pairs of a run up to symmetry are stated over abstract
 transition systems too ([The liveness searches](#the-liveness-searches)). None of them reads
-the Rust code.
+the Rust code. One executable, `lemma5-check`, checks the sets the code computes against
+Lemma 5 ([Checking the code's sets with Lean](#checking-the-codes-sets-with-lean)).
 
 ## Building
 
@@ -59,7 +60,8 @@ The toolchain is pinned in [lean-toolchain](./lean-toolchain) (`leanprover/lean4
 elan installs it on the first build. `nix develop` provides elan; `nix shell nixpkgs#elan`
 does too.
 
-**No Mathlib.** The project imports only Lean's core. The proofs need five things:
+**No Mathlib.** The project imports only Lean's core, and the executable `lemma5-check` also
+imports `Lean.Data.Json`, which ships with Lean. The proofs need five things:
 
 - reachability as an inductive predicate;
 - paths through a set of states;
@@ -441,6 +443,94 @@ keeps `T` small.
 
 The folds stay abstract in this model. Lemma 6's model below adds them, with the cone that
 `restrict_to` builds.
+
+## Checking the code's sets with Lean
+
+<!-- constrained-by #definition-3-and-lemma-5-over-actions -->
+
+```sh
+scripts/check-lean-certificates.sh
+```
+
+`Lemma5` is a predicate on any sets, so the sets the code computes can be checked against it
+directly. The script does that for every top-level split of the samples, the domain samples
+and the engine corpus cases that build a model, at `Bounds::STATES` and `Bounds::VERIFY`,
+with the inputs of `S` on and off (the walk of `every_split_passes_its_check`):
+
+1. The ignored Rust test `dump_lemma5_certificates` writes one certificate per split, one
+   JSON object per line, equal certificates once. A certificate holds the sets
+   `split_faults` reads, by `VarId` and `ActId` index: each action's reads (`action_reads`
+   with `copy_reads`) and writes (`action_writes`), from the same `read_write_sets` that
+   `split_faults` calls; the variables `monotone_vars` marks; the split `split_with` returns
+   (`T_v`, `S_v`, `T_a`, `S_a`, `obs`, `inputs`, and each action's `Fold::reads`); and the
+   seeds' reads and kept actions.
+2. `lake build` checks the soundness proof below and builds the executable `lemma5-check`
+   (`Lemma5CheckMain.lean`). It reads the file with `Lean.Json` and runs
+   `Cert.Data.check`, a Boolean function over lists of numbers
+   (`RdraIsh/Lemma5Cert.lean`), on each certificate. It fails unless it accepts all of them.
+3. Eleven faults are planted in copies of the dump, one for each part of `check`, such as an
+   `S_a` write moved into `T_v`, an `obs` read dropped, or a non-monotone input. Each must be
+   rejected, and the rejection must name its part.
+
+The dump has about 500 distinct certificates, about half of them with an `S` side, at most
+34 variables and 46 actions each, about 200 KB in all. Once the Rust test binary and the
+Lean project are built, the script takes about 3 seconds, and `lemma5-check` itself takes
+0.03 s of CPU. A cold run adds the build of rdra-ish-core's test binary. CI does not run
+the script.
+
+| Lean (`RdraIsh.`) | File | Claim | Statement |
+|---|---|---|---|
+| `Cert.Data.check_sound`, `Cert.Data.check_lemma5` | `Lemma5Check.lean` | Lemma 5 (a)–(e) | A certificate that `check` accepts satisfies `Lemma5` over `Fin nv` and `Fin na`, for every model whose reads and writes are the certificate's (`Fits`). The guards, effects and initial states of the model are unconstrained. `check_lemma5` is the same for the certificate's own `model`. |
+| `Cert.Data.fits_model` | `Lemma5Check.lean` | none | The certificate's `model` (its reads and writes, no guards, effects that change nothing) fits it, so `check_sound` is not vacuous. |
+| `Cert.Data.sides_of_check`, `Cert.Data.sa_iff` | `Lemma5Check.lean` | Lemma 5, the split | An accepted certificate's `S_v` is the complement of its `T_v`, and its `S_a` is `Sa`, the writers outside `T_a`. |
+| `Cert.Data.split_of_check` | `Lemma5Check.lean` | A8, the hypothesis `Split` | Under `Local`, an accepted certificate's split makes `Act.cone` satisfy `Split`. |
+| `Cert.mem_toFin` | `Lemma5Check.lean` | none | The ids of a list below `n`, as `Fin n`, are the list's members. |
+
+`check` is ordinary compiled code that the kernel never evaluates on the dump. The theorem
+is about the function `lemma5-check` runs: `Lemma5CheckMain.lean` imports
+`Lemma5Cert.lean`, and `Lemma5Check.lean` proves `check_sound` of the `check` defined there.
+
+An accepted dump does not establish these:
+
+- **`Fits` of the code.** That a certificate's reads and writes are the ones the cone system
+  has is read from the dump code: it calls `read_write_sets`, as `split_faults` does. That
+  they bound what each action looks at is `Local`, which nothing checks.
+- **Nested splits.** A nested split, chosen in `Classes::of`, is not dumped.
+- **The folds and `monotone_vars`.** `folded` is taken to be `Fold::reads`, and `mono` to be
+  `monotone_vars`. `FoldData` and the acyclicity behind `monotone_vars` are not checked.
+- **Three clauses of `split_faults` that `Lemma5` does not state.** The first is the side rule
+  of Definition 3 (`Clause::Sides`). The second is that every fold is of an `S_a` action. The
+  third is that a `T_v` variable an `S_a` action reads outside its fold (`raw_reads`) is an
+  input.
+- **The tools.** The Lean compiler, `Lean.Json` and the Rust dump are trusted.
+
+### The same pattern for (B1)–(B3) and the shape of `X`
+
+No checker exists for these. The pattern carries over as follows.
+
+- **The data.** The certificate would carry what `partition/reference.rs::stable` reads: the
+  number of states of `X`, its silent edges and its rises as pairs of state numbers, the
+  initial labels (`Partition::initial`, each state's `obs` and inputs, numbered), and the
+  blocks. It would add the representative of each block. For (B1) to be checked rather than
+  read from the numbering, and for `Extended`, it would also give each state's `obs` values,
+  `S` values and input bytes, so that a check can test that a block agrees on `obs` and the
+  input bytes, a silent edge keeps the input bytes, and a rise keeps `S`.
+- **The checker.** It would test four things: that the blocks refine the labels (B1); that
+  one sweep with every block a splitter splits nothing (B2); that the states of a block
+  enter the same set of blocks by a rise (B3); and that each representative lies in its
+  block.
+- **The Lean statement.** The targets are `Reduction.lean`'s `Stable` and `Extended`, over
+  the system whose states are `Fin n` and whose steps are the listed edges, with `Reach`
+  being reachability from the listed initial states.
+- **The bridge.** The unverified step becomes "the dumped graph is `X`'s reachable graph",
+  where for Lemma 5 it is "the dumped sets are the cone's reads and writes".
+- **The cost.** The certificate grows with the states of `X`, not with its variables and
+  actions. The largest quotient `verify` computes on the samples has about 2.2 million
+  states, so a certificate takes megabytes, and the checker needs arrays rather than the
+  lists `check` uses. Proving (B2) sound needs reasoning about paths: a sweep that splits
+  nothing gives `SilentExit` for every state of a block, by induction on the path inside the
+  block. That is more work than the set lemmas of `check_sound`. (B1) and (B3) are about as
+  hard as Lemma 5.
 
 ## Definition 4 and Lemma 6 over actions
 
