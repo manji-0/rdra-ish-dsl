@@ -16,31 +16,35 @@ What it checks, by place and form of the backticked text:
   column, and `CheckAxioms.lean` holds `#print axioms RdraIsh.<name>`. A name without a
   namespace that is not declared at the top level takes the namespace of the name before it
   in the cell (`ExampleRise.bisim`, `c_after_flag` is `RdraIsh.ExampleRise.c_after_flag`).
-- `File.lean::name` anywhere in the checked text: the same, in that file, where `name` may
-  leave out a namespace the file opens (`Split.lean::no_counter_input` is
-  `RdraIsh.Act.no_counter_input`). A path such as `proofs/lean/RdraIsh/Split.lean` alone
-  must exist.
+- `File.lean::name` anywhere in the checked text: a Lean declaration in that file, where
+  `name` may leave out a namespace the file opens (`Split.lean::no_counter_input` is
+  `RdraIsh.Act.no_counter_input`), and listed in `CheckAxioms.lean` when it is a `theorem`
+  or `lemma`. A path such as `proofs/lean/RdraIsh/Split.lean` alone must exist.
+- `RdraIsh.name`: the same, in any file.
 - A Rust path: `path.rs::a::b`, `Type::item` or `module::item` (identifiers joined by `::`,
-  with or without a file), and `::item` after a `path.rs::...` on the same line, which reads
-  `item` in that file. The last segment is a definition (`fn`, `struct`, `enum`, `trait`,
+  with or without a file), and `::item` after a `path.rs::...` on the same line (in the
+  same paragraph, in claims.md and cones.md), which reads `item` in that file. The last
+  segment is a definition (`fn`, `struct`, `enum`, `trait`,
   `type`, `const`, `static`, `mod`, a struct field or an enum variant) in `crates/`, and
   the other segments name, in order, modules or items that enclose it. A trailing argument
   list is dropped (`Reduction::stages(before, after)`). A file path is matched by its
   trailing segments; a leading `core/`, `cli/`, `emit/`, `lsp/` or `syntax/` is the crate
   `rdra-ish-<that>`, and directories may be left out in between (`core/reduce/split.rs` is
-  `crates/rdra-ish-core/src/lifecycle/reduce/split.rs`).
+  `crates/rdra-ish-core/src/lifecycle/reduce/split.rs`). A definition under a `reference`
+  module, a speed-up's twin, counts only when the citation names `reference`
+  (`partition/reference.rs::stable`), so the twin cannot hide a rename of the fast side.
 - proofs/lean/README.md only: a bare snake_case name with an underscore (`split_at`) names a
   Rust definition, a Lean declaration, field or constructor, or a keyword of the language
   (`leads_to`, a `Token::Ident("…")` of crates/rdra-ish-syntax/src); a dotted name whose
   head is a Lean namespace or type of the project (`InnerMap.path_fwd`, `Stable.b2`) names
-  a Lean declaration. `--sides` prints which side each bare name resolves on, so a name the prose
-  means as code that resolves only through Lean shows up; such a name is qualified in the
-  README (`Reduction::stages`) rather than listed here.
+  a Lean declaration. `--sides` prints which side each bare name resolves on, so a name the
+  prose means as code that resolves only through Lean shows up; such a name is qualified in
+  the README (`Reduction::stages`) rather than listed here.
 
 Checked text: all of proofs/lean/README.md; the doc comments (`/-- -/`, `/-! -/`) of
-proofs/lean/**/*.lean, for Rust paths and `File.lean::name`; and docs/theory/claims.md and
-docs/theory/cones.md, for Rust paths and `File.lean::name` on each line that names a Lean
-file (`.lean`).
+proofs/lean/**/*.lean, for every form but the bare and dotted names; and
+docs/theory/claims.md and docs/theory/cones.md, for the same forms, in each paragraph or
+table row that names a Lean file (`.lean`) or `RdraIsh.`.
 
 What it does not see: bare names outside the README (in claims.md and cones.md they cannot
 be told from corpus cases and test names), single words (`Extended`, `stages`, `obs`),
@@ -58,6 +62,7 @@ LEAN = "proofs/lean"
 AXIOMS = "proofs/lean/CheckAxioms.lean"
 THEORY = ("docs/theory/claims.md", "docs/theory/cones.md")
 CRATE_ALIAS = {"core", "cli", "emit", "lsp", "syntax"}
+REFERENCE = "reference"  # the module of a speed-up's twin (CLAUDE.md, "A speed-up change")
 
 sys.dont_write_bytecode = True  # no scripts/__pycache__ from the import below
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -74,6 +79,7 @@ RUST_PATH = re.compile(
     rf"^(?:(?P<file>[\w./-]+\.rs)(?:::(?P<a>{CHAIN}))?|(?P<b>{IDENT}(?:::{IDENT})+)|::(?P<c>{CHAIN}))$"
 )
 LEAN_REF = re.compile(rf"^(?P<file>[\w./-]+\.lean)(?:::(?P<name>{IDENT}(?:\.{IDENT})*))?$")
+QUALIFIED = re.compile(rf"^RdraIsh\.({IDENT}(?:\.{IDENT})*)$")
 SNAKE = re.compile(r"^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$")
 DOTTED = re.compile(rf"^({IDENT})\.({IDENT}(?:\.{IDENT})*)$")
 TICK = re.compile(r"`([^`\n]+)`")
@@ -216,6 +222,7 @@ def tree(index, rel):
 class Lean:
     def __init__(self, root):
         self.decls = {}  # full name -> file (relative to proofs/lean)
+        self.theorems = set()  # the full names `theorem` or `lemma` declares
         self.members = set()  # fields and constructors, full names
         self.heads = set()  # namespaces and types, last segment
         self.docs = []  # (rel path, line, text) of doc comments
@@ -263,6 +270,8 @@ class Lean:
             if m:
                 full = ".".join(ns + m.group(2).split("."))
                 self.decls[full] = rel
+                if m.group(1) in ("theorem", "lemma"):
+                    self.theorems.add(full)
                 owner = full if m.group(1) in ("structure", "inductive", "class") else None
                 if owner:
                     self.heads.add(full.split(".")[-1])
@@ -308,15 +317,31 @@ def lean_table_rows(lines):
             yield n, cells[0], cells[1] if len(cells) > 1 else ""
 
 
+def paragraphs(text):
+    """[(line number, line)] per paragraph outside code fences; a table row is its own."""
+    out, cur, fence = [], [], False
+    for n, line in enumerate(text.splitlines(), 1):
+        if line.lstrip().startswith("```"):
+            fence = not fence
+            out, cur = out + [cur], []
+            continue
+        if fence or not line.strip() or line.startswith("|"):
+            out, cur = out + [cur], []
+            if not fence and line.startswith("|"):
+                out.append([(n, line)])
+            continue
+        cur.append((n, line))
+    return [p for p in out + [cur] if p]
+
+
 class Checker:
     def __init__(self, root):
         self.root = root
         self.rust = rust_index(root)
         self.lean = Lean(root)
-        self.last = {}  # rust definition last segment -> True
-        for defs in self.rust.values():
-            for d in defs:
-                self.last[d[-1]] = True
+        # Last segments of the definitions outside a `reference` module: a bare name never
+        # resolves through a speed-up's twin, which keeps the name the fast side drops.
+        self.last = {d[-1] for defs in self.rust.values() for d in defs if REFERENCE not in d}
         self.keywords = set()
         syntax = os.path.join(root, "crates", "rdra-ish-syntax", "src")
         for dirpath, _, filenames in os.walk(syntax):
@@ -339,16 +364,17 @@ class Checker:
             if not chain:
                 return None
             want = tuple(chain)
+            twin = REFERENCE in want or REFERENCE in file[:-3].split("/")
             for rel in rels:
                 for r in tree(self.rust, rel):
-                    if any(subsequence(want, d) for d in self.rust[r]):
+                    if any(subsequence(want, d) and (twin or REFERENCE not in d) for d in self.rust[r]):
                         return None
             return f"no definition `{'::'.join(chain)}` in `{file}`"
         want = tuple(chain)
-        if want[-1] in self.last:
-            for defs in self.rust.values():
-                if any(subsequence(want, d) for d in defs):
-                    return None
+        twin = REFERENCE in want
+        for defs in self.rust.values():
+            if any(subsequence(want, d) and (twin or REFERENCE not in d) for d in defs):
+                return None
         return f"no Rust definition `{'::'.join(chain)}` under crates/"
 
     def check_lean_ref(self, where, file, name, table=False):
@@ -366,15 +392,23 @@ class Checker:
         full = self.lean.resolve(name, base)
         if not full:
             self.fail(where, f"`{file}::{name}`: no Lean declaration `{name}` in {base}")
-        elif full not in self.lean.axioms:
+        elif full in self.lean.theorems and full not in self.lean.axioms:
             self.fail(where, f"`{full}` is not listed in {AXIOMS} (`#print axioms {full}`)")
 
     def check_token(self, where, tok, ctx, readme):
-        """One backticked token; ctx holds the last Rust file named on the line."""
+        """One backticked token; ctx holds the last Rust file named before it."""
         tok = tok.strip()
         tok = re.sub(r"\(.*\)$", "", tok)  # a call: `Reduction::stages(before, after)`
         if m := LEAN_REF.match(tok):
             self.check_lean_ref(where, m.group("file"), m.group("name"))
+            return
+        if m := QUALIFIED.match(tok):
+            self.count += 1
+            full = f"RdraIsh.{m.group(1)}"
+            if full not in self.lean.decls:
+                self.fail(where, f"`{tok}`: no Lean declaration")
+            elif full in self.lean.theorems and full not in self.lean.axioms:
+                self.fail(where, f"`{full}` is not listed in {AXIOMS} (`#print axioms {full}`)")
             return
         if m := RUST_PATH.match(tok):
             if m.group("file"):
@@ -453,16 +487,13 @@ class Checker:
 
     def check_theory(self):
         for doc in THEORY:
-            fence = False
-            for n, line in enumerate(open(os.path.join(self.root, doc), encoding="utf-8"), 1):
-                if line.lstrip().startswith("```"):
-                    fence = not fence
-                    continue
-                if fence or ".lean" not in line:
+            for para in paragraphs(open(os.path.join(self.root, doc), encoding="utf-8").read()):
+                if not any(".lean" in line or "RdraIsh." in line for _, line in para):
                     continue
                 ctx = {}
-                for tok in TICK.findall(line):
-                    self.check_token(f"{doc}:{n}", tok, ctx, False)
+                for n, line in para:
+                    for tok in TICK.findall(line):
+                        self.check_token(f"{doc}:{n}", tok, ctx, False)
 
 
 def main():
@@ -474,6 +505,8 @@ def main():
     c.check_readme()
     c.check_lean_docs()
     c.check_theory()
+    for full in sorted(c.lean.axioms - set(c.lean.decls)):
+        c.fail(AXIOMS, f"`#print axioms {full}`: no such declaration under {LEAN}")
     if sides:
         for where, tok, side in c.sides:
             print(f"{side:7} {tok}  {where}")
