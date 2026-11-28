@@ -1,0 +1,37 @@
+// trap: a `Triggered` param beside a fold's key, on an entity the reduction stubs (P67).
+// The rule's cone has T = Order and S = Voucher and Ticket. `Issue`, EvPaid's handler, folds
+// keyed by its ticket, with its `Triggered` Order param beside the key. Voucher's owner keeps
+// Order in the extended sub-lifecycle as a stub, which `Place` leaves absent there forever.
+// Before the fix the param kept its role and bound no stub row, so `Issue` never ran in the
+// extended sub-lifecycle, no voucher was used, Ship never ran, and the reduced cone said `ok`
+// to a rule the cone breaks in 7 steps: Draft, Place, Pay, Issue, Grant, Use, Ship.
+// expect Forbidden_Order_0: native=counterexample tlc=counterexample z3=refuted
+// expect Deadlock_Order_status_paid: native=counterexample tlc=counterexample
+entity Order "注文" { id: Int @pk  status: Enum(new, paid, shipped) @default(new) }
+entity Voucher "券" { id: Int @pk  status: Enum(open, used) @default(open) }
+entity Ticket "札" { id: Int @pk  status: Enum(draft, issued) @default(draft) }
+relate(Voucher, Order, N:1)
+usecase Place "注文"
+usecase Pay "支払"
+usecase Ship "出荷"
+usecase Grant "発券"
+usecase Draft "起票"
+usecase Issue "発行"
+usecase Use "使用"
+event EvPaid "支払済"
+creates(Place, Order)
+transitions(Pay, Order.status, new -> paid)
+raises(Pay, EvPaid)
+triggers(EvPaid, Issue)
+transitions(Ship, Order.status, paid -> shipped)
+condition HasUsedVoucher "使用済の券"
+holds(HasUsedVoucher, Voucher.status == used)
+applies_to(HasUsedVoucher, Ship)
+creates(Grant, Voucher)
+creates(Draft, Ticket)
+transitions(Issue, Ticket.status, draft -> issued)
+transitions(Use, Voucher.status, open -> used)
+condition TicketIssued "発行済の札"
+holds(TicketIssued, Ticket.status == issued)
+applies_to(TicketIssued, Use)
+forbidden(Order, status == shipped)

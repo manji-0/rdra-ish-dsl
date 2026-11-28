@@ -10,23 +10,23 @@ Entity lines that name each rule or reason:
   IdAgainstLiteral: 0: fires in no cone
   JointTooLarge: 0: fires in no cone
   MixedIds: 0: fires in no cone
-  Observed:input: 25
-  Observed:named by T: 27 (kept without a witness of its own)
-  Observed:named by an input: 2 (kept without a witness of its own)
-  Observed:named by obs: 19 (kept without a witness of its own)
-  Observed:obs: 88
-  Observed:stub: 6 (kept without a witness of its own)
+  Observed:input: 31
+  Observed:named by T: 28 (kept without a witness of its own)
+  Observed:named by an input: 3 (kept without a witness of its own)
+  Observed:named by obs: 21 (kept without a witness of its own)
+  Observed:obs: 95
+  Observed:stub: 8 (kept without a witness of its own)
   OrderedId: 0: fires in no cone
   OwnerChoice: 0: fires in no cone
   OwnerLiteral: 0: fires in no cone
   PinnedStart: 0: fires in no cone
-  Reduced:S: 283
-  Reduced:S action param: 288 (kept without a witness of its own)
-  Reduced:S var: 283 (kept without a witness of its own)
-  Reduced:bit key: 20 (kept without a witness of its own)
-  Reduced:input: 10 (kept without a witness of its own)
-  Reduced:named by S: 88 (kept without a witness of its own)
-  Reduced:named by an input: 2 (kept without a witness of its own)
+  Reduced:S: 294
+  Reduced:S action param: 301 (kept without a witness of its own)
+  Reduced:S var: 294 (kept without a witness of its own)
+  Reduced:bit key: 23 (kept without a witness of its own)
+  Reduced:input: 13 (kept without a witness of its own)
+  Reduced:named by S: 91 (kept without a witness of its own)
+  Reduced:named by an input: 3 (kept without a witness of its own)
   UnlinkedCreate: 0: fires in no cone
 
 == samples/ec-site
@@ -1203,6 +1203,35 @@ Entity lines that name each rule or reason:
   [entity Job, property JobStarts] reduced, H at depth 1
     Gate[2] stays G_T=S,S var,S action param | H stays H=obs,named by T
     Job[2] moves
+== engine_corpus/cone_rise_param_on_a_stub.rdra
+  [entity Order, Forbidden_Order_0] reduced, H at depth 1
+    Order[2] stays G_T=named by S,bit key,S action param | H stays H=named by obs,input,stub
+    Sheet[2] stays G_T=input | H stays H=input
+    Ticket[2] stays G_T=S,S var,S action param | H moves
+    Voucher[2] stays G_T=S,S var,S action param | H stays H=obs
+  [entity Sheet] unreduced
+    Order[2] moves
+    Sheet[2] moves
+  [entity Ticket] unreduced
+    Ticket[2] moves
+  [entity Voucher] reduced, H at depth 1
+    Order[2] stays G_T=S,S var,S action param | H stays H=obs
+    Sheet[2] stays G_T=S,S var,S action param | H stays H=obs
+    Ticket[2] stays G_T=S,S var,S action param | H stays H=obs
+    Voucher[2] moves
+== engine_corpus/cone_triggered_param_on_a_stub.rdra
+  [entity Order, Forbidden_Order_0] reduced, H at depth 1
+    Order[2] stays G_T=named by S,bit key,S action param | H stays H=named by obs,input,stub
+    Ticket[2] stays G_T=S,S var,bit key,S action param | H stays H=input
+    Voucher[2] stays G_T=S,S var,S action param | H stays H=obs
+  [entity Ticket] reduced, H at depth 1
+    Order[2] stays G_T=S,S var,named by S,S action param | H stays H=obs
+    Ticket[2] stays G_T=input | H stays H=input
+    Voucher[2] stays G_T=S,S var,S action param | H moves
+  [entity Voucher] reduced, H at depth 2
+    Order[2] stays G_T=S,S var,named by an input,S action param | H stays H=obs,named by an input,named by T
+    Ticket[2] stays G_T=S,S var,S action param
+    Voucher[2] stays G_T=input | H stays H=input
 == engine_corpus/fair_counted_exposes_lost_run.rdra
   [entity Order, EventOverflow_Order_EvDispatched_Deliver, property OrderComplete] unreduced
     Order[2] moves

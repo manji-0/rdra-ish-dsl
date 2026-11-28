@@ -27,7 +27,9 @@ impl TransitionSystem {
     /// An owner var in `vars` whose parent's existence is not (the sub-lifecycle of
     /// `TransitionSystem::reduced` may hold a child of an entity outside it) keeps its domain
     /// through a stub of the parent: an entity of its existence alone, after every var of
-    /// `vars`, which no action here writes.
+    /// `vars`, which no action here writes. A param on a stub keeps its role, so one that
+    /// needs a present row never binds here; the extended sub-lifecycle of `reduced` binds
+    /// such params to any slot (`Extended::build`, P67).
     pub fn restrict_to(&self, vars: &VarSet, keep: &BTreeSet<ActId>) -> TransitionSystem {
         self.restrict_to_mapped(vars, keep, true).0
     }

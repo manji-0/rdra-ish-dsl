@@ -316,6 +316,92 @@ condition AllSettled "請求がすべて片付いている"
 holds(AllSettled, Case.status == closed).none(Claim.status == open)
 "#;
 
+/// Order is created, paid (raising `EvPaid`) and shipped once a voucher is used; a voucher is
+/// used once some ticket is issued; `Issue`, EvPaid's handler, issues a ticket. In the order's
+/// cone S is Voucher and Ticket, and `Issue` folds keyed by its ticket with a `Triggered` Order
+/// param beside the key. Voucher's owner keeps Order in the extended sub-lifecycle as a stub,
+/// absent forever since `Place` creates it, and before P67 the kept `Triggered` param bound no
+/// row of it: `Issue` never ran there, no voucher was used, and the reduced cone said `ok` to
+/// a rule the cone breaks in 7 steps.
+const TRIGGERED_ON_A_STUB: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(new, paid, shipped) @default(new) }
+entity Voucher "券" { id: Int @pk  status: Enum(open, used) @default(open) }
+entity Ticket "札" { id: Int @pk  status: Enum(draft, issued) @default(draft) }
+relate(Voucher, Order, N:1)
+usecase Place "注文"
+usecase Pay "支払"
+usecase Ship "出荷"
+usecase Grant "発券"
+usecase Draft "起票"
+usecase Issue "発行"
+usecase Use "使用"
+event EvPaid "支払済"
+creates(Place, Order)
+transitions(Pay, Order.status, new -> paid)
+raises(Pay, EvPaid)
+triggers(EvPaid, Issue)
+transitions(Ship, Order.status, paid -> shipped)
+condition HasUsedVoucher "使用済の券"
+holds(HasUsedVoucher, Voucher.status == used)
+applies_to(HasUsedVoucher, Ship)
+creates(Grant, Voucher)
+creates(Draft, Ticket)
+transitions(Issue, Ticket.status, draft -> issued)
+transitions(Use, Voucher.status, open -> used)
+condition TicketIssued "発行済の札"
+holds(TicketIssued, Ticket.status == issued)
+applies_to(TicketIssued, Use)
+forbidden(Order, status == shipped)
+"#;
+
+/// `Note`, a use case of the order's cone T (it reads `Order.hold`, which goes both ways),
+/// creates a sheet under an order; a voucher is used once some sheet and some ticket exist.
+/// In the order's cone S is Voucher and Ticket, and Sheet's existence is an input that `Note`
+/// raises. Voucher's owner keeps Order in the extended sub-lifecycle as a stub, so `Note`'s
+/// rise there keeps its `Parent` Order param; before P67 it bound no row of the stub, the
+/// rise never ran, and the reduction panicked looking it up for the cone's `Note` step.
+const RISE_ON_A_STUB: &str = r#"
+entity Order "注文" { id: Int @pk  status: Enum(new, paid, shipped) @default(new)  hold: Bool @default(false) }
+entity Voucher "券" { id: Int @pk  status: Enum(open, used) @default(open) }
+entity Sheet "票" { id: Int @pk  status: Enum(made) @default(made) }
+entity Ticket "札" { id: Int @pk  status: Enum(draft, issued) @default(draft) }
+relate(Voucher, Order, N:1)
+relate(Sheet, Order, N:1)
+usecase Place "注文"
+usecase Pay "支払"
+usecase Ship "出荷"
+usecase Grant "発券"
+usecase Use "使用"
+usecase Hold "保留"
+usecase Release "解除"
+usecase Note "記票"
+usecase Draft "起票"
+usecase Issue "発行"
+creates(Place, Order)
+transitions(Pay, Order.status, new -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+sets(Hold, Order.hold == true)
+sets(Release, Order.hold == false)
+condition Held "保留中"
+holds(Held, Order.hold == true)
+creates(Note, Sheet)
+applies_to(Held, Note)
+condition HasUsedVoucher "使用済の券"
+holds(HasUsedVoucher, Voucher.status == used)
+applies_to(HasUsedVoucher, Ship)
+creates(Grant, Voucher)
+transitions(Use, Voucher.status, open -> used)
+condition SheetMade "票がある"
+holds(SheetMade, Sheet.status == made)
+applies_to(SheetMade, Use)
+creates(Draft, Ticket)
+transitions(Issue, Ticket.status, draft -> issued)
+condition TicketIssued "発行済の札"
+holds(TicketIssued, Ticket.status == issued)
+applies_to(TicketIssued, Use)
+forbidden(Order, status == shipped)
+"#;
+
 /// A case closes once none of its claims is open, and a claim is paid once its case is
 /// flagged (#112): in the case's cone the claims read the case's flag and existence, which
 /// only rise, so they stay a sub-lifecycle with those two vars as its inputs.
@@ -1553,6 +1639,8 @@ struct FoldsChecked {
     folds: usize,
     checked: usize,
     past_0: usize,
+    /// The cone's S steps, folded or not, found among the extended sub-lifecycle's.
+    s_steps: usize,
 }
 
 /// The fold half of Lemma 6 of docs/theory/cones.md (open problem P31), checked against the
@@ -1570,8 +1658,26 @@ fn fold_bits_hold_where_their_actions_run(
     each_folded_cone(models, bounds, |name, target, cone, run, red| {
         let bits: Vec<&Fold> = red.bits().iter().flatten().collect();
         seen.folds += bits.len();
+        let silent = red.silent_steps(cone);
         for s in run.states.iter() {
+            let steps = silent.from(red, cone, &s);
             for m in cone.moves(&s) {
+                // Every S step of the cone is a silent step of the extended sub-lifecycle to
+                // the same state, by an action it stands for (P67): a true bit is not enough,
+                // the step's other params must bind there too.
+                if red.s_actions().contains(&m.act) {
+                    assert!(
+                        steps
+                            .iter()
+                            .any(|x| x.next == m.next && x.acts.iter().any(|(a, _)| *a == m.act)),
+                        "{name} {target:?}: the cone steps by {} {:?} where the extended \
+                         sub-lifecycle has no such step, in {:?}",
+                        cone.actions[m.act.index()].name,
+                        m.params,
+                        &s.0
+                    );
+                    seen.s_steps += 1;
+                }
                 for fold in bits.iter().filter(|f| f.act() == m.act) {
                     let slot = match fold.key() {
                         FoldKey::Param(p) => m.params[usize::from(*p)],
@@ -1693,6 +1799,51 @@ fn case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0() {
     assert!(held.past_0 > 0, "{held:?}");
     let stepped = folded_steps_are_steps_of_the_cone(&models, &bounds);
     assert!(stepped.past_0 > 0, "{stepped:?}");
+}
+
+/// A `Triggered` param beside a fold's key, on an entity the extended sub-lifecycle stubs,
+/// binds there as the key does (P67): the reduced cone finds the violation the cone has, at
+/// one and two instances, and both halves of the fold check pass on it.
+#[test]
+fn a_triggered_param_on_a_stub_binds_in_the_extended_sub_lifecycle() {
+    let model = model_from(TRIGGERED_ON_A_STUB);
+    let bounds = [Bounds::STATES, Bounds::VERIFY];
+    let caps = Caps::new(usize::MAX, 200_000);
+    for b in &bounds {
+        let ts = TransitionSystem::build(&model, b.clone(), &Scope::ALL).ts;
+        let targets = ts.targets();
+        let reduced = ts.explore_targets_reduced(&targets, caps);
+        let rule = targets
+            .iter()
+            .find(|t| matches!(t, Target::Invariant(_)))
+            .expect("the rule");
+        let r = reduced.cone_of(*rule);
+        assert!(
+            r.run.system.reduction().is_some(),
+            "{b:?}: the rule's cone reduces"
+        );
+        assert!(
+            !violated(&reduced).is_empty(),
+            "{b:?}: the reduced cone finds the violation"
+        );
+        assert!(assert_reduction_exact("TRIGGERED_ON_A_STUB", &model, b.clone()) >= 1);
+    }
+    let models = [("TRIGGERED_ON_A_STUB", model)];
+    let held = fold_bits_hold_where_their_actions_run(&models, &bounds);
+    assert!(held.s_steps > 0, "{held:?}");
+    let stepped = folded_steps_are_steps_of_the_cone(&models, &bounds);
+    assert!(stepped.checked > 0, "{stepped:?}");
+}
+
+/// A rise whose `Parent` param is on an entity the extended sub-lifecycle stubs binds there
+/// (P67): the cone's `Note` step has its rise, and the reduced cone decides what the cone
+/// decides.
+#[test]
+fn a_rise_with_a_param_on_a_stub_is_a_rise_of_the_extended_sub_lifecycle() {
+    let model = model_from(RISE_ON_A_STUB);
+    for b in [Bounds::STATES, Bounds::VERIFY] {
+        assert!(assert_reduction_exact("RISE_ON_A_STUB", &model, b) >= 1);
+    }
 }
 
 /// The reduction is a divergence-blind stuttering bisimulation, and `Deadlock` reads "no
