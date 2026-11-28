@@ -1418,6 +1418,7 @@ const TLC_NO_ERROR: &str = "Model checking completed. No error has been found.";
 
 /// TLC's line for a violated invariant of the refinement check, which a planted fault must
 /// produce by name: a parse error or a crash of TLC is no catch.
+#[cfg(feature = "shadow")]
 fn tlc_invariant_violated(name: &str) -> String {
     format!("Error: Invariant {name} is violated.")
 }
