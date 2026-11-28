@@ -89,3 +89,69 @@ fn a_contradictory_premise_proves_no_rule() {
         }
     }
 }
+
+/// A rule that holds for any number of rows, beside a guard that compares with `<`.
+const FILL: &str = r#"
+entity Item "商品" { id: Int @pk  k: Int @null  n: Int }
+usecase Add "追加"
+usecase Bump "増加"
+usecase Fill "記入"
+creates(Add, Item)
+updates(Bump, Item)
+sets(Bump, Item.k == present)
+updates(Fill, Item)
+condition Small "小さい"
+holds(Small, Item.k < 3)
+sets(Fill, Item.n == 1).when(Small)
+forbidden(Item, n == 2)
+"#;
+
+/// The checks of a proof's own output (claims B1 and B16): with nothing planted the rule is
+/// proved and no check fails; a planted wrong comparison in the encoding (`<` written as
+/// `<=`) and a planted false lemma kept beside the rule are each caught, and the proof then
+/// proves nothing and says why.
+#[test]
+fn a_planted_fault_in_the_proof_proves_nothing() {
+    use crate::lifecycle::explore::symmetry::witnesses::dropping;
+    let Some(z3) = z3() else { return };
+    let ts = system_from(FILL, Bounds::VERIFY);
+    let rules: Vec<usize> = (0..ts.invariants().len()).collect();
+    let solve = || {
+        let mut solvers = [Z3::start(&z3).expect("z3 starts")];
+        prove::prove(
+            &ts,
+            None,
+            &rules,
+            &BTreeSet::new(),
+            &mut solvers,
+            ProveOptions::default(),
+        )
+        .expect("z3 answers")
+    };
+    let proof = solve();
+    assert_eq!(proof.proved(), rules.len(), "{proof:?}");
+    assert!(proof.faults.is_empty(), "{:?}", proof.faults);
+    for (plant, says) in [
+        ("prove_compare", "disagrees with the native comparison"),
+        (
+            "prove_false_lemma",
+            "the kept lemma `a planted false lemma` fails",
+        ),
+    ] {
+        let proof = dropping(plant, solve);
+        assert_eq!(proof.proved(), 0, "{plant}: {proof:?}");
+        assert!(
+            proof.faults.iter().any(|f| f.contains(says)),
+            "{plant}: {:?}",
+            proof.faults
+        );
+        assert!(proof.lemmas.is_empty(), "{plant}");
+        assert!(
+            proof
+                .rules
+                .iter()
+                .all(|r| matches!(r.verdict, Verdict::Unproved(Unproved::Uncertified(_)))),
+            "{plant}: {proof:?}"
+        );
+    }
+}

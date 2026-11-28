@@ -25,7 +25,7 @@ use crate::parallel::{in_parallel, jobs};
 use super::encode::Formula;
 
 /// The most states one mining run explores.
-const STATE_CAP: usize = 50_000;
+pub(super) const STATE_CAP: usize = 50_000;
 /// The most patterns one pattern lemma lists.
 const PATTERN_CAP: usize = 64;
 

@@ -304,15 +304,15 @@ not a bound on what exists.
 
 **Proofs with z3**
 
-- **B1.** `Enc::compare` re-implements `expr.rs::compare` and is tied to it by reading and
-  differential tests only; under `core/prove/` only `Enc::one_of` has a Kani harness, and no
-  code has a twin.
+- **B1.** Every proof checks `Enc::compare` against `expr.rs::compare` at the run's bounds
+  only; the rest of the encoding is tied to the native step by reading and differential tests,
+  under `core/prove/` only `Enc::one_of` has a Kani harness, and no code has a twin.
   `proof_equivalence` skips 130 comparisons on the samples. The header of
   `z3_guarded_null_beside_present` says BFS breaks its rule at `--int-range-max 6`, which no
   test runs.
-- **B2.** Nothing checks at run time that a bound in a proof's printed `--int-range-max` range
-  builds the same system; Lemma U is a reading of the code, checked by the reference
-  interpreter on its subset.
+- **B2.** A proof compares with its own system only the builds its printed `--int-range-max`
+  range was found by, the two ends among them; between them Lemma U is a reading of the code,
+  checked by the reference interpreter on its subset.
 - **B6.** Step pruning has no test; that a step changes only `Wr(a)` is checked in debug and
   `shadow` builds only.
 - **B7.** No test checks that an unstateable rule is `out of scope`, that a guard is dropped or
@@ -324,7 +324,8 @@ not a bound on what exists.
 - **B14.** Independence from the solver count is empirical.
 - **B16.** The checks z3 gives up on by itself are counted, not asserted. A wrong `proved`
   turns a cone stopped at the memory limit into a wrong `ok`, and no run-time check sees it
-  (residual risk 2).
+  (residual risk 2). The check of the kept lemmas runs in tests only, not on users' runs, and
+  reads only the states the miner's cones reach.
 - **B18.** No test asserts that `proved` covers state rules only.
 
 **The native verifier**
