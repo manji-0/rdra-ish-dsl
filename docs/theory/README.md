@@ -227,7 +227,7 @@ not a bound on what exists.
 **Cones, the reduction, and symmetry**
 
 - **A1.** A release build does not check that a step changes only the variables `Wr(a)`
-  names; debug and `shadow` builds do.
+  names; debug and `shadow` builds do. No Kani harness proves it.
 - **A2.** That `Trace::free_triggers` lists every step that runs an action reading a mark
   outside the cone is a reading of the code, with no test of its own; that the exact cone's
   counterexample is vouched for is a `debug_assert!` only.
@@ -235,7 +235,10 @@ not a bound on what exists.
 - **A6.** Rests on Lemma 6 (A8).
 - **A8.** Lemma 6, which ties the extended sub-lifecycle to the cone, is argued, not proved;
   the tests check what it assumes on the models and bounds they run. TLC checks the reduction
-  step by step on the corpus's reduced cones only, one way (`C ⇒ R`), without fairness.
+  step by step on the corpus's reduced cones only, one way (`C ⇒ R`), without fairness. Of
+  the locality Lemma 5 and 6 assume (`Local`), Kani proves only that a predicate reads its
+  `pred_reads`, for shapes of depth 1; that a step writes only `Wr(a)` and writes a function of
+  `Rd(a) ∪ Wr(a)` has no harness.
 - **A10.** Rests on Lemma 6 (A8).
 - **A11.** The fold equivalence is proved by Kani for one action at small bounds and tested
   on the models and bounds of the fold tests otherwise; Lemma 6 is argued (A8).

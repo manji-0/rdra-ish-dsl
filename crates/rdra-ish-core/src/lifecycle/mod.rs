@@ -102,9 +102,8 @@ pub struct TransitionSystem {
     now: Option<VarId>,
     offsets: Vec<usize>,
     width: usize,
-    /// The id of each API a `New` param is created through (`Param::via_api`). A `BTreeMap`,
-    /// not a `HashMap`: Kani does not support `RandomState`, and `fold.rs`'s harnesses build a
-    /// system.
+    /// The id of each API a `New` param is created through (`Param::via_api`). A `BTreeMap`
+    /// needs no random hash seed, so a Kani harness can build a system (`cone.rs`, `proofs`).
     api_ids: std::collections::BTreeMap<crate::model::ApiKey, String>,
     /// The S side of a reduced cone (`reduced`).
     reduction: Option<std::sync::Arc<Reduction>>,

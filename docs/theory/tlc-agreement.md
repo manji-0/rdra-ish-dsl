@@ -818,11 +818,11 @@ included, so they are lower bounds on that fraction.
 
 <!-- derived-from ../engine-agreement.md#kani-harnesses -->
 
-**Kani (T13) [read].** There are 22 `#[kani::proof]` harnesses, all in `core`: two in
+**Kani (T13) [read].** There are 25 `#[kani::proof]` harnesses, all in `core`: two in
 `expr.rs` (the comparison of D5), three in `types.rs` (the value encoding of the domains), four in `explore/store.rs`, three in `explore/segments.rs`,
 three in `explore/packing.rs`, one in `explore/arena.rs`, two in `explore/table.rs`, one in
-`explore/symmetry/mod.rs`, one in `prove/encode.rs` (the z3 encoding of a choice), two in
-`reduce/fold.rs` (the fold bit of Lemma 6). Bounded model checking (CBMC, as Kani uses it) proves each
+`explore/symmetry/mod.rs`, one in `prove/encode.rs` (the z3 encoding of a choice), three in
+`cone.rs` (the read set of a predicate), two in `reduce/fold.rs` (the fold bit of Lemma 6). Bounded model checking (CBMC, as Kani uses it) proves each
 statement for every input up to its bound. For agreement, the two `expr.rs` harnesses
 matter: they fix the native reading of null and ordering that `pred.rs::numeric` must
 mirror. Nothing ties `pred.rs` to them except tests. No harness concerns the printer, the

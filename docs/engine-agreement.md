@@ -494,6 +494,9 @@ share its fixture, in a `proofs` module that tests also compile.
 | `an_owner_value_names_its_slot` | `types.rs` | `Domain::slot` reads back the slot `Domain::of_slot` made an owner value from, and an optional owner's null names no slot | every slot below 255, optional or not |
 | `growth_keeps_room_for_one_more` | `explore/table.rs` | the shared table's growth rule is hashbrown's as `Seen::bytes_with` reads it: an insert keeps the capacity while there is room, else moves to a capacity of at least one more item whose buckets are a power of two | every length up to the capacity, buckets from 2^2 to 2^40 |
 | `one_of_admits_what_the_step_forks_on` | `prove/encode.rs` | the term `Enc::one_of` writes for a non-key `Effect::Choose` holds of a value exactly when `each_successor` forks on it within the domain, and, past the top, when the choice is of every number from `from` (`Numbers`) and the value is at least `from`; the choices are those `build/sets.rs` builds, numbers expanded from `from` beside listed values, and an evaluator of `smt.rs` terms (`cfg(kani)`) reads the term. Under Kani a term's nodes are leaked rather than shared through an `Arc` (`smt.rs::Shared`), since CBMC unwinds the drop of an `Arc` through every kind of node | a domain of 1 to 4 values, `from` up to 3, any non-empty set of listed values, every candidate byte |
+| `an_atom_reads_only_its_read_set` | `cone.rs` | two states, and two successors, that agree on the vars `pred_reads` returns give a predicate the same value under `eval`, for any binding: `pred_reads`, from which `plain_reads`, `mark_reads`, `copy_reads` and `check_reads` take each predicate's reads, covers what `eval` reads | `True`, `False`, a comparison and a membership in no term or one, over any term (a slot of a param, of its successor row or of the binder, a literal, an integer, a slot index, the clock), every state, every binding, on a system of two entities of two slots and a clock (11 bytes), under one binder |
+| `a_connective_reads_only_its_read_set` | `cone.rs` | the same | `Not` of a comparison, `And` and `Or` of none or one |
+| `a_quantifier_reads_only_its_read_set` | `cone.rs` | the same | `Forall`, `Exists` and `Count` (any operator, any bound up to 2) of a comparison that reads its binder or the outer one |
 | `a_fold_keyed_by_its_s_row_holds_where_some_t_binding_does` | `reduce/fold.rs` | step (a) of Lemma 6 (theory/cones.md): `Fold::holds` of a `Param` fold keyed by the action's `S` row holds at a slot exactly when some binding of its two `T` parameters satisfies the folded guards, each parameter on a present row when its role needs one (`Existing`, `Parent`, `Triggered`) and on any row for `Earlier`; the spec reads the state's bytes and evaluates the guards itself. A test checks that `fold_of` gives the fold the harness takes. Under Kani the reference twin of `Fold::holds` is left out | an action `A(s, t1, t2)` on two `T` entities of 2 slots each, every pair of roles, the folded guards `t1.c in A`, `t2.c in B` (any sets of a 2-value column) and `t1.c <= t2.c`, every state whose columns hold values, every slot of the key |
 | `a_fold_keyed_by_a_linked_t_row_holds_where_some_t_binding_does` | `reduce/fold.rs` | the same for the fold the link `s.owner = t1` keys by `t1`: the key fixed at the slot, `t2` ranging | the same, on entities of 1 to 3 slots, with `t1.c op t2.c` at every operator |
 
@@ -511,6 +514,16 @@ sampled sets, operators and states. Their guards read the system's lists, so the
 harness: below that CBMC does not resolve which variant an enum read from a list is, and the
 fold harnesses unwind `eval` through every kind of `Pred`.
 
+The `cone.rs` harnesses prove `pred_reads` one shape of predicate at a time, with symbolic
+leaves: CBMC unwinds to the bound every walk over a list whose length or kind it cannot fold
+to a constant, so a shape of symbolic kind, a list of two predicates, a box in a box, or a
+quantifier over a symbolic entity does not finish in minutes. A predicate is well typed, as
+the build makes it: a slot term reads a var of the entity of the param or binder it names.
+They prove the read set of a predicate, not the split of an action's guards between
+`plain_reads`, `mark_reads` and `copy_reads`, and not a step: a harness over an action's list of
+guards or of effects (`each_successor`) did not finish in minutes, so no harness proves that a
+step changes only `Wr(a)` or that what it writes is a function of `Rd(a) ∪ Wr(a)`.
+
 ### Running them
 
 Kani is not in the flake's nixpkgs. Install the version `KANI_VERSION` in
@@ -525,9 +538,11 @@ cargo kani -p rdra-ish-core                                        # every harne
 cargo kani -p rdra-ish-core --harness compare_negates_and_mirrors  # one harness
 ```
 
-`store_bytes_is_at_most_the_model_before` and
-`apply_of_a_composition_is_the_composition_of_applies` take several minutes each, the two fold
-harnesses under two minutes each and up to 9 GB, and the others under a minute.
+`store_bytes_is_at_most_the_model_before`,
+`apply_of_a_composition_is_the_composition_of_applies` and `a_quantifier_reads_only_its_read_set`
+(4 to 5 minutes) take several minutes each; `an_atom_reads_only_its_read_set` and
+`a_connective_reads_only_its_read_set` about a minute each; the two fold harnesses under two
+minutes each and up to 9 GB; the others under a minute.
 
 ### In CI
 

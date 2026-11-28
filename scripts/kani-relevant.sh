@@ -23,17 +23,21 @@ while IFS= read -r path; do
     crates/rdra-ish-core/src/lifecycle/explore/store.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/explore/table.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/explore/symmetry/mod.rs) relevant=true ;;
+    # The read-locality harnesses (`cone.rs`: `pred_reads` against `eval`), and the system
+    # they build (`mod.rs`: `TransitionSystem::empty` and its fields). `eval` is `expr.rs`,
+    # `Pred::each_term` `types.rs`, both listed here.
+    crates/rdra-ish-core/src/lifecycle/cone.rs) relevant=true ;;
+    crates/rdra-ish-core/src/lifecycle/mod.rs) relevant=true ;;
     # `one_of`'s harness, its evaluator of `smt.rs` terms, and the choices of `build/sets.rs`
     # (`guarded_set`) that it models.
     crates/rdra-ish-core/src/lifecycle/prove/encode.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/prove/smt.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/build/sets.rs) relevant=true ;;
     # The fold harnesses, and what `Fold::holds` reads of the system they build: `slots`,
-    # `entity`, `offset` and `var` (lifecycle/mod.rs, whose struct the fixture fills) and
+    # `entity`, `offset` and `var` (lifecycle/mod.rs, listed above; the fixture fills its struct) and
     # `id8` (narrow.rs). The reference twin is left out under Kani, so `fold/reference.rs`
     # changes no proof.
     crates/rdra-ish-core/src/lifecycle/reduce/fold.rs) relevant=true ;;
-    crates/rdra-ish-core/src/lifecycle/mod.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/narrow.rs) relevant=true ;;
     # The canonical form: `symmetry/mod.rs` builds it into the harness's module, though the
     # harness proves `Group::apply` and `Group::compose` and calls no function of it.

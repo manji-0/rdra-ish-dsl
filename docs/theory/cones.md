@@ -70,6 +70,14 @@ action `a`:
 - `ex(v)` is `cone.rs::TransitionSystem::existences`: the existence of `v`'s entity, and for an
   owner also the existence of its parent.
 
+`Rd`, `Mk` and `Cp` take each guard's reads from `cone.rs::TransitionSystem::pred_reads`. Three
+Kani harnesses in `cone.rs` prove that it covers what `eval` reads: two states, and two
+successors, that agree on `pred_reads(e)` give `e` the same value under any binding, for atoms,
+`Not`, `And` and `Or` of at most one part, and one quantifier, on a system of 11 state bytes
+([engine-agreement.md, Kani harnesses](../engine-agreement.md#kani-harnesses)). That a step
+changes only `Wr(a)`, and that what it writes is a function of `Rd(a) ∪ Wr(a)`, has no harness:
+debug and `shadow` builds check the first on every step they take (`check_writes`, claim A1).
+
 For `W ⊆ V`, `π_W : S → S|W` projects a state onto `W` (`TransitionSystem::project`), and
 `π_W(σ)` applies it to each state of a trace or behavior. Two behaviors are *stutter
 equivalent* when they agree after every finite run of repeated states is collapsed to one
