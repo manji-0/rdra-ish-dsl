@@ -2,8 +2,9 @@
 
 <!-- derived-from ../../docs/theory/cones.md#the-reduction-by-an-independent-sub-lifecycle -->
 <!-- derived-from ../../docs/theory/cones.md#instance-symmetry -->
+<!-- derived-from ../../docs/theory/cones.md#wf_varsnext-on-a-reduced-cone -->
 
-This directory holds a Lean 4 project. It proves parts of Theorems A8, A18, A20 and A21 of
+This directory holds a Lean 4 project. It proves parts of Theorems A8, A15, A18, A20 and A21 of
 [cones.md](../../docs/theory/cones.md) from their hypotheses. Every theorem is stated over
 abstract transition systems. None of them reads the Rust code.
 
@@ -31,14 +32,17 @@ The toolchain is pinned in [lean-toolchain](./lean-toolchain) (`leanprover/lean4
 elan installs it on the first build. Without elan, run `nix shell nixpkgs#elan` and then
 the script.
 
-**No Mathlib.** The project imports only Lean's core. The proofs need four things:
+**No Mathlib.** The project imports only Lean's core. The proofs need five things:
 
 - reachability as an inductive predicate;
 - paths through a set of states;
 - existentials;
-- a group action given by its laws.
+- a group action given by its laws;
+- finiteness, for A15's pigeonhole steps, given as a `List` that holds every reachable
+  state, with core's list membership lemmas (`List.mem_cons`, `List.mem_flatMap`,
+  `List.mem_map`).
 
-All four are a few lines each. Mathlib would add its compiled cache, a download of
+All five are a few lines each. Mathlib would add its compiled cache, a download of
 thousands of files, to every CI run that misses the cache. Pinning it would also tie the
 toolchain to Mathlib's releases. The group laws are fields of `Sym`, so
 `Equiv.Perm`, `Subgroup` and `MulAction` are not needed.
@@ -57,6 +61,13 @@ toolchain to Mathlib's releases. The group laws are fields of `Sym`, so
 | `Sym.sub` | `Symmetry.lean` | A20 | A family of subgroups of `G_s` is again a symmetry when it is closed under the group operations, preserved by its own elements, and kept along steps. |
 | `quotient_covers`, `quotient_sound` | `Symmetry.lean` | A18, its last sentence | The run that stores `can(t) = π(t)(t)` for every successor `t`, with `π(t) ∈ G_t`, reaches an image of every reachable state, and only images of reachable states. |
 | `quotient_holds_iff` | `Symmetry.lean` | A21, for invariants | An invariant whose value is the same on `s` and `g(s)` for every `g ∈ G_s` gets the plain run's verdict on that quotient. Any member of the orbit serves, as A21 needs. |
+| `LTS.wfNext_iff` | `Behaviour.lean` | D20 | `WF_vars(Next)` holds on a behaviour iff it stays forever only at states that no step leaves. |
+| `recurrent_segment` | `Behaviour.lean` | A15, the pigeonhole | A sequence over the states of a list has, after any index, a segment `[n₀, m)` with `ρ m = ρ n₀` in which every later step of the sequence occurs. |
+| `LTS.lasso_of_behaviour` | `Behaviour.lean` | A15, native.md's lassos | On a system whose reachable states lie in a list, a behaviour that satisfies `Fair_P`, stays forever only where `stop` holds and violates `□(trig ⇒ ◇goal)` folds into a lasso (a prefix and a cycle) with the same four properties. |
+| `image_step`, `takes_fwd`, `enabled_back`, `moves_back` | `Fairness.lean` | A15, the image | The image `(t, s) ↦ (t, B(x(t, s)))` of a step of `C` is a step of `R` or a stutter; a fair instance taken in `C` is taken by the image step; one enabled at the image is enabled in `C`; a move of `R` from the image lifts to a move of `C`. |
+| `silentCycle_of_divergence` | `Fairness.lean` | A15, case (i) | A behaviour of `C` that keeps its image at `(t, c)` and still changes state infinitely often gives a cycle of silent edges of `X` between different states of `c`. |
+| `a15_image`, `a15_behaviour`, `a15` | `Fairness.lean` | A15 | Under A8's hypotheses (Lemma 6 both ways), finitely many reachable states of `X` and `R`, and `hloop` (every block with such a silent cycle can loop): if no lasso of `R` that satisfies `Fair_P` and stays forever only where no move leaves or the class can loop violates the property, `C` satisfies it under `Fair_P ∧ WF_vars(Next)`. `a15_image` is the map of a counterexample of `C` to one of `R`. |
+| `ExampleFair.silent_cycle`, `ExampleFair.eventually_flag` | `FairnessExample.lean` | none | A cone whose one block holds a silent cycle (a toggle) and whose fair `T_a` action sets a flag: every hypothesis of `a15` is discharged and the run's verdict proved, so `eventually flag` holds under `WfNext` although `C` can toggle forever. |
 | `Example.flag_after_s`, `ExampleSym.sorted_quotient` | `Example.lean` | none | Concrete systems that discharge every hypothesis of `a8_holds_iff` and of `quotient_holds_iff`, so the hypotheses are jointly satisfiable. The A8 instance is small: its partition is the identity, it has no rises and its input bytes are constant, so (B2), (B3) and the rise half of Lemma 6 hold trivially there. No block of two states and no rise is exercised. |
 
 ## What the hypotheses are
@@ -81,6 +92,18 @@ The proofs assume the following hypotheses and do not derive them:
 
   cones.md derives the commutation from (G1)–(G6). The Lean statement assumes it on every
   state, where cones.md states it on reachable states.
+- **A15's extra hypotheses** (`a15`).
+  - The reachable states of `X` and of `R` lie in lists (`LX`, `LR`). The model's
+    bounds make both finite. A complete `R` graph is what the theorem's "`R`'s graph is
+    complete" asks; when `obs = ∅` the code does not explore `X`, and `LX` is only a
+    hypothesis of the proof.
+  - `hloop`: every block whose silent edges between different states contain a cycle from
+    a reachable state can loop (`SilentCycle`, Definition 5, case 1). The code's
+    `divergence` and, for `obs = ∅`, `s_cycles` must make it true; cones.md argues both.
+- **The fairness model** (`Behaviour.lean`). A fair instance is a set of `T_a` labels (fair
+  actions are `T_a` actions, Lemma 5 (e), assumed by giving instances on `Ta` only). A step
+  takes an instance only when it changes the state (assumption τ of native.md). Behaviours
+  may stutter.
 
 ## What is not covered
 
@@ -103,8 +126,18 @@ The proofs assume the following hypotheses and do not derive them:
     new input bytes, which (B1), (B3) and `rise_keeps_s` make unique.
   - Lemma 5 (c)–(e) and the folds. Their effect is inside the step relations that Lemma 6
     relates.
-- **A15** (`WF_vars(Next)` on a reduced cone). Nothing about infinite behaviors is
-  defined yet.
+- **A15, the rest of the theorem.**
+  - The run's search. `a15` reads the run's verdict as "no lasso of `R` with the fairness
+    and stops above violates the property". That the search over strongly connected
+    components finds such a lasso when one exists is N9, which Lean does not check. The
+    lift and replay of a candidate are run-time evidence, and the converse (a counterexample
+    of the run is one of `C`) is not claimed.
+  - The nested case. Definition 5's cases 2 (an inner class that can loop) and 3 (an orbit
+    self-edge of `S` up to `H`), and the proof's (ii), need the inner reduction, which
+    Reduction.lean does not model.
+  - Case 4 (`obs = ∅`, `s_cycles` over `monotone_vars`) enters only through the hypothesis
+    `hloop`. The proof's (iii), that a variable whose write graph is acyclic changes
+    finitely often, is not formalized.
 - **A23** (the annotated quotient, fairness up to symmetry). It is not started.
 - **A18's BFS depth.** The claim that each class is reached at its least depth is not stated.
 
