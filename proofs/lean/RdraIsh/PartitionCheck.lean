@@ -26,7 +26,10 @@ What is proved:
   representatives;
 - `extended_of_check`: the reachable part of `X` (`onReach`, the steps from reachable
   states, which has the same reachable states, `reach_onReach`) has Definition 4's shape,
-  `Extended`.
+  `Extended`;
+- `onReach_of_check`: the record's run is a run of `onReach X` as well (`graph_onReach`), so
+  `onReach X` has both: a `Stable` partition and `Extended`. Lemma 6 for `onReach X` is not
+  derived here.
 -/
 
 namespace RdraIsh.PCert
@@ -363,6 +366,39 @@ theorem extended_of_check (hG : Graph X d st idx) (hF : Faithful obs d st)
     have := hF.s (hG.idx_lt hx) (hG.idx_lt hy) this
     rw [hG.st_idx hx, hG.st_idx hy] at this
     exact this.symm
+
+/-- The record's run is a run of `onReach X` too, when the record is accepted: its edges
+leave reachable states. -/
+theorem graph_onReach (hG : Graph X d st idx) (h : d.check = true) :
+    Graph (onReach X) d st idx := by
+  obtain ⟨hw, -, -, -, -, -, -, hR⟩ := parts h
+  have hr : ∀ {i}, i < d.n → X.Reach (st i) := fun hi => reach_of_check hG hR hi
+  refine
+    { idx_lt := fun hx => hG.idx_lt (reach_onReach.mp hx),
+      st_idx := fun hx => hG.st_idx (reach_onReach.mp hx), idx_st := hG.idx_st,
+      silent_sound := ?_, silent_complete := ?_, rise_sound := ?_, rise_complete := ?_,
+      init := hG.init }
+  · intro i j he
+    obtain ⟨e, hen, hs, _⟩ := mem_silentList.mp he
+    obtain ⟨b, hb⟩ := hG.silent_sound he
+    exact ⟨b, hr (hs ▸ (hw.silent hen).1), hb⟩
+  · rintro x y hx ⟨b, -, hb⟩
+    exact hG.silent_complete (reach_onReach.mp hx) ⟨b, hb⟩
+  · intro i j he
+    obtain ⟨e, hen, hs, _⟩ := mem_riseList.mp he
+    obtain ⟨r, hb⟩ := hG.rise_sound he
+    exact ⟨r, hr (hs ▸ (hw.rise hen).1), hb⟩
+  · rintro x y r hx ⟨-, hb⟩
+    exact hG.rise_complete (reach_onReach.mp hx) hb
+
+/-- **(B1)–(B3) and the shape of one system.** On an accepted record, `onReach X`, the steps
+of `X` from its reachable states, has a `Stable` partition with the dumped representatives
+and is `Extended`: both hypotheses of A8 that the record bears on, for one system. -/
+theorem onReach_of_check (hG : Graph X d st idx) (hF : Faithful obs d st)
+    (h : d.check = true) :
+    Stable (onReach X) obs (blockOf (d.run st idx) d.blkOf) (fun c => st (d.repOf c)) ∧
+      Extended (onReach X) :=
+  ⟨stable_of_check (graph_onReach hG h) hF h, extended_of_check hG hF h⟩
 
 end Run
 

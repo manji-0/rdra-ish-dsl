@@ -597,6 +597,7 @@ in a `ci-checked` one.
 | `PCert.reach_of_check`, `PCert.complete_of_check` | `PartitionCheck.lean` | A8, `Sweep.Complete` | Given `Graph` and `Faithful`, every numbered state of an accepted record is reachable, and the record's run is `Sweep.Complete`. |
 | `PCert.stable_of_check` | `PartitionCheck.lean` | A8, (B1)–(B3) | Given `Graph` and `Faithful`, an accepted record's partition is `Stable`, with the dumped representatives. |
 | `PCert.extended_of_check`, `PCert.reach_onReach` | `PartitionCheck.lean` | A8, the shape of `X` | Given `Graph` and `Faithful`, the steps of `X` from its reachable states (`onReach`, which has the reachable states of `X`) are `Extended`: a silent edge keeps the input bytes, a rise keeps `S`. |
+| `PCert.graph_onReach`, `PCert.onReach_of_check` | `PartitionCheck.lean` | A8, (B1)–(B3) and the shape of `X` | An accepted record's run is a run of `onReach X` too, so `onReach X` has both a `Stable` partition, with the dumped representatives, and `Extended`, the two hypotheses of A8 the record bears on, for one system. Lemma 6 for `onReach X` is not derived here. |
 | `PCert.wf_of` | `PartitionCheck.lean` | none | The bounds the well-formed part checks. |
 
 An accepted dump does not establish these:
@@ -613,8 +614,9 @@ An accepted dump does not establish these:
 - **The runs left out.** Nested runs, runs up to `H`, runs past a cap, and every run outside
   this walk, user runs among them, are not checked. The shape is checked on the reachable
   part of `X` only: a step from a state no run reaches is not seen.
-- **The tools.** The Lean compiler and the Rust dump are trusted. `check` is ordinary
-  compiled code that the kernel never evaluates on the dump. `PartitionCheckMain.lean`
+- **The tools.** The Lean compiler, the Rust dump and the line parser of
+  `PartitionCheckMain.lean` are trusted. `check` is ordinary compiled code that the kernel
+  never evaluates on the dump. `PartitionCheckMain.lean`
   imports `PartitionCert.lean`, and `PartitionCheck.lean` proves the theorems of the `check`
   defined there.
 

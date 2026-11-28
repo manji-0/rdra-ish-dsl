@@ -2707,13 +2707,14 @@ fn dump_lemma5_certificates() {
 
 /// Writes every flat run of `X` that `Classes::of_graph` partitions while the cones of
 /// `every_quotient_passes_the_checks_of_its_hypotheses` are reduced, at `Bounds::STATES` and
-/// `Bounds::VERIFY`, to the file `RDRA_LEAN_RUNS` names, for the Lean checker of proofs/lean
+/// `Bounds::VERIFY`, with each run of `X` capped at `RDRA_LEAN_RUNS_CAP` states (default
+/// 200,000), to the file `RDRA_LEAN_RUNS` names, for the Lean checker of proofs/lean
 /// (`scripts/check-lean-certificates.sh` runs both). A record holds the numbered run (each
 /// state's `obs`, `S` and input values, the silent edges, the rises, the initial states), the
 /// class of each state and each class's representative (`partition/dump.rs`). Equal runs are
 /// written once. The runs left out are counted by reason (`Dump::left_out`): runs under an
 /// inner reduction, runs up to `H`, partitions that are the identity, runs a cap stopped,
-/// unobserved sub-lifecycles, and runs past `RDRA_LEAN_RUNS_CAP` states (default 200,000).
+/// and unobserved sub-lifecycles.
 #[test]
 #[ignore = "run by scripts/check-lean-certificates.sh"]
 fn dump_partition_certificates() {
@@ -2721,8 +2722,8 @@ fn dump_partition_certificates() {
     use std::io::Write;
     let path = std::env::var("RDRA_LEAN_RUNS").expect("RDRA_LEAN_RUNS names the output");
     let cap = std::env::var("RDRA_LEAN_RUNS_CAP").map_or(200_000, |c| c.parse().expect("a cap"));
-    let caps = Caps::new(usize::MAX, 50_000);
-    let ((), dump) = dump::recording(cap, || {
+    let caps = Caps::new(usize::MAX, cap);
+    let ((), dump) = dump::recording(|| {
         for (name, model) in &walked_models() {
             for (label, bounds) in [("states", Bounds::STATES), ("verify", Bounds::VERIFY)] {
                 let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;

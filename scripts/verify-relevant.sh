@@ -29,6 +29,9 @@ while IFS= read -r path; do
     .github/workflows/release.yml | .github/workflows/publish-pypi.yml) ;;
     .github/workflows/portability.yml | scripts/check-skill-snippets.py | pyproject.toml) ;;
     scripts/check-release-version.sh) ;;
+    # A change to the Lean proofs alone skips formal-verify's step that runs the Lean
+    # certificate checkers on the code's dumps as well: the `lean` job checks the proofs but
+    # builds no executable, and every run on main runs the step.
     proofs/lean/* | scripts/check-lean-proofs.sh) ;;
     .claude-plugin/* | plugins/*) ;;
     crates/rdra-ish-cli/tests/lsp_cli.rs | crates/rdra-ish-cli/tests/plugin_manifest.rs) ;;

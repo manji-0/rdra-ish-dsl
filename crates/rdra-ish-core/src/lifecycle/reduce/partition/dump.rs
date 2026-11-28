@@ -30,15 +30,13 @@ use crate::lifecycle::TransitionSystem;
 pub(crate) struct Dump {
     /// The name the next records take.
     pub(crate) name: String,
-    /// Runs past this many states are counted, not written.
-    pub(crate) cap: usize,
     pub(crate) records: Vec<String>,
     /// The runs left out, by reason: `nested` (a run of `X` under its own inner reduction,
     /// whose states are inner classes), `up to H` (a run whose states are orbits),
     /// `identity` (a partition `of_graph` turns down before it numbers classes, #101),
     /// `stopped` (a run of `X` a cap or a limit stopped, which `Classes::of` never
-    /// partitions), `unobserved` (an `X` with no `obs`, one class that is never explored)
-    /// and `over cap` (a run past `cap` states).
+    /// partitions) and `unobserved` (an `X` with no `obs`, one class that is never
+    /// explored).
     pub(crate) left_out: std::collections::BTreeMap<&'static str, usize>,
 }
 
@@ -47,13 +45,8 @@ thread_local! {
 }
 
 /// Runs `f` with a dump on and returns what it recorded.
-pub(crate) fn recording<T>(cap: usize, f: impl FnOnce() -> T) -> (T, Dump) {
-    DUMP.with(|d| {
-        *d.borrow_mut() = Some(Dump {
-            cap,
-            ..Dump::default()
-        })
-    });
+pub(crate) fn recording<T>(f: impl FnOnce() -> T) -> (T, Dump) {
+    DUMP.with(|d| *d.borrow_mut() = Some(Dump::default()));
     let out = f();
     let dump = DUMP
         .with(|d| d.borrow_mut().take())
@@ -98,7 +91,6 @@ pub(super) fn record(
         let why = match () {
             _ if sub.reduction().is_some() => "nested",
             _ if up_to_h => "up to H",
-            _ if n > d.cap => "over cap",
             _ => "",
         };
         if !why.is_empty() {

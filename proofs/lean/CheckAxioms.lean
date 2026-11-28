@@ -331,3 +331,5 @@ an axiom outside Lean's three standard ones (`propext`, `Classical.choice`, `Quo
 #print axioms RdraIsh.PCert.stable_of_check
 #print axioms RdraIsh.PCert.reach_onReach
 #print axioms RdraIsh.PCert.extended_of_check
+#print axioms RdraIsh.PCert.graph_onReach
+#print axioms RdraIsh.PCert.onReach_of_check
