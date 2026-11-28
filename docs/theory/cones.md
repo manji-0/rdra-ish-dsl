@@ -753,11 +753,12 @@ projection on `obs`, the raw inputs and the bits, labels each state of `C` and o
 part and the block of its `X` state, and requires the two runs to have the same labelled states,
 initial labels and labelled edges up to stuttering. `::reduced_cones_step_as_their_cones_step`
 runs it on every corpus case at its flags and on every sample root at the flags of its `// expect
-verify` lines (53 reductions, 10 of them nested, all with the class level).
+verify` lines: 53 reductions, 10 of them nested, all with the class level; 25 more reduced
+cones of the samples pass 200,000 states unreduced and are not checked.
 `::the_stub_cases_step_as_their_cones_step` runs it on `cone_triggered_param_on_a_stub` and
-`cone_rise_param_on_a_stub`. With `bind_stub_params` and the stub check both undone, the first
-fails on an `Issue` step that has no silent edge in `X`, and the second on a `Note` step that has
-no rise. `::a_removed_class_move_fails_the_class_level` removes the class moves of one class the
+`cone_rise_param_on_a_stub`, and again with `bind_stub_params` dropped in the `X` the check
+builds: the first then fails on an `Issue` step that has no silent edge in `X`, and the second on
+a `Note` step that has no rise. `::a_removed_class_move_fails_the_class_level` removes the class moves of one class the
 reduced run reaches, and the class level fails. `scripts/reduction-diff.py lemma6` runs the
 check on random models: CI runs it on the 522 PR seeds, of which 361 reduce a cone. The check
 shares `Reduction::key` (and so `Fold::holds`), `Extended::build` and the step relation with the

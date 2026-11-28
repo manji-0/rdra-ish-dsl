@@ -68,8 +68,11 @@ pub(crate) struct StepCheck {
     /// Reductions whose class level was skipped: a state of `R` maps to no state of
     /// `Reach X`.
     pub(crate) classes_skipped: usize,
-    /// Reductions whose `X`, or whose nested `R`, stopped at the caps: not checked.
+    /// Reductions whose `X`, or whose `R`, stopped at the caps: not checked.
     pub(crate) stopped: usize,
+    /// Reduced cones whose unreduced cone stopped at the caps, counted by the caller: not
+    /// checked.
+    pub(crate) cones_stopped: usize,
 }
 
 impl std::ops::AddAssign for StepCheck {
@@ -86,6 +89,7 @@ impl std::ops::AddAssign for StepCheck {
         self.class_edges += o.class_edges;
         self.classes_skipped += o.classes_skipped;
         self.stopped += o.stopped;
+        self.cones_stopped += o.cones_stopped;
     }
 }
 

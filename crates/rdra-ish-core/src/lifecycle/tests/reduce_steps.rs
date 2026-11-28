@@ -11,7 +11,7 @@ use super::cone::load;
 use super::*;
 use crate::lifecycle::explore::Checks;
 use crate::lifecycle::reduce::lemma6::{check, StepCheck};
-use crate::lifecycle::{Cone, Seed};
+use crate::lifecycle::{ComponentRun, Cone, Seed};
 use crate::load_project;
 
 /// The caps of every run here: the cone, the reduction, the extended sub-lifecycle.
@@ -48,7 +48,24 @@ fn bounds_of(model: &SemanticModel, flags: &[String]) -> (Bounds, Scope) {
 /// under `CAPS`, and panics naming the cone on the first failure. A target cone is reduced
 /// under the seeds of every target that shares it, as `explore_targets_reduced` reduces it.
 fn check_model(name: &str, model: &SemanticModel, bounds: Bounds, scope: &Scope) -> StepCheck {
-    let ts = TransitionSystem::build(model, bounds.clone(), scope).ts;
+    check_model_with(model, bounds.clone(), scope, check)
+        .unwrap_or_else(|e| panic!("{name} at {bounds:?}, {e}"))
+}
+
+/// The signature of `check`.
+type Checker =
+    fn(&TransitionSystem, &ComponentRun, &TransitionSystem, Caps) -> Result<StepCheck, String>;
+
+/// `check_model` with `checker` in place of `check`, run on each reduced cone after the
+/// reduction is built: the first failure, naming the cone, or what the checks saw. A cone
+/// whose unreduced run stops at `CAPS` is counted in `cones_stopped`.
+fn check_model_with(
+    model: &SemanticModel,
+    bounds: Bounds,
+    scope: &Scope,
+    checker: Checker,
+) -> Result<StepCheck, String> {
+    let ts = TransitionSystem::build(model, bounds, scope).ts;
     let mut cones: Vec<(String, Cone, Vec<Seed>)> = Vec::new();
     for t in ts.targets() {
         let cone = ts.target_cone(t);
@@ -70,14 +87,12 @@ fn check_model(name: &str, model: &SemanticModel, bounds: Bounds, scope: &Scope)
         let c = ts.restrict_to(&cone.vars, &cone.keep);
         let run = c.clone().run_checking(CAPS.without_views(), Checks::none());
         if !run.complete {
+            seen.cones_stopped += 1;
             continue;
         }
-        match check(&c, &run, &sys, CAPS) {
-            Ok(s) => seen += s,
-            Err(e) => panic!("{name} at {bounds:?}, {what}: Lemma 6: {e}"),
-        }
+        seen += checker(&c, &run, &sys, CAPS).map_err(|e| format!("{what}: Lemma 6: {e}"))?;
     }
-    seen
+    Ok(seen)
 }
 
 /// A corpus case's model and the bounds of its `// flags:` line, or `None` for a case whose
@@ -165,18 +180,23 @@ fn reduced_cones_step_as_their_cones_step() {
         }
     }
     eprintln!("lemma 6: corpus {corpus:?}; with the samples {seen:?}");
-    assert!(corpus.reductions >= 20, "{corpus:?}");
+    assert!(corpus.reductions >= 30, "{corpus:?}");
+    assert!(seen.reductions >= 53 && seen.nested >= 10, "{seen:?}");
     assert!(
         seen.rises > 0 && seen.s_steps > 0 && seen.silent_back > 0,
         "{seen:?}"
     );
-    assert!(seen.classes > 0 && seen.nested > 0, "{seen:?}");
+    assert!(
+        seen.classes == seen.reductions && seen.classes_skipped == 0 && seen.stopped == 0,
+        "the class level runs on every reduction: {seen:?}"
+    );
 }
 
 /// The two stub shapes of claim A11: a `Triggered` param beside a fold's key on a stub, and a
-/// rise whose `Parent` param is on one. With `bind_stub_params` and the stub check of
-/// `reduced_with` both undone, the first fails on an `S_a` step with no silent edge, the second
-/// on a `T_a` step with no rise.
+/// rise whose `Parent` param is on one. Both pass. With `bind_stub_params` dropped in the `X`
+/// the check builds (the reduction itself is built as it is, past the stub check of
+/// `reduced_with`), the first fails on an `Issue` step with no silent edge in `X`, and the
+/// second on a `Note` step with no rise.
 #[test]
 fn the_stub_cases_step_as_their_cones_step() {
     let triggered = check_case("cone_triggered_param_on_a_stub");
@@ -186,6 +206,33 @@ fn the_stub_cases_step_as_their_cones_step() {
     );
     let rise = check_case("cone_rise_param_on_a_stub");
     assert!(rise.rises > 0 && rise.stages > 0, "{rise:?}");
+    fn dropped(
+        c: &TransitionSystem,
+        run: &ComponentRun,
+        sys: &TransitionSystem,
+        caps: Caps,
+    ) -> Result<StepCheck, String> {
+        crate::lifecycle::explore::symmetry::witnesses::dropping("bind_stub_params", || {
+            check(c, run, sys, caps)
+        })
+    }
+    for (case, act, shape) in [
+        (
+            "cone_triggered_param_on_a_stub",
+            "Issue",
+            "X has no silent edge",
+        ),
+        ("cone_rise_param_on_a_stub", "Note", "X has no rise"),
+    ] {
+        let path = corpus_dir().join(format!("{case}.rdra"));
+        let (model, bounds, scope) = corpus_case(&path).expect("the case loads");
+        let e = check_model_with(&model, bounds, &scope, dropped)
+            .expect_err("the dropped binding is caught");
+        assert!(
+            e.contains(&format!("C steps by {act}")) && e.contains(shape),
+            "{case}: {e}"
+        );
+    }
 }
 
 /// A class move removed from a flat reduction's tables is caught at the class level: the
@@ -253,7 +300,7 @@ fn generated_models_step_as_their_cones_step() {
         match checked {
             Ok(s) => println!(
                 "lemma6 {file}: ok reductions={} nested={} states={} s_steps={} rises={} \
-                 silent_back={} classes={} classes_skipped={} stopped={}",
+                 silent_back={} classes={} classes_skipped={} stopped={} cones_stopped={}",
                 s.reductions,
                 s.nested,
                 s.states,
@@ -262,7 +309,8 @@ fn generated_models_step_as_their_cones_step() {
                 s.silent_back,
                 s.classes,
                 s.classes_skipped,
-                s.stopped
+                s.stopped,
+                s.cones_stopped
             ),
             Err(e) => {
                 let why = (e.downcast_ref::<String>().cloned())
