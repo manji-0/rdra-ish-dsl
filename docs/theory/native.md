@@ -77,8 +77,9 @@ which runs in the release jobs only and needs TLC; marks as in
 and by the twin `Twin::EachEnabled` (`explore/moves/reference.rs`), which compares the
 planned enumeration with a filter over all bindings. Two further premises are not part of
 this sketch: that the built `T` is `T_β(M)` of D13 (claim I1), and that the edge list reads
-back the edges it recorded (every edge number is a checked conversion, [The state store and
-its encoding](#the-state-store-and-its-encoding)).
+back the edges it recorded (every edge number is a checked conversion, through
+`explore/edges.rs::edge_number` except an orbit self-edge's index, [The state store and its
+encoding](#the-state-store-and-its-encoding)).
 
 ## The state store and its encoding
 
@@ -88,12 +89,12 @@ A state of `T` is a byte per cell (`expr.rs::State`), one cell per slot of each 
 D2. The store keeps it packed: each cell in `ceil(log2 |Domain|)` bits, cells end to end,
 the total rounded up to bytes (`explore/packing.rs::Packing::of`). States are found by
 their packed bytes in a hash table (`explore/arena.rs::Seen`) under the FxHash-style
-multiply-rotate hash of `core-root/fasthash.rs` with a fixed seed (`arena.rs::hash`).
+multiply-rotate hash of `core-root/fasthash.rs` with a fixed seed (`explore/arena.rs::hash`).
 
 **N2 (Store).** Suppose (i) every domain has at most 256 values, so that each value of
-`T_β(M)` is a distinct byte and fits its cell (`packing.rs::bits_for` caps a cell at 8
+`T_β(M)` is a distinct byte and fits its cell (`explore/packing.rs::bits_for` caps a cell at 8
 bits), and (ii) every cell starts at a bit offset that `Packing` holds exactly
-(`packing.rs::offsets`, a `u32` per cell). Then on states whose cells hold values
+(`explore/packing.rs::offsets`, a `u32` per cell). Then on states whose cells hold values
 inside their domains, packing is injective and unpacking inverts it; the patch path
 (`Packing::patch`, which writes only the cells a move changed into the source's packed row)
 equals packing the successor, and `Packing::cell` reads the cell back; the arena, segment and
@@ -118,16 +119,17 @@ reads a stored state ("by N1", "by N2") holds under both preconditions.
 
 The offsets matter because `pack_into` and `unpack_into` count offsets as they go, while
 `Packing::patch` and `Packing::cell` read the stored offsets. On a plain run every successor
-takes the patch path (`probe.rs::Probes::read`); on a run up to symmetry the successor is the
+takes the patch path (`explore/probe.rs::Probes::read`); on a run up to symmetry the successor is the
 canonical form packed whole (`States::pack_into`), and `Packing::cell` serves the deadlock
-readers (`findings.rs::can_leave`, `orbit/findings.rs`). An offset that did not hold its cell
+readers (`findings.rs::can_leave`, `explore/orbit/findings.rs`). An offset that did not hold its cell
 would merge distinct successors and unpack stored rows to states `T` does not have, which
 would reach every verdict and warning that reads the store.
 
 The edge index is checked the same way: every edge number (`first`, the edge being pushed, a
 parent edge) goes through `explore/edges.rs::edge_number`, which panics past the last `u32`
-below the `INITIAL` marker instead of wrapping, and the index of an orbit self-edge through a
-checked `u32::try_from` of its own in `bfs.rs::Bfs::take`, which panics past `u32` too. A
+below the `INITIAL` marker instead of wrapping. The one exception is the index of an orbit
+self-edge: `explore/bfs.rs::Bfs::take` converts it with a `u32::try_from(…).expect` of its own,
+which panics past `u32::MAX` but, unlike `edge_number`, does not exclude the `INITIAL` marker. A
 wrapped index in `EdgeList::first` would attribute edges to the wrong sources, and liveness,
 `can_reach` and deadlocks would read a graph that is not `G`. A run also stops, as at the state
 cap, before it numbers a state `u32::MAX`, the marker of an unresolved move and of an
@@ -139,7 +141,7 @@ into the table and looks a row up), on small widths (4 or 11 cells, widths up to
 harnesses are listed in row N2). The table lookup compares whole packed rows
 (`Seen::find_hashed`), so a hash collision costs time and never merges two states; the hash's
 quality does not bear on correctness. The seed is fixed and no table is iterated into the
-output (`fasthash.rs` states the rule for `FastMap`), so the hash does not bear on determinism
+output (`core-root/fasthash.rs` states the rule for `FastMap`), so the hash does not bear on determinism
 either. `Packing::pack` panics when a value does not fit its bits, in release builds too; that
 check cannot catch a value wrapped to a byte before it reaches the store, which is what (i)
 prevents. The shadow twins check the store against a reference: `Twin::Packed` compares
@@ -155,7 +157,7 @@ The bounds are pinned by tests, not by Kani:
   model has two creating use cases that differ only in `c32` and a `forbidden` over every
   column, and must give `counterexample`; the other has one creating use case and must give
   `ok`. The test asserts the verdicts written in the fixtures at 255 instances only.
-  `packing.rs::tests::a_state_past_bit_65535_packs_patches_and_reads_back` checks the patch, the
+  `explore/packing.rs::tests::a_state_past_bit_65535_packs_patches_and_reads_back` checks the patch, the
   unpack and `Packing::cell` on either side of the first cell past bit 65,535.
   `build/mod.rs::width_tests::a_state_past_the_packed_width_is_a_build_error` checks the
   threshold function `too_wide` one bit past a width and at `MOST_PACKED_BITS`, and that the
@@ -166,7 +168,7 @@ The bounds are pinned by tests, not by Kani:
   reference interpreter's `core/tests/reference/mod.rs::a_value_past_a_byte_is_not_wrapped`,
   which decodes each native state through `Domain`'s documented encoding rather than the
   builder's tables.
-- Edge numbers. `edges.rs::tests::an_edge_number_past_u32_panics`.
+- Edge numbers. `explore/edges.rs::tests::an_edge_number_past_u32_panics`.
 
 ## Memory accounting and the stop rule
 
@@ -194,13 +196,20 @@ The charge covers the state store only: the passes over a finished graph (livene
 `can_reach`, deadlocks, the partition) and the workers' scratch are outside it, as
 formal-verification.md says.
 
-**N15 (Stops give `not decided`).** Every reader below returns `Undecided` (or
-`NotDecided`, or leaves the finding open) on a stopped graph unless it found a violation in
-the part explored, and the CLI maps that to `not decided` (`cli/src/verify/end.rs::End::result`: with no failure and no tool error, a capped,
-undecided or denied-unproved finding makes the result `RunResult::NotDecided`).
-A stopped run's counterexamples are sound for safety (they are paths of `G`, hence traces
-of `T`) and for liveness by N10. The time budget (`Caps::deadline`, read every 256
-admissions) is the one stop whose position depends on the machine.
+**N15 (Stops give `not decided`).** On a stopped graph no reader prints `ok`: the run's
+result is `not decided` unless a violation was found in the part explored, and a
+counterexample found there is one of `T`.
+
+*Proof sketch.* Every reader below returns `Undecided` (or `NotDecided`, or leaves the
+finding open) on a stopped graph unless it found a violation in the part explored: N5 and the
+`after` check by their code paths, N8 by the `complete` guard of `answer_targets`, N14 by
+`Progress::NotDecided`, N9 by N10. The CLI maps that to `not decided`
+(`cli/src/verify/end.rs::End::result`: with no failure and no tool error, a capped,
+undecided or denied-unproved finding makes the result `RunResult::NotDecided`). A stopped
+run's safety counterexamples are paths of `G`, hence traces of `T`, and its liveness
+counterexamples are those of `T` by N10. ∎ The step not derived is that every reader takes
+one of those paths, which is read from the code. The time budget (`Caps::deadline`, read
+every 256 admissions) is the one stop whose position depends on the machine.
 
 ## Parallel exploration
 
@@ -208,7 +217,7 @@ admissions) is the one stop whose position depends on the machine.
 <!-- derived-from ../design/native-bfs-parallel.md#holding-it-correct -->
 
 `Bfs::explore` hands chunks of 128 consecutive unread states (`CHUNK`) to worker threads,
-which expand them (`bfs.rs::expand`): compute moves, canonical forms under symmetry, packed
+which expand them (`explore/bfs.rs::expand`): compute moves, canonical forms under symmetry, packed
 successors and their hashes, a `Probe` per move, and a dense binding number. The caller,
 the **reader**, takes the expanded chunks back in hand-out order (`Workers::next`) and does
 everything that changes the run: numbering, admission, edges, bindings, violations,
@@ -335,7 +344,7 @@ violating state.
 *Code.* State rules are evaluated at admission (`Bfs::check_invariants`, before the state
 is stored), on the unpacked successor; the first violation per rule name is kept, and its
 trace is the parent path (`ComponentRun::trace_of`). `always` is evaluated after the run by
-`properties.rs::ComponentRun::unsafe_state`: the first state in BFS order where some binding
+`explore/properties.rs::ComponentRun::unsafe_state`: the first state in BFS order where some binding
 fails, and its parent path.
 
 *Proof.* Iff: by N1, `S_G = Reach(T)`. Shortest: admission order is BFS order, so the first
@@ -357,12 +366,12 @@ successor equals its source (`Probe::Loop`), so an `after` assertion is never ev
 step with `s' = s`. This is D17's reading, and TLC's: the TLA+ printer emits `[][… => …]_vars`
 (`crates/rdra-ish-emit/src/tla/module.rs`), whose subscript exempts stuttering steps. A last
 step that only ever stutters makes the assertion vacuous (N18). The model of
-`tests/vacuous.rs::an_assert_after_a_step_that_only_stutters_holds_vacuously` shows it:
+`core/tests/vacuous.rs::an_assert_after_a_step_that_only_stutters_holds_vacuously` shows it:
 `Touch` sets `Order.status := open` on a row created `open`, and
 `after(Touch).assert(Order.flag == true)` with `flag` false and never written. Every `Touch`
 step is a self-loop, so the assertion holds and the vacuity check reports
 `Vacuous_AfterAssert_Touch_0`; with `Touch` setting `closed` the assertion is violated. The
-test asserts both at one and two instances.
+test asserts the vacuity at one and two instances and the violation at one.
 
 ### Step forms and order forms
 
@@ -411,15 +420,9 @@ A stopped graph must not be read: an unexpanded state has no out-edges and would
 stuck. The guard is the match arm `Target::Reach(i) if !cones[at].run.complete` in
 `targets.rs::TransitionSystem::answer_targets`, which records the property as
 undecided; `reach_failure` and `TransitionSystem::verdict` also `assert!` completeness in
-every build. TLC cannot state
-`can_reach`; besides the unit tests, a naive oracle (`core/tests/oracle.rs`) with its own
-exploration and a forward search from every state agrees with the checker's verdicts, and
-on the whole system finds the state the checker reports among the failing ones, on every
-corpus case and formal-verification sample that builds without an error and whose whole
-system has at most 3,000 states (`MOST_STATES`; a larger one is skipped), at 1 and 2
-instances (row N8; that comparison, `can_reach_and_deadlocks_agree_with_a_naive_oracle`,
-runs on main only). That the reported state is the first in BFS order, so that the trace is
-shortest, rests on the proof above; no test checks it.
+every build. The tests, the naive oracle of `core/tests/oracle.rs` and what they leave open
+(among it, that the reported state is the first in BFS order rests on the proof above) are
+in [row N8](./claims.md#c-the-native-verifier).
 
 ## Deadlocks
 
@@ -441,20 +444,18 @@ marked has no such path, which is the definition. The reported state is the mini
 `(idx, k)`. ∎ On a stopped graph every candidate value is `Progress::NotDecided`. Both
 `can_leave` and the trace read packed cells through `Packing::cell`, so they rest on N2's
 preconditions.
-TLC's deadlock check is one-sided (row T6); the naive oracle of `core/tests/oracle.rs`
-checks this one against a forward search on its own exploration, on main only, on the
-systems N8's comparison covers. It compares only stuck against not stuck, not the
-state reported, and it picks the open values with the checker's own filter (`exits`,
-`has_way_on`), so a fault in which values count as open passes it. A value no arm leaves is
-tested (`core/tests/deadlock.rs::an_end_value_is_no_deadlock`); no test has a value whose only
-way out is a delete.
+The evidence is in [row N14](./claims.md#c-the-native-verifier). The naive oracle there picks
+the open values with the checker's own filter (`exits`, `has_way_on`), so a fault in which
+values count as open passes it.
 
 ## Vacuity
 
 **N18 (Vacuity).** `targets.rs::TransitionSystem::vacuity` reports a state rule or `after`
 assertion as vacuous only on a complete run of its cone, only when the run reports no
 violation of it, and only when no stored state meets one of its premises
-(`unmet_of_rule`, `unmet_of_assert`). It is a warning and changes no verdict (D18). On a
+(`unmet_of_rule`, `unmet_of_assert`). It is a warning and changes no verdict (D18).
+
+*Proof sketch.* On a
 complete plain run "no stored state" is "no reachable state" by N1 and N2, so only under
 N2's preconditions, which the build enforces: a store that merged two states would print a
 false vacuity warning for the premise only the merged-away state met. On a reduced run or a
@@ -462,13 +463,14 @@ run up to symmetry the stored states are representatives; that a premise met by 
 member of a class is met by its representative is theme (a). The `after` premise is read
 from the step's ends (`ComponentRun::step_ends`): on a run that keeps its edges, from the edge
 list, where an edge moves when its ends differ or it is an orbit self-edge
-(`graph.rs::ComponentRun::step_ends_with`); on a run that keeps none (one under
+(`explore/graph.rs::ComponentRun::step_ends_with`); on a run that keeps none (one under
 `Caps::stop_when_all_violated`), from what `Bfs::push` recorded on every move
-(`edges.rs::StepEnds::read`).
+(`explore/edges.rs::StepEnds::read`).
 `Ends::moved` records whether a move of the step changes the state (an orbit self-edge does),
 and only such moves count, so the premise agrees with the check, which is never evaluated on a
 self-loop (`Probe::Loop`). A step that only stutters is its own vacuity reason
-(`UnmetPremise::OnlyStutters`).
+(`UnmetPremise::OnlyStutters`). ∎ The step not derived here is the one to representatives on a
+reduced or symmetric run, which is theme (a).
 
 Properties have a check of the same kind, `targets.rs::TransitionSystem::property_vacuity`,
 on a complete run of the property's cone: it warns when no stored state, under some binding
@@ -491,7 +493,7 @@ under `Plain` (`Fair_P` alone) or `WfNext` (`Fair_P ∧ WF_vars(Next)`)
 printer, or the checker. On `G` define, for a state `s`:
 
 - `En(s)`: the fair instances that label an edge from `s` to a state `≠ s`
-  (`liveness.rs::FairSteps::enabled`); `Moves(s)`: some edge leaves `s` to a state `≠ s`
+  (`explore/liveness.rs::FairSteps::enabled`); `Moves(s)`: some edge leaves `s` to a state `≠ s`
   (`FairSteps::moves_on`).
 - For a set `C` of states, `Tk(C)`: the fair instances that label an edge `(u, v)` with
   `u ≠ v` and `u, v ∈ C`.
@@ -500,19 +502,19 @@ By N1 and the definition of enabledness in D20 (some binding extending `κ` has 
 `≠ s`), `En(s)` on a complete `G` is the set of fair instances enabled at `s` in `T`, and a
 step `s → s'` with `s ≠ s'` takes every fair instance that labels an edge from `s` to `s'`.
 
-**Assumption τ (a step that changes nothing takes nothing).** D20 counts a fair instance as
-taken only by a step `s → s'` with `s' ≠ s`, although D13 allows a step with `s' = s`. The code
-and the TLA+ output read it the same way: `fair_steps` keeps only edges with `from ≠ to`, and
-the printer's `WF_vars` takes `⟨A⟩_vars` steps only. This document names that clause
-assumption τ, because N9's (⇒) direction uses it twice. A second reading goes with it: D14's
-behaviors are sequences of states without action labels, so the code counts a step `s → s'`
-as taking every fair instance that labels some edge from `s` to `s'` (`En`, `Tk` above;
-`lasso.rs::unfair_loop` likewise), not only the instance of the action a behavior "used".
-This is the TLA+ reading (`⟨A⟩_vars` is a predicate on the pair of states); D20's wording, "a
-step whose action is `a`", is narrower. Without τ, a behavior that stutters forever at a state
-where an instance `(a, κ)` has both a self-loop and a move to another state would take `(a, κ)`
-infinitely often on the self-loop and satisfy `Fair_P`, while the code does not count that
-state as a stop.
+**Assumption τ (a step that changes nothing takes nothing).** This document names τ the clause
+of [D20](./semantics.md#d20) by which a fair instance `(a, κ)` is taken only by a step
+`s → s'` with `s' ≠ s` (some binding of `a` extending `κ` moves `s` to `s'`), although D13
+allows a step with `s' = s`. N9's (⇒) direction uses it twice; the counterexamples of (⇐), and
+with them N10 and N11, do not depend on it. The code and the TLA+ output read D20 the same way:
+`fair_steps` keeps only edges with `from ≠ to`, and the printer's `WF_vars` takes `⟨A⟩_vars`
+steps only. D14's behaviors are sequences of states without action labels, so a step `s → s'`
+takes every fair instance that labels some edge from `s` to `s'` (`En`, `Tk` above;
+`lasso.rs::unfair_loop` likewise), as `⟨A⟩_vars`, a predicate on the pair of states, reads it.
+Without τ, a behavior that stutters forever at a state where an instance `(a, κ)` has both a
+self-loop and a move to another state would take `(a, κ)` infinitely often on the self-loop
+and satisfy `Fair_P`, while the code does not count that state as a stop; an `ok` would then
+not be licensed by D20 and D21.
 
 ### The check
 
@@ -556,17 +558,12 @@ infinitely often and the non-stuttering steps taken infinitely often; `I` is str
 connected within `(N_b, E_N)`, has at least two states, and lies in one component `C`. A
 fair instance enabled at every state of `C` is enabled at every state of `σ` from some
 point on, so `Fair_P` makes `σ` take it infinitely often, on a step inside `I ⊆ C`, and by
-τ on a step that changes the state, an edge of `E_N`; so it is in `Tk(C)`, and `C` is fair.
-(Without τ the instance could be taken only on self-loops, which `Tk` does not count.) In
+τ on a step that changes the state, an edge of `E_N`; so it is in `Tk(C)`, and `C` is fair. In
 both cases `σ_i` reaches the end by the non-stuttering steps of `σ`, which are edges of
 `E_N`. ∎
 
-Without τ, (⇒) fails in exactly the way the note on assumption τ describes, and an `ok` would
-not be licensed by D20 and D21; D20 states τ for this reason. The counterexamples of (⇐), and
-with them N10 and N11, do not depend on τ.
-
-*Code.* `liveness.rs::ComponentRun::liveness_search` runs `ComponentRun::avoid` per binding:
-the components by iterative Tarjan (`graph.rs::Adjacency::components`), the `always` and
+*Code.* `explore/liveness.rs::ComponentRun::liveness_search` runs `ComponentRun::avoid` per binding:
+the components by iterative Tarjan (`explore/graph.rs::Adjacency::components`), the `always` and
 `taken` bit sets per component, the stops, and a backward BFS from the ends over the
 predecessors in `E_N` (`toward`). The binding whose failing trigger state comes first in BFS
 order is chosen. For weak fairness a single pass over the maximal components suffices,
@@ -643,11 +640,11 @@ for a deadlock or `can_reach`.
 | Check | Plain | Reduced | Symmetric |
 |---|---|---|---|
 | State rule, `after` | replayed (`explore/mod.rs::ComponentRun::trace_violations`, `trace_of`; `LiftFault` carrying `LassoFault::Replay` on failure); not re-evaluated: the violation was evaluated at admission on the same states | replayed on the reduced system, then lifted step by step (`LiftFault` on failure); re-evaluated on the lifted last state, and a lifted state that no longer violates is `LiftFault` carrying `LassoFault::Satisfies` | lifted (`lift_path`), replayed on the system the run explored, lifted through the reduction when that system is reduced (`explore/orbit.rs`, `LiftFault` on either failure); re-evaluated on the lifted last state (`LassoFault::Satisfies` as in the reduced column) |
-| `always` | re-evaluated on the stored path, failing at its last state, in every build (`explore/properties.rs::ComponentRun::decide_property`, `property_failure`; `PropertyVerdict::Fault` with `LassoFault::Satisfies` otherwise), then replayed (`trace_along_to`; `LassoFault::Replay` on failure) | re-evaluated on the reduced path as in the plain column, replayed on the reduced system and lifted step by step (`trace_along_to`), then re-evaluated on the lifted last state (`LassoFault::Satisfies` if it no longer fails) | only on a cone the reduction leaves whole (`cli/verify/jobs.rs::PropertyJob::symmetric`), so no lift through a reduction is needed: lifted, replayed (`LassoFault::Replay`) and re-evaluated on the lifted path (`OrbitRun::decide_always`, `LassoFault::Satisfies`) |
+| `always` | re-evaluated on the stored path, failing at its last state, in every build (`explore/properties.rs::ComponentRun::decide_property`, `property_failure`; `PropertyVerdict::Fault` with `LassoFault::Satisfies` otherwise), then replayed (`trace_along_to`; `LassoFault::Replay` on failure) | re-evaluated on the reduced path as in the plain column, replayed on the reduced system and lifted step by step (`trace_along_to`), then re-evaluated on the lifted last state (`LassoFault::Satisfies` if it no longer fails) | only on a cone the reduction leaves whole (`cli/src/verify/jobs.rs::PropertyJob::symmetric`), so no lift through a reduction is needed: lifted, replayed (`LassoFault::Replay`) and re-evaluated on the lifted path (`OrbitRun::decide_always`, `LassoFault::Satisfies`) |
 | `stable`, `unchanged`, `precedes` | as `always`, plain | never reduced (`decide_property` restricts without reduction) | not run up to symmetry |
-| `eventually`, `leads_to` | replayed, formula re-evaluated, fairness re-checked (N11; `LassoFault` on failure) | the reduced lasso is never printed; what prints is either the `WfNext` lasso lifted to the unreduced cone and replayed, re-evaluated and fairness-checked there (`decide_liveness_reduced`; `Spurious` otherwise, `Spurious::Fails` for a lift that fails its step checks), or the lasso of the rerun on the unreduced cone (`Cone_P_Full`); if that rerun stops, the property is `not decided` | run up to symmetry on any cone, but on a reduced cone a counterexample of that run is decided again by the plain runs and never printed (`cli/verify/native.rs::liveness_up_to_symmetry`); on a cone the reduction leaves whole, replayed, re-evaluated and fairness-checked after lifting (`orbit/liveness.rs`, `LassoFault` on failure, `LassoFault::Unclosed` past 10,000 copies) |
+| `eventually`, `leads_to` | replayed, formula re-evaluated, fairness re-checked (N11; `LassoFault` on failure) | the reduced lasso is never printed; what prints is either the `WfNext` lasso lifted to the unreduced cone and replayed, re-evaluated and fairness-checked there (`decide_liveness_reduced`; `Spurious` otherwise, `Spurious::Fails` for a lift that fails its step checks), or the lasso of the rerun on the unreduced cone (`Cone_P_Full`); if that rerun stops, the property is `not decided` | run up to symmetry on any cone, but on a reduced cone a counterexample of that run is decided again by the plain runs and never printed (`cli/src/verify/native.rs::liveness_up_to_symmetry`); on a cone the reduction leaves whole, replayed, re-evaluated and fairness-checked after lifting (`explore/orbit/liveness.rs`, `LassoFault` on failure, `LassoFault::Unclosed` past 10,000 copies) |
 | `can_reach` | replayed (`targets.rs::TransitionSystem::verdict`, `trace_to`; `TraceFault` on failure); the finding is not decided again on the trace | never reduced (`explore_cone` keeps a `can_reach` cone whole) | not run up to symmetry |
-| Deadlock | replayed (`targets.rs::read_entity`, `trace_to`; `TraceFault` in the deadlock's place on failure); not decided again on the trace | `verify` reduces entity cones (`explore_targets_reduced_in`), `check` does not: replayed on the reduced system and lifted step by step (`TraceFault`); the finding is decided on the reduced graph (cones.md, Theorem A8, consequence 3) | lifted (`lift_path`), replayed, and lifted through the reduction when the cone is reduced (`orbit/findings.rs::trace_to_slot`, `TraceFault` on failure) |
+| Deadlock | replayed (`targets.rs::read_entity`, `trace_to`; `TraceFault` in the deadlock's place on failure); not decided again on the trace | `verify` reduces entity cones (`explore_targets_reduced_in`), `check` does not: replayed on the reduced system and lifted step by step (`TraceFault`); the finding is decided on the reduced graph (cones.md, Theorem A8, consequence 3) | lifted (`lift_path`), replayed, and lifted through the reduction when the cone is reduced (`explore/orbit/findings.rs::trace_to_slot`, `TraceFault` on failure) |
 
 Three consequences.
 
@@ -666,24 +663,11 @@ Three consequences.
 - *What is still unchecked or panics.* Deadlock and `can_reach` traces replay, but the
   finding is not decided again on them. The lifted start of a reduced trace is built from an
   initial S state of the start's class (a start with none is `ReplayError::NotInitial`) and is
-  not itself checked against the unreduced cone's initial states. Some code holds invariants of
-  its own by release panics, listed here (the [claims inventory](./claims.md), in its list of
-  panics left on a lift's way, gives the reason each holds or the assumption it rests on): `reduce/lift.rs::lift_stop`
-  (`expect`s about its caller, a reduced cone, and its walk's own graph, marked in the code as unchecked invariants); in
-  `explore/orbit/liveness.rs` `Product::new`'s permutations and the look-ups of the pair search
-  before the lift (`lasso`, `thread_walk`, `walk_in`, `threads_covered`), and in
-  `explore/liveness.rs` their counterparts on a plain run (`edge_between`, `fair_loop`,
-  `walk_in`); preconditions of a caller; the deadlock lift's trace slot; and, outside those
-  files, the `expect`s and the `panic!` of the extended sub-lifecycle that `lift` rebuilds and
-  explores again (`reduce/extended.rs::Extended::build` and its helpers,
-  `reduce/mod.rs::TransitionSystem::moves_of_into`, `explore/moves.rs::TransitionSystem::initial_states`),
-  which hold if `Extended::rebuild` reproduces the build the reduction was made from (not
-  checked), `Canon::canonical`'s count of places, and the last state of a replayed lasso
-  (`lasso.rs::TransitionSystem::replay_lasso`, `::explain_property`, `::unfair_loop`; a replay
-  holds its start). Two read a lifted path, `lift_stop`'s state list and the last step of an
-  `after` violation in `explore/orbit.rs::run_orbits_annotating`, and both hold whatever path
-  of the system's own states is lifted; the lasso replays' last states hold for any replay.
-  A failure there stops the command; none can print a trace that does not replay. The lasso
+  not itself checked against the unreduced cone's initial states. Some code on a lift's way
+  holds invariants of its own by release panics; the
+  [claims inventory](./claims.md#panics-left-on-a-lifts-way) lists them, with the reason each
+  holds or the assumption it rests on. A failure there stops the command; none can print a
+  trace that does not replay. The lasso
   lift of `explore/orbit/liveness.rs` checks that an edge is the move at its place and that
   its permutation takes the move to the stored target: `Product::lift` returns
   `ReplayError::NoMove` otherwise, which `lasso` reports as `LassoFault::Replay` (test
@@ -708,23 +692,23 @@ only what the lift computes.
 - **Reduced, stop** (`lift_stop`). From the lifted last state, a breadth-first walk of at
   most 2^18 states (`MAX_WALK`) through S steps that keep T and `obs` finds a state with no
   move or a cycle; none gives `Spurious::NoLoop`.
-- **Symmetric** (`orbit.rs::lift_path`). Each stored edge is recomputed from its source as
+- **Symmetric** (`explore/orbit.rs::lift_path`). Each stored edge is recomputed from its source as
   the first move of its action and parameters whose successor `t` canonicalizes to the
   stored target; with `σ` the permutation that takes `t` there, the concrete step is the
-  move read through the accumulated `τ`, and `τ := τ ∘ σ⁻¹`. The lasso lift of
-  `orbit/liveness.rs` takes instead the move at the edge's place among its source's moves and
+  move read through the accumulated `θ`, and `θ := θ ∘ σ⁻¹`. The lasso lift of
+  `explore/orbit/liveness.rs` takes instead the move at the edge's place among its source's moves and
   the permutation the annotated run stored for the edge, and returns `ReplayError::NoMove`
   when they do not match the edge. A liveness loop on
   (state, binding) pairs (**N12**) closes after at most the order of the loop's composed
-  permutation, capped at 10,000 copies (`orbit/liveness.rs::MOST_COPIES`). **N13**: a
-  lifted trace that does not replay is a tool error, never a printed counterexample.
+  permutation, capped at 10,000 copies (`explore/orbit/liveness.rs::MOST_COPIES`). **N13**:
   `lift_path` reports a stored edge that is no move of its source as `ReplayError::NoMove`,
-  and so does the lasso lift of `orbit/liveness.rs` (the third consequence above lists what
-  still panics).
+  and so does the lasso lift of `explore/orbit/liveness.rs`; that such a failure is a tool
+  error and never a printed counterexample is N16 (the table above), and what still panics on
+  the way is in the [claims inventory](./claims.md#panics-left-on-a-lifts-way).
 
 The `Twin::OrbitLiveness` twin compares the orbit search with the plain run's `avoid`
 (`ComponentRun::liveness_reference`), so it tests the quotient against N9's implementation,
-not N9 itself; it skips runs past 200,000 states (`orbit/reference.rs::SHADOW_CAP`), as do
+not N9 itself; it skips runs past 200,000 states (`explore/orbit/reference.rs::SHADOW_CAP`), as do
 `Twin::OrbitRun` and `Twin::OrbitStateModels`. The twin's description says it checks the
 quotient only, and a `shadow` build reports each skipped call.
 
@@ -790,15 +774,15 @@ each of its variants a fair action whose enabledness reads its mark (event-order
 - **Symmetric counterexamples.** Ip and Dill ("Better verification through symmetry",
   FMSD 9(1/2), 1996) and Emerson and Sistla ("Symmetry and model checking", FMSD 9(1/2),
   1996) explore the quotient by a symmetry group and relate paths of the quotient to paths
-  of the original system, which is what `orbit.rs::lift_path` does when it carries the
+  of the original system, which is what `explore/orbit.rs::lift_path` does when it carries the
   accumulated permutation along a stored path (N12, N13). rdra-ish then replays the lifted
   trace on `T` rather than relying on that correspondence alone.
 - **TLA+ fairness.** `WF_vars(A)` and stuttering steps are Lamport's ("The temporal logic of
   actions", ACM TOPLAS 16(3), 1994; *Specifying Systems*, 2002). D20's per-instance weak
   fairness is the conjunction of `WF_vars` over instances that the TLA+ printer emits; the
   exemption of stuttering steps from action properties (`[][A]_vars`) is D17's reading of
-  `after`, and the same exemption in `WF_vars(A)`, which only `⟨A⟩_vars` steps satisfy, is the
-  reading assumption τ adopts.
+  `after`, and the same exemption in `WF_vars(A)`, which only `⟨A⟩_vars` steps satisfy, is
+  [assumption τ](#the-fairness-model).
 
 ## Threats to validity
 
@@ -816,7 +800,7 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   reports each skip. The probe twins run in one CI job, on code release builds do not run.
 - **Readers share code with the checks they certify.** `unfair_loop` and `avoid` both use
   `moves` and `Property::fair_instance`; `explain_property` and `liveness_search` both use
-  `holds_bound` and `triggers`. Self-certification catches a fault in the search, not in
+  `holds_bound` and `triggers` (N11). Self-certification catches a fault in the search, not in
   these.
 - **Fixed-width integers.** A value that wraps silently in a release build gives a wrong verdict
   within the documented bounds, which is why the value encoding, the bit offsets of the packing,
@@ -825,12 +809,14 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   the samples, the corpus and engine agreement build with the `ci-checked` profile of the
   workspace `Cargo.toml` (release with `overflow-checks`), so an arithmetic overflow panics
   there; the `release` profile, which users run, wraps silently.
-- **Fairness wording.** N9's (⇒) direction, hence every liveness `ok`, rests on assumption τ,
-  which D20 states, and on the reading that a step takes every fair instance that labels some
-  edge between its two states.
+- **Fairness reading.** Every liveness `ok` rests on N9's (⇒) direction, hence on
+  [assumption τ](#the-fairness-model).
 - **Determinism of memory stops beside other runs** rests on the reruns of N4.
-- **What this document does not cover.** `reduce/lift.rs::lift_stop` beyond `MAX_WALK`,
-  `Spurious::NoLoop` and its error path; `fasthash.rs` beyond the rule quoted in N2;
-  `cli/src/verify/native.rs::native_property_after` beyond the order of its runs and what it
-  records for the comparison; and `cli/src/verify/shared.rs::Shared::up_to_symmetry` beyond its
-  use of `PropertyJob::symmetric`, which the N16 table cites.
+- **Parts argued only in part.** That `reduce/lift.rs::lift_stop` finds a stop whenever one
+  exists is not argued: past `MAX_WALK` states, or with no stop found, it gives
+  `Spurious::NoLoop`, and the CLI then decides the property on the unreduced cone, so a missed
+  stop costs time, not soundness. Determinism under `core-root/fasthash.rs` rests on the rule
+  quoted in N2 (no table is iterated into the output) being kept by every user of `FastMap`.
+  `cli/src/verify/native.rs::native_property_after` is argued only for the order of its runs
+  and what it records for the comparison, and `cli/src/verify/shared.rs::Shared::up_to_symmetry`
+  only for its use of `PropertyJob::symmetric`, which the N16 table cites.
