@@ -197,3 +197,16 @@ an axiom outside Lean's three standard ones (`propext`, `Classical.choice`, `Quo
 #print axioms RdraIsh.ExampleLemma6.stub_bug
 #print axioms RdraIsh.ExampleLemma6.mark_step
 #print axioms RdraIsh.Act.Ext.reads_of_lemma5
+#print axioms RdraIsh.SymAct.Sys.act_mul
+#print axioms RdraIsh.SymAct.Sys.mem_act
+#print axioms RdraIsh.SymAct.Sys.eval_mv
+#print axioms RdraIsh.SymAct.Sys.post_comm
+#print axioms RdraIsh.SymAct.Sys.step_comm
+#print axioms RdraIsh.SymAct.Sys.mem_step
+#print axioms RdraIsh.SymAct.Sys.W_step
+#print axioms RdraIsh.SymAct.Sys.W_act
+#print axioms RdraIsh.SymAct.Sys.init_act
+#print axioms RdraIsh.SymAct.Sys.symOn
+#print axioms RdraIsh.SymOn.quotient_reach_iff
+#print axioms RdraIsh.SymAct.Sys.a18_holds_iff
+#print axioms RdraIsh.ExampleOffW.off_W_counterexample

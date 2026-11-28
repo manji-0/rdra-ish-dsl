@@ -7,12 +7,14 @@
 <!-- derived-from ../../docs/theory/semantics.md#verdicts -->
 
 This directory holds a Lean 4 project. It proves parts of Theorems A8, A15, A18, A20, A21 and A23 of
-[cones.md](../../docs/theory/cones.md) from their hypotheses, Lemma 5 from Definition 3, and
-Lemma 6 from Definition 4. The theorems of A8 and the others are stated over abstract
-transition systems; Lemmas 5 and 6 are stated over a model of the cone by its actions
+[cones.md](../../docs/theory/cones.md) from their hypotheses, Lemma 5 from Definition 3,
+Lemma 6 from Definition 4, and Theorem A18's commutation from (G1)–(G6). The theorems of A8 and the
+others are stated over abstract transition systems; Lemmas 5 and 6 are stated over a model of
+the cone by its actions
 ([Definition 3 and Lemma 5 over actions](#definition-3-and-lemma-5-over-actions),
-[Definition 4 and Lemma 6 over actions](#definition-4-and-lemma-6-over-actions)). None of
-them reads the Rust code.
+[Definition 4 and Lemma 6 over actions](#definition-4-and-lemma-6-over-actions)), and A18's
+commutation over a model of the cone by its slots
+([Theorem A18 over slots](#theorem-a18-over-slots)). None of them reads the Rust code.
 
 ## Building
 
@@ -152,11 +154,11 @@ The proofs assume the following hypotheses and do not derive them:
   - `G_{g(s)} = G_s`;
   - (G3).
 
-  cones.md derives the commutation from (G1)–(G6). The Lean statement assumes it on every
-  state, where cones.md states it on reachable states. `SymOn` assumes it on a set `W` that
-  holds the initial states and is closed under steps and every `G_s`, which the quotient's
-  stored states need; reachable states alone do not suffice
-  (`ExampleReachOnly.reach_only_counterexample`).
+  `Sym` assumes it on every state. `SymOn` assumes it on a set `W` that holds the initial
+  states and is closed under steps and every `G_s`, which the quotient's stored states need;
+  reachable states alone do not suffice (`ExampleReachOnly.reach_only_counterexample`).
+  `SymActions.lean` derives a `SymOn` from (G1)–(G6), with `W` the states whose absent rows
+  hold base values ([below](#theorem-a18-over-slots)).
 - **A23's extra hypotheses** (`SymLive`, `LiveEqui`, `a23`).
   - `G` acts on fair instances and on bindings, with the composition and inverse laws, and
     moves a label of an instance to a label of the moved instance.
@@ -189,7 +191,9 @@ The proofs assume the following hypotheses and do not derive them:
     it. The fields of `Lemma6Hyp` are read from the code, and the model leaves out what
     [below](#what-the-lemma-6-model-leaves-out) lists. Reading the builder itself would need
     a deep embedding of it.
-  - The same holds for (G1)–(G6) and the symmetry scan.
+  - (G1)–(G6) are stated over a slot-level model of the code's syntax
+    ([below](#theorem-a18-over-slots)). That the model's `act`, hypotheses and effects are
+    `Group::apply`, `breaks::scan` and `each_successor` is read from the code, not derived.
   - (B1)–(B3) are certified at run time on each partition (claim A8, R). That certificate
     is the nearest link from the code to `Stable`, but it is not `Stable` itself. The code
     checks that one sweep with every block as a splitter splits nothing, while `Stable.b2`
@@ -424,3 +428,82 @@ Each field is a fact about one action, read from the code:
   at run time that the built `X` is the one `bind_stub_params` is meant to build.
 - **Consequences 2 to 4.** These are stated for `coneW`. `a8_actions_holds_iff` reads
   invariants on `cone` itself.
+
+## Theorem A18 over slots
+
+<!-- derived-from ../../docs/theory/cones.md#instance-symmetry -->
+
+`SymActions.lean` models the cone system by its slots and derives Theorem A18's commutation
+from (G1)–(G6). The model (`SymAct.Sys`):
+
+- entities in classes, each class with its slot count and whether the scan lets it move;
+- a state gives each slot an existence (absent, present, deleted), each data column and each
+  owner a value per slot, and the clock. An owner holds a parent slot or `null`;
+- a permutation per class that fixes the slots past the class's count. `G_s` is the
+  permutations that fix every absent slot and every slot of a class that does not move.
+  `act` is `Group::apply`: a slot's variables move with it, and an owner on a row that is
+  not absent is relabelled by its parent's permutation;
+- terms, predicates and effects after `lifecycle/types.rs`. A term reads at a parameter, at
+  a parameter's slot in the successor, or at a quantifier's slot. Quantifiers range over the
+  present slots of the pre-state. Effects are read pointwise: a location takes the last
+  write in the list;
+- a step binds each parameter by its role (`Existing`, `Parent`, `Triggered` a present slot,
+  `New` the lowest absent slot, `Earlier` any slot), and each choice effect picks a value.
+
+`BaseAbsent`, the `W` of Theorem A18, is the set of states whose absent rows hold base values.
+
+| Lean (`RdraIsh.`) | File | Claim | Statement |
+|---|---|---|---|
+| `SymAct.Sys.act_mul`, `SymAct.Sys.mem_act` | `SymActions.lean` | Definition 6 | `act` composes, and `G_{g(s)} = G_s` for `g ∈ G_s`. |
+| `SymAct.Sys.eval_mv` | `SymActions.lean` | A18, predicates | Under (G1), (G6) and well-typedness, a predicate has the same value at `(s, t, p)` and `(g(s), g(t), g(p))` when the rows it may read an owner of are not absent. |
+| `SymAct.Sys.post_comm` | `SymActions.lean` | A18, effects | On `W`, the successor of `g(s)` under `g(p)` is `g` of the successor of `s` under `p`, by (G2) and (G4). |
+| `SymAct.Sys.step_comm`, `SymAct.Sys.mem_step` | `SymActions.lean` | A18 | A step from a state of `W` commutes with every `g ∈ G_s`, and a step keeps `g ∈ G_t` on every state. |
+| `SymAct.Sys.W_step`, `SymAct.Sys.W_act`, `SymAct.Sys.init_act` | `SymActions.lean` | A18, (G3) | `W` holds the initial states and is closed under steps and every `G_s`; (G3) closes the initial set under every `G_s`. |
+| `SymAct.Sys.symOn` | `SymActions.lean` | A18, A23 | These give the `SymOn` of `a23_on`, with `W` the base-absent states. |
+| `SymOn.quotient_reach_iff`, `SymAct.Sys.a18_holds_iff` | `SymActions.lean` | A18, A21 | The canonical quotient of a system reaches what the quotient of its restriction to `W` reaches; so an invariant that `G_s` preserves gets the plain run's verdict on the canonical quotient of the cone system. |
+| `ExampleOffW.off_W_counterexample` | `SymActionsExample.lean` | none | Shops and orders, a creation that does not write the order's optional owner: every hypothesis of `step_comm` holds, and a step from a state outside `W`, with the absent order's owner on shop 0, has no image under the swap of the shops. |
+
+### What these hypotheses are
+
+- **`WF`**: a term reads, and an effect writes, a column or an owner on a row of its own
+  entity, and every parameter it names exists.
+- **`Built`**, what the builder gives and the scan does not check. A `New` parameter is
+  created by its action, and an `Earlier` parameter carries a run-mark conjunct `mark = k`
+  whose base is not `k`. The `Earlier { step: 0 }` parameters of the extended sub-lifecycle
+  carry no such conjunct; they bind entities `H` leaves out.
+- **`Hyp`**, (G1)–(G4) and (G6) as `breaks::scan` states them. (G1): a term naming rows of a
+  class that moves is compared only by `=` or `≠` with a term naming rows of the same class
+  or with `null`, and appears in no `In`. (G2): an owner is written from a parameter of its
+  parent's class or from `null`, and an owner choice ranges over every row. A data column is
+  not written from the slot of a class that moves. (G3): an identity start couples its child
+  and parent classes, and a pre-existing row's owner starting at its base names no row. (G4):
+  a creation writes every owner of the created row whose base names a row. (G6): no guard
+  reads an owner on a `New` parameter in the pre-state. Each condition also holds when the
+  class it names does not move, which is how the scan's leaving a class out enters.
+- **(G5)** is the semantics: a delete resets the row's columns (not its run marks) and keeps
+  its owners.
+- **Guards only.** Invariants, `after` assertions and properties are not in the model, so
+  (G6) outside guards is not derived; `a18_holds_iff` takes the invariance of its invariant
+  under `G_s` as a hypothesis.
+
+Outside `W` the commutation can fail. Take an absent row whose optional owner names a row,
+created by a step that does not write that owner: the step from `g(s)` keeps the value and
+`g(t)` relabels it (`ExampleOffW.off_W_counterexample`).
+
+The model differs from the code in these ways:
+
+- Effects are read in list order. `each_successor` applies the deletes after the other
+  effects and the choices last, and it drops a choice on a deleted row.
+- A `Transition` is a choice among its arms from the pre-state value. Owner `Transition`s
+  are not in the syntax; the scan leaves their class out (`OwnerChoice`).
+- The domain sizes of data columns are not checked, and `null` data values are not
+  modelled.
+- The roles carry no data. `Parent` and `Triggered` bind a present slot, and what else they
+  ask is in the guard.
+- The reduced cone (`G_T`) and the run of `S` up to `H` (A22) are not modelled.
+
+The slot model and the action model of `Actions.lean` are separate. `Act.Model` keeps guards
+and effects opaque behind read and write sets, and `SymAct.Sys` gives them a syntax. Its
+`Param` and `Role` restate `Act.Param` and `Act.Role` without `Role.earlier`'s step. A
+common model would read `Act.Model`'s guard and effect from `SymAct`'s syntax and share one
+`Role` with the semantics Lemma 6 gives it.
