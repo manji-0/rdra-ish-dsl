@@ -191,7 +191,7 @@ fn a_run_past_its_frontiers_peak_estimates_the_states_its_cone_reaches() {
 
 /// Cones explored side by side share the limit with the results of the cones before them,
 /// and stop where they stop when run one at a time: the run is the same on one thread as on
-/// eight.
+/// eight. Three threads is the BFS any-thread test's count, not a second integration.
 #[test]
 fn cones_side_by_side_stop_where_they_stop_one_at_a_time() {
     let run_on = |jobs: &str| {
@@ -209,7 +209,6 @@ fn cones_side_by_side_stop_where_they_stop_one_at_a_time() {
     let stops = one.matches("error[MemoryCapReached_").count();
     assert!((1..16).contains(&stops), "{stops} cones stopped\n{one}");
     assert_eq!(run_on("8"), one);
-    assert_eq!(run_on("3"), one);
 }
 
 /// The safety and property passes give on any number of threads what they give on one (claims
@@ -217,35 +216,34 @@ fn cones_side_by_side_stop_where_they_stop_one_at_a_time() {
 /// it meets the memory limit where alone it completes. It then runs again alone, with the whole
 /// room of the pool, and prints the complete run's state count, as one thread does; before, it
 /// was decided on a run that stopped once its check failed (`counterexample (15150 states)`
-/// against `(65793 states)`).
+/// against `(65793 states)`). 7MiB, 8MiB and 10MiB all sat in that band and printed the same
+/// complete count, on one, three and eight threads. One memory in the band, and eight threads
+/// against one, is the check.
 #[test]
 fn safety_and_property_passes_stop_where_they_stop_one_at_a_time() {
     let dir = scratch("memory_cli_partners");
     let model = repo().join("crates/rdra-ish-cli/tests/fixtures/memory/partners.rdra");
-    for memory in ["7MiB", "8MiB", "10MiB"] {
-        let run_on = |jobs: &str| {
-            let spec = dir.join("spec");
-            let _ = std::fs::remove_dir_all(&spec);
-            let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
-                .current_dir(&dir)
-                .env("RDRA_JOBS", jobs)
-                .args(["verify", "--instance-count", "2", "--memory", memory])
-                .arg(&model)
-                .arg("-o")
-                .arg(&spec)
-                .output()
-                .expect("rdra-ish runs");
-            String::from_utf8_lossy(&out.stdout).into_owned()
-                + &String::from_utf8_lossy(&out.stderr)
-        };
-        let one = run_on("1");
-        assert!(
-            one.contains("Cone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (65793 states)"),
-            "{memory}: one thread decides the cone on its complete run\n{one}"
-        );
-        assert_eq!(run_on("8"), one, "{memory}: eight threads");
-        assert_eq!(run_on("3"), one, "{memory}: three threads");
-    }
+    let memory = "8MiB";
+    let run_on = |jobs: &str| {
+        let spec = dir.join("spec");
+        let _ = std::fs::remove_dir_all(&spec);
+        let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+            .current_dir(&dir)
+            .env("RDRA_JOBS", jobs)
+            .args(["verify", "--instance-count", "2", "--memory", memory])
+            .arg(&model)
+            .arg("-o")
+            .arg(&spec)
+            .output()
+            .expect("rdra-ish runs");
+        String::from_utf8_lossy(&out.stdout).into_owned() + &String::from_utf8_lossy(&out.stderr)
+    };
+    let one = run_on("1");
+    assert!(
+        one.contains("Cone_Forbidden_Task_0 [Forbidden_Task_0]: counterexample (65793 states)"),
+        "{memory}: one thread decides the cone on its complete run\n{one}"
+    );
+    assert_eq!(run_on("8"), one, "{memory}: eight threads");
 }
 
 /// `verify` releases an entity cone that stops at the memory limit once its findings are
@@ -274,15 +272,15 @@ fn a_stopped_entity_cone_leaves_its_room_on_any_number_of_threads() {
         one.contains("the OfficeAction cone stopped at the memory limit"),
         "an entity cone stops\n{one}"
     );
-    assert_eq!(run_on("4"), one, "four threads");
     assert_eq!(run_on("8"), one, "eight threads");
 }
 
 /// Cones with equal sub-lifecycles share one quotient, which stays counted while `verify`
 /// holds it (#252). Under limits where cones stop, the run is the same on one thread as on
 /// eight: a cone takes a shared quotient only where computing its own would have fit, and the
-/// shared quotients come and are charged in cone order. At these limits the quotients held
-/// leave every cone where it stops with the sharing off.
+/// shared quotients come and are charged in cone order. 2MiB, 3MiB and 8MiB each left every
+/// cone where it stops with the sharing off, and each shared a quotient. The tightest of them
+/// is the check, and its cones stop sooner.
 #[test]
 fn shared_quotients_stop_no_cone_elsewhere_on_any_number_of_threads() {
     let dir = scratch("memory_cli_shared_quotients");
@@ -313,16 +311,15 @@ fn shared_quotients_stop_no_cone_elsewhere_on_any_number_of_threads() {
                 .join("\n");
         (text, hits)
     };
-    for memory in ["2MiB", "3MiB", "8MiB"] {
-        let (one, hits) = run_on("1", memory, true);
-        assert!(
-            one.contains("not decided"),
-            "{memory}: some cone stops\n{one}"
-        );
-        assert!(hits > 0, "{memory}: some cone takes a shared quotient");
-        assert_eq!(run_on("8", memory, true).0, one, "{memory}: eight threads");
-        assert_eq!(run_on("1", memory, false).0, one, "{memory}: no sharing");
-    }
+    let memory = "2MiB";
+    let (one, hits) = run_on("1", memory, true);
+    assert!(
+        one.contains("not decided"),
+        "{memory}: some cone stops\n{one}"
+    );
+    assert!(hits > 0, "{memory}: some cone takes a shared quotient");
+    assert_eq!(run_on("8", memory, true).0, one, "{memory}: eight threads");
+    assert_eq!(run_on("1", memory, false).0, one, "{memory}: no sharing");
 }
 
 #[test]

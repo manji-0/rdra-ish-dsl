@@ -156,7 +156,10 @@ fn a_run_is_the_same_on_any_number_of_threads() {
         assert_eq!(one.complete, complete);
         // Enough states that the workers take most of them.
         assert!(one.states.len() >= 5_000, "{} states", one.states.len());
-        for threads in THREADS {
+        // One worker, the counts that probe (4 and 17), and many workers on the build's
+        // own path (7, which does not probe). Two and three workers are the pull-request
+        // symmetry run's extra counts (`THREADS`).
+        for threads in [1usize, 4, 7, 17] {
             let many = probing(probes_at(threads), || {
                 ts.clone()
                     .run_on(caps, Checks::All, Threads::Fixed(threads))

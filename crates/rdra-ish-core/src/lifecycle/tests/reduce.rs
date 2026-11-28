@@ -1282,7 +1282,9 @@ fn a_quantifier_over_t_folds_into_a_bit_keyed_by_the_linked_row() {
 
 /// A count over T in a guard is read raw: no node pulls it out as it pulls an existential,
 /// so the reduced cones decide what the cones decide, whichever way the count points
-/// (docs/design/counting-rules.md). The case fold's `.none` becomes each count in turn.
+/// (docs/design/counting-rules.md). The case fold's `.none` becomes each count in turn, at
+/// the bounds `check` and `verify` use. Two instances already lets `at_most(1)` and
+/// `at_least(2)` each hold and fail; a third instance repeats those.
 #[test]
 fn a_count_over_t_in_a_guard_reduces_exactly() {
     for count in [
@@ -1294,11 +1296,7 @@ fn a_count_over_t_in_a_guard_reduces_exactly() {
         assert_ne!(src, CASE_FOLD);
         let model = model_from(&src);
         let mut reductions = 0;
-        for bounds in [
-            Bounds::STATES,
-            Bounds::VERIFY,
-            Bounds::VERIFY.at(std::num::NonZeroU8::new(3).unwrap()),
-        ] {
+        for bounds in [Bounds::STATES, Bounds::VERIFY] {
             reductions += assert_reduction_exact(count, &model, bounds);
         }
         assert!(reductions > 0, "{count}: some cone reduces");
