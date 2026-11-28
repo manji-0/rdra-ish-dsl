@@ -8,7 +8,7 @@ gives the meaning of the model's rules and properties on that system, and of eve
 the tools print. The theme documents listed in the [index](./README.md) state their guarantees
 in this notation. The [claims inventory](./claims.md) refers to the definitions by number
 (D1, D2, …), and each definition has an anchor of its own (`semantics.md#d1` … `#d25`).
-The code it cites was read at commit `5ae62f2c` (origin/main, 2026-11-28, the merge of #542).
+The code it cites was read at commit `9857092a` (origin/main, 2026-11-28, the merge of #544).
 
 **What the definitions rest on.** D1 to D13 and D24 define `T_β(M)` from the model's text.
 Each clause names the surface construct it gives meaning to (an entity, a column and its
@@ -36,12 +36,12 @@ D14 to D23 define the meaning of rules, properties, and verdicts on a transition
 `T`, and D25 that of the deadlock finding. They apply to `T_β(M)` and to every system derived from it (a cone, a reduced cone, a
 quotient), and they cite code where a verdict is printed.
 
-This document was checked against commit `5ae62f2c` (origin/main, 2026-11-28; first
-`b83b9544`, then `670eec79`, `fec53d6a` and `5f59fae2`, see [Errata](#errata)). Code is cited by Rust path (`lifecycle::types::Bounds`) or as
+This document was checked against commit `9857092a` (origin/main, 2026-11-28; first
+`b83b9544`, then `670eec79`, `fec53d6a`, `5f59fae2` and `5ae62f2c`, see [Errata](#errata)). Code is cited by Rust path (`lifecycle::types::Bounds`) or as
 `file.rs::symbol`, with file paths relative to `crates/rdra-ish-core/src/lifecycle/` unless
 they start with `cli/` (`crates/rdra-ish-cli/`), as in the [claims inventory](./claims.md).
 **Implemented by** notes are pointers, not statements, and carry no read status. A code
-citation in a statement was read at `5ae62f2c` unless it carries `unread@pin`
+citation in a statement was read at `9857092a` unless it carries `unread@pin`
 ([claims inventory](./claims.md#how-to-read-a-row)). Revisions are listed in
 [Errata](#errata).
 
@@ -706,6 +706,10 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
 
 ## Errata
 
+- **2026-11-28, re-pin to `9857092a`** (the merge of #544). The crates change after
+  `5ae62f2c` only by #544 (`prove/encode.rs::Enc::one_of` and its call, P66, and tests). The
+  one citation of `encode.rs` here, `Enc::in_domain` in S5, is unchanged; every reading at
+  `5ae62f2c` carries over.
 - **2026-11-28, fourth audit; re-pin to `5ae62f2c`** (the merge of #542). The crates change
   after `5f59fae2` only by #539 (a test) and #541 (`reduce/lift.rs::lift`,
   `reduce/partition.rs::Succ::shortest_path`), which were read. D23's `counterexample` row

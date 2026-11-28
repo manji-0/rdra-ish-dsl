@@ -9,10 +9,10 @@ This document states what assurance exists that the native verifier and TLC, rea
 TLA+ module rdra-ish prints, give the same verdicts, and what kind of assurance each piece
 is. It owns rows T1 to T16 of the [claims inventory](./claims.md#d-agreement-with-tlc) and
 uses the notation of [semantics.md](./semantics.md) (D1 to D25) without redefining it. It
-describes the code at commit `5ae62f2c` (origin/main, 2026-11-28, the merge of #542).
+describes the code at commit `9857092a` (origin/main, 2026-11-28, the merge of #544).
 
 It was first written against `fb6928c7`, then pinned to `fec53d6a`; [Appendix: the pinned
-commit](#appendix-the-pinned-commit) says what changed in the cited code up to `5ae62f2c` and
+commit](#appendix-the-pinned-commit) says what changed in the cited code up to `9857092a` and
 what was read again. Paths follow the convention of the
 [claims inventory](./claims.md#how-to-read-a-row): `core` is
 `crates/rdra-ish-core/src/lifecycle`, `cli` is `crates/rdra-ish-cli`, `emit` is
@@ -506,7 +506,7 @@ rule 2 `continue`d past such a module and rule 8 compared only checks both runs 
 Rule 1 in the harness reads the printed verdicts, so it inherits the run-time comparison
 above.
 
-**Known disagreements [read].** The corpus has none: no case carries a `known` line (0 of 86).
+**Known disagreements [read].** The corpus has none: no case carries a `known` line (0 of 87).
 No run-time disagreement is open as an issue at the pinned commit, as far as the notes say.
 
 ## 3. Differential evidence
@@ -531,17 +531,17 @@ compares; what the test shows when it passes is [test].
 
 `cli/tests/engine_corpus.rs` over `cli/tests/engine_corpus/*.rdra` (T7).
 
-- **Inputs.** 86 cases with 210 `expect` lines; families `cap` 2, `cone` 12, `fair` 9,
-  `presence` 9, `safety` 25, `sym` 10, `width` 2, `z3` 17. One case (`cap_memory_limit`)
+- **Inputs.** 87 cases with 211 `expect` lines; families `cap` 2, `cone` 12, `fair` 9,
+  `presence` 9, `safety` 25, `sym` 10, `width` 2, `z3` 18. One case (`cap_memory_limit`)
   skips TLC. 38 cases carry a `bfs=` list.
 - **Bounds.** TLC runs at the case's flags: 2 instances and Int `0..5` by
-  default; 1 instance in the six cases with `--instance-count 1`; per-entity counts above
+  default; 1 instance in the seven cases with `--instance-count 1`; per-entity counts above
   2 in three cases, two entities raised in each of the first two and one in the third
   (`presence_per_entity_slots`: Loan and Room at 3 over `--instance-count 1`; `safety_count_per_entity`: Loan at 4, Shelf at 3;
   `sym_per_entity_bounds`: Room at 3, Booking at 2); one entity held at 1 instance
   (`--instances X=1`, the others at 2) in four cases (`sym_arm_reorders`,
-  `sym_deleted_row_owner`, `sym_lift_compose`, `sym_relink_loop`); `--int-range-max` in four
-  cases (5, 6 or 7 in three `z3_` cases, 255 in `width_nullable_int_top`). Since #476 the
+  `sym_deleted_row_owner`, `sym_lift_compose`, `sym_relink_loop`); `--int-range-max` in five
+  cases (5, 6 or 7 in four `z3_` cases, 255 in `width_nullable_int_top`). Since #476 the
   `bfs=` runs at 1, 3 and 4 instances run TLC beside BFS too (P14, narrowed).
 - **Compares.** Each engine against the hand-written header, rules 1 to 3 against TLC,
   rule 8 against the symmetric native run.
@@ -694,7 +694,7 @@ included, so they are lower bounds on that fraction.
 
 | Source | Native fault | Printer fault | TLC fault | Common-mode fault | Bounds and inputs |
 |---|---|---|---|---|---|
-| Corpus headers | yes, on the trap | yes, on the trap | yes, on the trap | yes, on the trap | 86 hand cases, TLC at each case's flags and at the `bfs=` counts |
+| Corpus headers | yes, on the trap | yes, on the trap | yes, on the trap | yes, on the trap | 87 hand cases, TLC at each case's flags and at the `bfs=` counts |
 | Corpus rules 1 to 3 | where TLC differs | where native differs | where native differs | no | as above |
 | Sample graph comparison | states, edges with params, initial states, safety verdicts | same | same | no | 40 roots, 1 and 2 instances, cones under 300,000 states |
 | Temporal cone comparison | liveness and ladder verdicts | same | same | no | 23 cases, 2 instances |
@@ -787,7 +787,7 @@ the sections it cites, and carries the tag of the statements it rests on.
    [z3.md](./z3.md#uniformity-in-the-bound),
    [native.md](./native.md#the-state-store-and-its-encoding)) and P32 (an entity cone that
    left a raised mark out, fixed in #477; [cones.md](./cones.md#safety-cones)) were faults of
-   this kind. The 210 hand-written `expect` lines see these on the 86 traps they name. For the builder,
+   this kind. The 211 hand-written `expect` lines see these on the 87 traps they name. For the builder,
    the reference interpreter of P26 (`core/tests/reference/`, #492) is a second check
    [test]: it reads a subset of the language from the `SemanticModel` without
    `TransitionSystem::build`, explores it by brute force on plain values (`i64` integers,
@@ -896,7 +896,7 @@ the sections it cites, and carries the tag of the statements it rests on.
   printing and in the comparison, so a consistent renaming is invisible (harmless) and a
   decoder that maps two TLC states to one native state would show as a count mismatch,
   which the comparison checks.
-- **External.** The inputs are 40 sample roots, 86 corpus cases, 23 temporal cases, the 36
+- **External.** The inputs are 40 sample roots, 87 corpus cases, 23 temporal cases, the 36
   `bfs_and_tlc_*` tests of `engine_equivalence.rs`, and 45 random models with TLC. The samples were written alongside the tools,
   so they exercise what the authors thought of. The random generator has a fixed shape
   (no counts, three to five entities).
@@ -948,8 +948,8 @@ document. The open problems this document confirmed, extended, or added, in the
 
 [read] The document was first written against `fb6928c7` (origin/main, 2026-11-28), later
 than the index's first pin `b83b9544`; between those two no path it cites changed in a part
-it relies on. It was then pinned to `fec53d6a`, then to `5f59fae2`, and it now describes `5ae62f2c` (the last
-two paragraphs of this appendix). `git diff --stat fb6928c7 fec53d6a` over the cited
+it relies on. It was then pinned to `fec53d6a`, then to `5f59fae2` and `5ae62f2c`, and it now describes
+`9857092a` (the last three paragraphs of this appendix). `git diff --stat fb6928c7 fec53d6a` over the cited
 paths shows changes in the printer (`emit/tla/mod.rs`, `module.rs`, `names.rs`), the TLC
 readers (`tlc_output.rs`), the comparison and the runs (`verify/compare.rs`, `native.rs`,
 `jobs.rs`, `tlc.rs`, `bfs.rs`, `end.rs`, `refuted.rs`, `escalate.rs`, `property_cone.rs`),
@@ -1005,6 +1005,13 @@ class move with no S path behind it is the `NoMove` of that step, with a test in
 `core/tests/reduce.rs`); `.config/nextest.toml` does not change. Both were read at
 `5ae62f2c`. [Batch JVMs](#batch-jvms), the T1 summary, and residual risk item 2 were
 rewritten for them; at `5f59fae2` item 2 should also have named `shortest_path`'s `panic!`.
+
+[read] From `5ae62f2c` to `9857092a` (the merge of #544) the cited paths change only in the
+corpus: #544 adds the case `z3_guarded_null_beside_present` (P66) and its `CASES` line. Its
+other changes (`prove/encode.rs::Enc::one_of`, tests in `cli/tests/prove_cli.rs` and
+`core/tests/reference/proofs.rs`, the symmetry snapshot) are outside what this document
+cites, and `.config/nextest.toml` does not change. The corpus counts were recounted at
+`9857092a`.
 
 ## Errata
 
@@ -1066,3 +1073,7 @@ Changes to statements of this document after it was first written, newest last.
   it as an unchecked assumption. Effects covers `Create`, Predicates a slot index read as a
   number, Fairness the `TRUE` of a scope that keeps no fair action, and the `WF_vars(Next)`
   sentence says it is of `print` only. The Status paragraph names `emit/tla/names.rs`.
+- **2026-11-28, P66; re-pin to `9857092a`** (the merge of #544). The Appendix says what #544
+  changed after `5ae62f2c`: one corpus case. The corpus counts follow it: 87 cases with 211
+  `expect` lines, 18 in `z3`, seven cases at `--instance-count 1`, and `--int-range-max` in
+  five (Known disagreements, The corpus, the summary table, residual risk item 1, External).
