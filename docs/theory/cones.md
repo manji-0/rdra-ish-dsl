@@ -990,9 +990,49 @@ cone is a class move or a rise of the printed reduced module, or a stutter. With
 parameters left unbound and the stub check off, it fails on both stub cases at the step `X`
 drops (`Issue`, and `Note`'s rise).
 
-This is evidence on
-these models and bounds, not a proof of Lemma 6; cone-soundness.md, "Proof obligation", states
-the lemma in points 2, 3, and 5.
+M: `proofs/lean/RdraIsh/Lemma6.lean` proves the lemma over the action-level model of Lemma 5's
+evidence, for an `X` built as this definition builds it (`Restrict.lean`). A role is a guard
+conjunct on its entity's existence (`candidate_slots`). Each parameter has a side, and `X` gives
+it a role: kept on `S` and on an input, `Earlier { step: 0 }` for a fold's key off `S`
+(`fold_param`) and for a stub parameter that needs a present row of a rise or a folded action
+(`bind_stub_params`), dropped on a dropped entity and for `New` on a stub. `X` keeps the
+conjuncts `restrict_to` keeps and reads one bit per fold at the key's slot; a rise writes the
+raw inputs, a flip one bit, and `stages` lists the raw inputs and then each bit that changes.
+From `Lemma6Hyp` it proves both `S_a` halves, with the cone's binding equal to the edge's
+outside the fold's free `T` parameters (`s_fwd`, `s_back`), and the rise half through the
+stages (`rise_fwd`). So the hypotheses `Lemma6By`, `Lemma6Staged` and `Lemma6` of the Lean
+proof of Theorem A8 are theorems (`lemma6_by`, `lemma6_staged`, `lemma6`). `Lemma6Hyp` holds
+per-action facts read from the code, among them (the Lean README lists every field):
+
+- `Local` and Lemma 5 (a)–(c), which `split_faults` certifies;
+- a `New` parameter's existence is written;
+- the conjuncts `X` keeps read `S_v ∪ inputs`, and every other conjunct of an `S_a` action is
+  folded;
+- step (a): `Fold::holds` computes the bit exactly (`exact`);
+- what the folded conjuncts, the other conjuncts and the effects name (`fold_of`);
+- a folded action's effect reads `S_v ∪ inputs`;
+- step (c): a rise's effect on the inputs reads `S_v ∪ inputs`.
+
+The stub and dropped cells of an unfolded `S_a` action, for every role that reads its row (an
+`Earlier` parameter binds any slot on both sides), and a `New` `T` parameter of a folded one,
+are derived from Lemma 5 (a)(c) (`unfolded_side`). The cone is the cone without the steps
+of an action that writes nothing and is not kept, which `X` does not hold either: such steps
+stutter, and the two reach the same states (`coneW_reach_iff`). `Lemma6Example.lean`
+discharges `Lemma6Hyp` on a model with a folded action whose free `T` parameter is on a stub,
+an unfolded action with a kept conjunct, and a rise with a parameter on a stub. With
+`bind_stub_params` off, the `C ⇒ X` half fails there (`stub_bug`).
+
+The model leaves out node folds, groups of folds sharing a bit, the renumbering of step (b)
+(a binding of `X` keeps the cone's positions, and nothing states that `X`'s conjuncts and
+effects ignore the slots of dropped parameters), the rule that a fold whose key the
+restriction drops stays unfolded (`X` reads the bit at the key's position whatever its side,
+so `Fold::key_kept` and `Fault::KeyDropped` play no part), and the nested case. It takes `X`'s initial
+states to be the projections of the cone's, and does not derive them from `restrict_to` and
+`fold_initial`. It reads the model, not `Extended::build`.
+
+The tests above are evidence on these models and bounds, and the Lean proof is a proof over the
+model, not over the code. cone-soundness.md, "Proof obligation", states the lemma in points 2,
+3, and 5.
 
 **Theorem A8 (the reduced cone is stuttering equivalent to the cone).** Assume (B1) to (B3) for
 `B` and Lemma 6. Let `(t, s) ~ (t, ρ)` when `ρ` is the representative of the block of `x(t, s)`.
@@ -1056,7 +1096,7 @@ the next section treats it.
 Lemma 5: `split_at`, `split_with`, certified by `reduce/lemma5.rs::split_faults` before use; Lemma 6: `Extended::build`, `reduce/fold.rs`; the checks a
 reduced cone keeps: `drop_unreadable_checks` (A14).
 
-*Evidence.* P-sketch (Lemma 6 is argued, not proved; Lemma 5 is checked at run time on each split
+*Evidence.* P-sketch (Lemma 6 is argued for the code and proved in Lean over an action model; Lemma 5 is checked at run time on each split
 and (B1)–(B3) on each partition the reduction uses, R). For Lemma 5:
 `reduce/lemma5.rs::a_planted_split_fails_the_clause_it_breaks` plants a split that breaks
 each clause and the side rule in turn, and the last through the switch `split_sides`, on which a
@@ -1071,7 +1111,7 @@ bisimulation that keeps every `T_a` label, with its binding), `a8_edges_iff` (co
 `a8_stuck_iff` (consequence 3), `Plain.lean::a8_plain_iff` (consequence 4, for
 `□(trig ⇒ ◇goal)` under `Fair_P` over infinite behaviours), `Stages.lean::a8_staged` (point
 5 with `recanon` over the stages), and `Nested.lean::a8_nested` (a nested `X`, by induction
-on depth). It does not derive Lemma 6 from the code. In the nested case its outer
+on depth). `Lemma6.lean::a8_actions` derives the hypotheses `Split`, Lemma 6 and the shape of `X` over the action model (Lemma 6's evidence), so A8 with `recanon` holds there from `Lemma6Hyp`, (B1)–(B3) and the rise table; it does not derive Lemma 6 from the code. In the nested case its outer
 representative is a reachable state of `X` and its outer class moves and rises are read on
 `X`, where the code takes an inner representative and reads them on the inner run.
 D: `core/tests/reduce.rs::reduced_cones_decide_what_the_cones_decide`,
@@ -1149,11 +1189,12 @@ the tests count one cone's cells and keep a cone below the budget, and none make
   is an `S` step of the extended sub-lifecycle whose action has no counterpart in the cone; an
   inner lift that returns the wrong number of groups is `Length`. A class move with no silent
   path behind it is `NoMove` too: `reduce/partition.rs::Succ::shortest_path` returns `None` (test
-  `::a_class_move_with_no_s_path_is_a_replay_error`, which forges a move back to the class just
-  left). The lifted start state is built from the run's initial state and an initial `S` state of
-  its class, and is not itself checked against the unreduced cone's initial states. What still
-  panics on the lift's way, `lift_stop`'s `expect`s among it, is listed with the reason each
-  holds in the [claims inventory](./claims.md#panics-left-on-a-lifts-way).
+  `core/tests/reduce.rs::a_class_move_with_no_s_path_is_a_replay_error`, which forges a move
+  back to the class just left). The lifted start state is built from the run's initial state
+  and an initial `S` state of its class, and is not itself checked against the unreduced cone's
+  initial states. What still panics on the lift's way, `lift_stop`'s `expect`s among it, is
+  listed with the reason each holds in the
+  [claims inventory](./claims.md#panics-left-on-a-lifts-way).
 - **A17** (the cache): the cached quotient is keyed by the extended system, the caps, and the group;
   `Twin::CacheHit` recomputes every hit in a `shadow` build. M.
 
@@ -1311,26 +1352,51 @@ binding `p` to `g(p)`.
   goal given a read of an order's key by hand differs on rows never created and changes none
   of them.
 
-**Theorem A18.** Under (G1)–(G6), for every reachable `s`, every `g ∈ G_s`, and every step `s →_{a,p} t`:
-`g(s) →_{a,g(p)} g(t)` is a step and `g ∈ G_t`. Hence `≈ = {(s, g(s)) : g ∈ G_s}` is an equivalence and a
-bisimulation, and a breadth-first search that stores one member of each `≈`-class reaches exactly the
-classes of `Reach(T)` (or of the cone it runs on), each at its least depth.
+Two facts of the builder enter the theorem besides (G1)–(G6), and the scan checks neither: every
+`New` parameter is created by its action (`build/actions.rs`), and every `Earlier` parameter carries
+the run-mark conjunct `mark = k` of `run_marks`, with `k ≥ 1` and the mark's base `none`.
+`restrict_to` keeps both. A run-mark guard is a plain read (`cone.rs::plain_reads`), so its mark is
+in the cone of every action the cone keeps, and a `New` parameter stays only with its existence, and
+so with its `Create`. The
+`Earlier { step: 0 }` parameters of the extended sub-lifecycle (`reduce/extended.rs`) do not carry
+such a conjunct; they bind entities that `H` leaves out (A22).
+
+Let `W` be the states in which every absent row holds the base value of each of its variables, its
+owners among them. `W` holds the initial states, since a created row starts absent at its base
+values. It is closed under steps, since a step writes only rows that are present or deleted after
+it. It is closed under every `G_s`, since `apply` keeps an absent row's values. So it holds every
+image `g(s)` of a reachable `s`, which is what the quotient stores.
+
+**Theorem A18.** Under (G1)–(G6) and the two facts of the builder, for every `s ∈ W`, every
+`g ∈ G_s`, and every step `s →_{a,p} t`: `g(s) →_{a,g(p)} g(t)` is a step and `g ∈ G_t`. Hence
+`≈ = {(s, g(s)) : g ∈ G_s}` is an equivalence and a bisimulation on `W`, and a breadth-first search
+that stores one member of each `≈`-class reaches exactly the classes of `Reach(T)` (or of the cone it
+runs on), each at its least depth.
+
+Outside `W` the commutation can fail. Take an absent row whose optional owner names a row, and a
+step that creates the row without writing that owner, which (G4) allows for an owner whose base is
+`null`. `apply` keeps the value on the absent row, so the step from `g(s)` leaves it, while `g(t)`
+relabels it (`proofs/lean/RdraIsh/SymActionsExample.lean::off_W_counterexample`).
 
 *Proof.* Absent slots of `t` are absent in `s` (a slot leaves `absent` only), so `g` fixes them and
 `g ∈ G_t`; `G_s = G_{g(s)}` since `g` preserves the absent set, so `≈` is reflexive, symmetric, and
 transitive. *Bindings.* `New` takes the lowest absent slot, which `g` fixes; `Existing`, `Parent`, and
 `Triggered` admit a present slot, `Earlier` a slot by its run mark, and `g` preserves presence and moves
-marks with their slots. *Predicates.* A column or mark of slot `i` in `s` is the same value at slot
-`g(i)` in `g(s)`. By (G1) a row id is compared only by `=`/`≠` with a row id of its class, which a
-bijection preserves, or an optional owner with `null`, which relabelling preserves; an owner read on a
-non-absent row is relabelled consistently with the row ids it is compared with (G5 for deleted rows),
-and by (G6) none is read on an absent row. `Forall`, `Exists`, and `Count` range over the present slots,
+marks with their slots. In `W` an absent row holds the base mark, which no run-mark conjunct accepts.
+So every bound row other than a `New` one is present or deleted in `s`, and a `New` row is created,
+so every bound row is present or deleted in `t`. *Predicates.* A column or mark of slot `i` in `s` is
+the same value at slot `g(i)` in `g(s)`. By (G1) a row id is compared only by `=`/`≠` with a row id of
+its class, which a bijection preserves, or an optional owner with `null`, which relabelling preserves.
+An owner read on a non-absent row is relabelled consistently with the row ids it is compared with
+(G5 for deleted rows). None is read on an absent row: (G6) forbids the pre-state owner of a `New` row,
+the other bound rows are not absent, and `Forall`, `Exists`, and `Count` range over the present slots,
 a set `g` permutes. So every guard of `a` has the same value at `(s, t, p)` and `(g(s), g(t), g(p))`.
 *Effects.* Each effect commutes with `g`: a literal write is unchanged; an owner written from a
-parameter's slot is relabelled with that slot (G2); a create or delete moves with its slot; a `Choose` or
-`Transition` on an owner ranges over all rows (G2), so its set of forks is closed under `g`; (G4) keeps
-an unrelabelled base owner off non-absent rows. So `g(t) ∈ Post_a(g(s), g(p))`. The converse is the
-same statement for `g⁻¹ ∈ G_s`. With (G3) the initial classes are the classes of initial states. A
+parameter's slot is relabelled with that slot (G2); a create or delete moves with its slot; a `Choose` on
+an owner ranges over all rows (G2), so its set of forks is closed under `g`. An owner the step does not
+write on a row it creates holds its base value in `s ∈ W`, which (G4) makes `null` (unchanged by
+relabelling) or rules out. So `g(t) ∈ Post_a(g(s), g(p))`. The converse is the same statement for
+`g⁻¹ ∈ G_{g(s)}` at `g(s) ∈ W`. With (G3) the initial classes are the classes of initial states. A
 bisimulation that relates states at equal depth (it maps each step to one step) preserves BFS depth. ∎
 
 Leaving more classes out gives a subgroup of `G_s`, and the statement holds for every subgroup, so
@@ -1397,8 +1463,8 @@ so does each fair instance; the instance's sequence is its *thread*. A thread's 
 the step `r_n → t_n`, so an orbit self-edge (`t_n ≠ r_n`, `σ_n(t_n) = r_n`) is a move. Assume:
 
 - every step from a state of a set `W` commutes with every `g ∈ G_s` and keeps `g` in `G_t`, where
-  `W` holds the initial states and is closed under steps and under every `G_s` (Theorem A18's
-  commutation, on the images of reachable states and not only on reachable states), and (G3);
+  `W` holds the initial states and is closed under steps and under every `G_s` (Theorem A18 gives
+  this for the states whose absent rows hold base values), and (G3);
 - `g` maps a label of a fair instance to a label of its image;
 - the trigger and the stop rule read the same on `s` and on `g(s)`, with the binding moved by `g`,
   for `g ∈ G_s`, and so does the goal on every state at or after a state where the trigger holds.
@@ -1507,7 +1573,15 @@ self-edge stands for a concrete cycle inside its class and marks it (Definition 
 `core/tests/reduce.rs::reduced_cones_up_to_h_decide_what_the_cones_decide`,
 `cli/tests/engine_corpus.rs::each_h_reason_a_case_shows_has_a_witness` (shadow builds only).
 
-*Evidence for A18.* P-full given (G1)–(G6). M: the Kani harness
+*Evidence for A18.* P-full given (G1)–(G6) and the two facts of the builder. M: the Lean proof
+`proofs/lean/RdraIsh/SymActions.lean::step_comm` derives the commutation on `W` over a slot-level
+model of the cone system. In that model (G1)–(G4) and (G6) are conditions on the syntax of guards
+and effects, as `breaks.rs::scan` states them, (G5) is the semantics of a delete, and the two
+facts of the builder are hypotheses. `symOn` gives the `SymOn` that A23 assumes, and
+`a18_holds_iff` the verdict of an invariant `G_s` preserves on the canonical quotient. The model
+reads an action's effects in list order, where `each_successor` applies the deletes and then the
+choices last. It does not model owner `Transition`s, which the scan leaves out with `OwnerChoice`.
+It covers neither the reduced cone nor the extended sub-lifecycle (A22). Kani: the harness
 `explore/symmetry/mod.rs::apply_of_a_composition_is_the_composition_of_applies` proves that `apply` is a group
 action on a 2-slot parent and a 2-slot child; it does not call `canonical`, and no Kani harness
 covers the canonical form. `Twin::Canonical`,
@@ -1685,7 +1759,8 @@ Evidence: none beyond the reading of `escalate` and the guide.
 - **Partition and Lemma 6.** A8, A15, and every reduced cone's verdict rest on (B1)–(B3), which
   every build certifies on the partition it uses, given that one non-splitting sweep of
   `stuttering_blocks` is (B2), argued by inspection; and on Lemma 6, argued over a reading of
-  the code and not proved. Its fold half is checked against the cone's step relation on the
+  the code and proved in Lean only over an action model of the cone and `X`, from
+  hypotheses read from the code. Its fold half is checked against the cone's step relation on the
   domain samples and the built models only; its parameter matrix is checked cell by cell on
   built models, with three reachable cells that no model fills; and its parameters on a stub
   also on two corpus cases. Among those verdicts are the printed `ok` of a property's `Plain` run (A5.1) and of a
