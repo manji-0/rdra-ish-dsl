@@ -1827,6 +1827,13 @@ fn a_triggered_param_on_a_stub_binds_in_the_extended_sub_lifecycle() {
             "{b:?}: the reduced cone finds the violation"
         );
         assert!(assert_reduction_exact("TRIGGERED_ON_A_STUB", &model, b.clone()) >= 1);
+        // `Issue` binds its order freely in the extended sub-lifecycle; every state's path
+        // lifts to a real path of the cone, the one where only Order#2 is paid included.
+        let cone = ts.restrict_to(&r.cone.vars, &r.cone.keep);
+        for at in 0..r.run.states.len() {
+            let (start, steps) = lifted_path(&r.run, u32::try_from(at).unwrap());
+            assert_real_path(&cone, &start, &steps);
+        }
     }
     let models = [("TRIGGERED_ON_A_STUB", model)];
     let held = fold_bits_hold_where_their_actions_run(&models, &bounds);
