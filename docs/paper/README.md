@@ -9,7 +9,7 @@ the core over a calculus, and adds the evaluation.
 |---|---|
 | [paper1.md](./paper1.md) | **Paper 1 draft** (method paper, TACAS): the sub-lifecycle quotient and instance symmetry for fair liveness, with certificates and fallback |
 | [paper2.md](./paper2.md) | **Paper 2 draft** (experience/methodology, ICSE SEIP or ISSTA): per-claim evidence classes, and what each class found |
-| [tech-report.md](./tech-report.md) | Outline of the technical report, chapter by chapter, with sources |
+| [tech-report.md](./tech-report.md), [tech-report-full.md](./tech-report-full.md) | The technical report: its own front matter and summary, and the full report assembled from the theory documents by `scripts/paper/build-tech-report.py` |
 | [contribution.md](./contribution.md) | T1–T2: thesis, venue, contribution statement, the motivating examples |
 | [calculus.md](./calculus.md) | T12–T13: the calculus LC, Theorems 1–6 restated on it, and the decision on the code link |
 | [related-work.md](./related-work.md), [refs.bib](./refs.bib) | T14: the delta table against prior work, and the bibliography |
@@ -17,6 +17,7 @@ the core over a calculus, and adds the evaluation.
 | [evidence/measurements.md](./evidence/measurements.md) | T5: earlier measurements, each marked citable or to re-measure |
 | [eval/](./eval/README.md) | T4, T6–T8, T10, T11: the evaluation, with data and the commands that regenerate it |
 | [artifact.md](./artifact.md) | T19: how to rebuild and regenerate every table |
+| [extensions.md](./extensions.md) | T9, T15, T17, T18 |
 
 Scripts: [scripts/paper/eval.py](../../scripts/paper/eval.py) (ablation, scaling, least instance
 count, determinism, tables), [scripts/paper/defect-summary.py](../../scripts/paper/defect-summary.py),
@@ -35,18 +36,18 @@ count, determinism, tables), [scripts/paper/defect-summary.py](../../scripts/pap
 | T6 ablation | Done: with the reduction, four domain models finish in 4–42 s; without it, they time out at 300 s after 5–8 GB. The reduction costs on oidc-auth. | [eval/ablation.md](./eval/ablation.md) |
 | T7 scaling | Done: symmetry saves 1.6–55% of states end to end and never shrinks a domain model's largest run; the S7 per-cone factors are not reproduced end to end. | [eval/scaling.md](./eval/scaling.md) |
 | T8 baselines | Done for TLC: a local run with TLC 1.7.4 on eight models gives the same verdict and state count on all 50 cones both engines decided, with per-cone TLC times; CI agreement (TLC 1.8.0) as well. TLC with symmetry sets is unsound on this encoding, so there is no such column. Alloy and Apalache encodings are not written (stated as a limit). | [eval/tlc-baseline.md](./eval/tlc-baseline.md) |
-| T9 external models | Open: all models are the authors'. The five domain models cite public sources for their rules. Obtaining outside models needs contributors. | Paper 1, threat T1 |
+| T9 external models | Open, and needs people outside the project: all models are the authors'. The five domain models cite public sources for their rules. The page names two routes (outside modellers on the same PRDs; translated published case studies). | [extensions.md](./extensions.md#t9-models-not-written-by-the-authors) |
 | T10 determinism | Done: 24 of 24 runs at 1, 2 and 4 threads print byte-identical output. | [eval/determinism.md](./eval/determinism.md) |
 | T11 TLC-side mutation run | Attempted, no kill rate: run 46128666288 lost all four shards (runner shutdowns); about 45 runner-hours are needed, with a workflow change. Two mutants tested, both missed. Needs the owner's decision on CI cost. | [eval/README.md](./eval/README.md#t11-the-tlc-side-mutation-run) |
 | T12 core calculus | Done: LC, with Theorems 1–6 stated on it | [calculus.md](./calculus.md) |
 | T13 code link | Decided: the claim is narrowed to LC plus a validated translation (certificates, replay, shared Lean syntax, differential tests); a deep embedding of the builder is future work | [calculus.md](./calculus.md#4-the-link-to-the-code-t13) |
 | T14 related-work delta | Done, with the cells that need checking before submission listed | [related-work.md](./related-work.md#risky-cells) |
-| T15 certificates for `ok` | Not started (optional). The paper states the gap (residual risk 2). A first step is `proved`: the z3 certificate cache (B15) already re-checks an inductive set. | Paper 1, threat T3 |
+| T15 certificates for `ok` | `proved`: done offline. Every SMT query behind the 63 `proved` rules of four domain models is re-checked by cvc5: all 12,201 `unsat` answers confirmed (`scripts/paper/smt-crosscheck.py`). BFS `ok`: a reachable-set certificate designed and sized (18–151 MB), not built. | [extensions.md](./extensions.md#t15-certificates-for-proved-and-for-ok) |
 | T16 z3 characterization | Done as an evaluated heuristic (no fragment or cutoff theorem): every rule BFS passes on the samples is proved (79 on the domain models); on the corpus 13 of 66 are unproved, 7 of them because more rows break the rule. Ivy/DistAI baselines not run. | [eval/prove.md](./eval/prove.md) |
-| T17 requirements-to-code chain | Not started (optional); codegen is experimental | — |
-| T18 agent feedback study | Not started (optional, kept separate) | — |
+| T17 requirements-to-code chain | See the case study. | [extensions.md](./extensions.md#t17-the-requirements-to-code-chain) |
+| T18 agent feedback study | Protocol written; not run (kept separate, as the issue asks). | [extensions.md](./extensions.md#t18-agent-feedback-study-protocol-only) |
 | T19 artifact | Done: pinned toolchain (Nix flake) and scripts for every table | [artifact.md](./artifact.md) |
-| T20 drafts | Paper 1 and Paper 2 drafted; technical report outlined | this directory |
+| T20 drafts | Paper 1 and Paper 2 drafted; the technical report written (front matter, summary of results) and assembled from the theory documents | this directory |
 
 ## Before submission
 

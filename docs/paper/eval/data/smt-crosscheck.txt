@@ -1,0 +1,7 @@
+# scripts/paper/smt-crosscheck.py on prove_transcript output, main at 9e4a123, z3 5.4.1, cvc5 1.4.2 (nixpkgs)
+# root                 queries  z3 unsat & cvc5 unsat  z3 unknown & cvc5 unknown  z3 sat & cvc5 unknown  z3 unsat & cvc5 sat  rules proved
+samples/patent-ops            1116  1111   4   1   0  13
+samples/clinic-ops            4083  3994  88   1   0  13
+samples/food-permit-ops       3842  3783  58   1   0  14
+samples/insurance-claim-ops   3372  3313  58   1   0  23
+samples/oidc-auth             (13.8 MB transcript; the replay did not finish within 590 s, not checked)
