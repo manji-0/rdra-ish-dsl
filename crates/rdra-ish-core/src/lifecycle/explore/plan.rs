@@ -28,6 +28,10 @@ pub(crate) struct Plan {
     /// and `0xFF` when none does, and the bytes past the state's end are `0x00`. Every step
     /// is held to it (`TransitionSystem::check_writes`).
     pub writes: Box<[u64]>,
+    /// The mask of the state's last 8 bytes, in the same form, when the state is at least
+    /// 8 bytes wide and its width is no multiple of 8: those bytes are read as one word, so a
+    /// step's partial last word is checked without a copy.
+    last: u64,
 }
 
 /// A conjunct that reads one var of one param's row: it holds on a slot exactly when the
@@ -99,8 +103,10 @@ impl Plan {
             changed |= (u64::from_ne_bytes(*x) ^ u64::from_ne_bytes(*y)) & keep;
         }
         if !a_tail.is_empty() {
-            let keep = self.writes[self.writes.len() - 1];
-            changed |= (word(a_tail) ^ word(b_tail)) & keep;
+            changed |= match (s.0.last_chunk::<8>(), next.0.last_chunk::<8>()) {
+                (Some(x), Some(y)) => (u64::from_ne_bytes(*x) ^ u64::from_ne_bytes(*y)) & self.last,
+                _ => (word(a_tail) ^ word(b_tail)) & self.writes[0],
+            };
         }
         changed != 0
     }
@@ -158,19 +164,24 @@ impl TransitionSystem {
         for tests in &mut rows {
             tests.retain(|t| t.values != [u64::MAX; 4]);
         }
+        let written = self.written_cells(action);
         Plan {
             rows: rows.into_iter().map(Vec::into_boxed_slice).collect(),
             #[cfg(feature = "perf")]
             pre_kinds: pre.iter().map(super::perf::Kind::of).collect(),
             pre: pre.into(),
             post: post.into(),
-            writes: self.written_cells(action),
+            writes: written.chunks(8).map(word).collect(),
+            last: written
+                .last_chunk::<8>()
+                .map_or(0, |w| u64::from_ne_bytes(*w)),
         }
     }
 
-    /// `Plan::writes` of `action`. A test that plants a writer `action_writes` misses
+    /// Per state byte, `0x00` when a var of `action_writes(action)` holds it and `0xFF`
+    /// when none does (`Plan::writes`). A test that plants a writer `action_writes` misses
     /// (`dropped("action_writes")`) leaves the first var of each action's set out.
-    fn written_cells(&self, action: &Action) -> Box<[u64]> {
+    fn written_cells(&self, action: &Action) -> Vec<u8> {
         let mut cells = vec![0xFFu8; self.width];
         let planted = usize::from(crate::lifecycle::explore::symmetry::dropped(
             "action_writes",
@@ -180,7 +191,7 @@ impl TransitionSystem {
             let n = self.slots_of(&self.var(*var).kind);
             cells[at..at + n].fill(0);
         }
-        cells.chunks(8).map(word).collect()
+        cells
     }
 
     /// Checks that a step of `act` from `s` to `next` changes only bytes of vars
