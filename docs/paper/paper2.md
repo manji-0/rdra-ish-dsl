@@ -179,7 +179,8 @@ were written, which inflates class 2 relative to early classes (Section 6).
   The TSV's subclass column separates write-up (12) from review or audit (7).
 - *First finder only.* A defect that a later check would also have caught is credited once.
 - *Mutation runs.* The recorded kill rates (66.5% and 62.9%) cover the native liveness ladder, not
-  the reductions. A TLC-side run is in progress (roadmap T11).
+  the reductions. A TLC-side run (roadmap T11) lost all four of its CI runners before reporting.
+  It tested two mutants, and both survived. About 45 runner-hours are needed to complete it.
 
 # 7 Related work
 

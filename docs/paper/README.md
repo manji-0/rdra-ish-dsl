@@ -32,12 +32,12 @@ count, determinism, tables), [scripts/paper/defect-summary.py](../../scripts/pap
 | T3 bug-finding record | Done: 74 defects, 30 wrong verdicts shown; Lean, reference interpreter, mutation, certificates and twins found none first | [evidence/defects.md](./evidence/defects.md) |
 | T4 minimal-instance data | Done: 106 of 132 known counterexamples at n=1, 24 at n=2, none needs n=3 uniformly | [eval/minimal.md](./eval/minimal.md) |
 | T5 reuse of measurements | Done: about 80 earlier figures, most to re-measure | [evidence/measurements.md](./evidence/measurements.md) |
-| T6 ablation | Done | [eval/ablation.md](./eval/ablation.md) |
-| T7 scaling | Done | [eval/scaling.md](./eval/scaling.md) |
+| T6 ablation | Done: with the reduction, four domain models finish in 4–42 s; without it, they time out at 300 s after 5–8 GB. The reduction costs on oidc-auth. | [eval/ablation.md](./eval/ablation.md) |
+| T7 scaling | Done: symmetry saves 1.6–55% of states end to end and never shrinks a domain model's largest run; the S7 per-cone factors are not reproduced end to end. | [eval/scaling.md](./eval/scaling.md) |
 | T8 baselines | Partly done: verdict agreement with TLC from CI. Per-cone TLC state counts are not in the CI logs; the native unreduced counts equal TLC's by `engine_equivalence`. TLC with symmetry sets is not sound for this encoding (ordered slots, lowest-slot creation), so no such column. Alloy and Apalache encodings are not written. | [eval/tlc-baseline.md](./eval/tlc-baseline.md) |
 | T9 external models | Open: all models are the authors'. The five domain models cite public sources for their rules. Obtaining outside models needs contributors. | Paper 1, threat T1 |
-| T10 determinism | Done | [eval/determinism.md](./eval/determinism.md) |
-| T11 TLC-side mutation run | Started: `Mutants` workflow with `config=tlc` on main | [eval/README.md](./eval/README.md#t11-the-tlc-side-mutation-run) |
+| T10 determinism | Done: 24 of 24 runs at 1, 2 and 4 threads print byte-identical output. | [eval/determinism.md](./eval/determinism.md) |
+| T11 TLC-side mutation run | Attempted, no kill rate: run 46128666288 lost all four shards (runner shutdowns); about 45 runner-hours are needed, with a workflow change. Two mutants tested, both missed. Needs the owner's decision on CI cost. | [eval/README.md](./eval/README.md#t11-the-tlc-side-mutation-run) |
 | T12 core calculus | Done: LC, with Theorems 1–6 stated on it | [calculus.md](./calculus.md) |
 | T13 code link | Decided: the claim is narrowed to LC plus a validated translation (certificates, replay, shared Lean syntax, differential tests); a deep embedding of the builder is future work | [calculus.md](./calculus.md#4-the-link-to-the-code-t13) |
 | T14 related-work delta | Done, with the cells that need checking before submission listed | [related-work.md](./related-work.md#risky-cells) |

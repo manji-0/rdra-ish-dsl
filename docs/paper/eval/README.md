@@ -32,4 +32,26 @@ The `Mutants` workflow (`.github/workflows/mutants.yml`) with `config=tlc` mutat
 No run of it had completed before this work: the one earlier run (46052978676 on branch
 `mutants-tlc`, 2026-11-27) was cancelled. This work started run
 [46128666288](https://github.com/manji-0/rdra-ish-dsl/actions/runs/46128666288) on main, with four
-shards. MUTANTS-RESULT
+shards, on 2026-11-28.
+
+**Result: no kill rate.** All four shards were lost before they uploaded results ("The runner has
+received a shutdown signal"), after 10, 26, about 58 and about 62 minutes. The summary job found 0
+artifacts. What the logs show:
+
+- Each shard lists about 143 mutants (shard 0: 143; shard 3: 142), so about 570 in all.
+- Each mutant's test (the engine corpus under TLC and z3, the TLC reader's unit tests and five
+  `verify_cli` tests) takes about 280 s. One shard would need about 11 hours, while the workflow
+  allows 330 minutes per shard step. The whole run is about 45 runner-hours.
+- Shard 0 tested two mutants before it was lost. Both were **missed**:
+  `tlc_output.rs:90:58` (`||` to `&&` in `TlcRun::parse`) and `tlc_output.rs:184:52` (`&&` to `||` in
+  `violation_kind`). Two survivors say nothing about a rate, but both are worth a test of their own.
+- The `tlc` configuration runs without an address-space cap, because the JVM cannot start under one.
+  A mutant that makes the checker allocate without bound would exhaust the runner, which matches
+  the shutdowns. The logs do not show the cause.
+
+**What completing T11 needs** (a workflow change and an owner's decision on the CI cost): about 24
+shards or a narrower `re` per run; a per-mutant memory cap that the JVM tolerates (a cgroup limit
+such as `systemd-run --scope -p MemoryMax=`, or `prlimit` on the `rdra-ish` process with
+`RDRA_TLC_HEAP` set); and a shorter test command per mutant (the corpus cases that reach the
+mutated file). Paper 2 reports the two earlier liveness-ladder runs (66.5% and 62.9%) and states
+that no TLC-side or reduction-side kill rate exists.
