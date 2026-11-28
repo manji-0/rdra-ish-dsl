@@ -7,6 +7,8 @@ agree, and the tests that hold them to it: the adversarial corpus, the sample co
 the reduction sweep, the mutation run, and the Kani harnesses. What each engine decides is
 in [formal-verification.md](./formal-verification.md).
 
+This page describes main at `91524792`.
+
 **Rule for contributors.** A change to an engine adds a corpus case or updates one. A new
 case names the trap the change could fall into. An updated case says in its header why the
 verdict moved.
@@ -87,8 +89,9 @@ case, whatever the case's header says.
 corpus also catches a drift all engines share. The cone ladder decides both the native and the
 TLC verdict, and the model builder feeds every engine, so one mistake in either moves every
 engine at once ([What the corpus catches](#what-the-corpus-catches)). An Int `@default`
-outside the range once started at 0 in every engine (#180), and an Enum or Bool `@default`
-outside its values at the first value (#187).
+outside the range, or an Enum or Bool `@default` outside its values, would be read the same
+wrong way by every engine; the build rejects both, and `z3_int_default_out_of_range` and
+`z3_enum_bool_default_outside_values` hold that.
 
 ### Int columns and `now`
 
@@ -202,7 +205,7 @@ reads no nextest filter, so they run it on every pull request that can change a 
 
 ## Cases by trap
 
-Each row gives the case, its trap, its `flags`, and every `expect` line of its header. A verdict
+The corpus has 89 cases with 215 `expect` lines. Each row gives the case, its trap, its `flags`, and every `expect` line of its header. A verdict
 stands for both the native checker and TLC unless it names TLC apart. `cex` is
 `counterexample` and `nd` is `not_decided`; `BFS a/b/c[/d]` is the `bfs=` list. `cap_memory_limit`
 skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
@@ -213,7 +216,7 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `cap_temporal_budget_zero` | `--temporal-budget 0` stops the whole-model run before it decides | `--temporal-budget 0` | `PaidShipsUnfair` nd; `PaidShips` ok |
 | `cone_always_frees_slots` | `always` on a cone that frees slots |  | `NeverD` ok |
 | `cone_copy_from_parent` | A fair use case copies its parent's column into the cone |  | `IssueEventually`, `IssueEventuallyPlain` ok |
-| `cone_entity_mark_left_out` | An entity cone that leaves a raised mark out, and its state-model findings (P32) |  | `Deadlock_Order_status_placed`, `Deadlock_Payment_status_unpaid`, `Witness_Order_status_shipped`, `Witness_Payment_status_paid`, `Witness_Notice_status_received`, `Witness_Notice_status_read` cex |
+| `cone_entity_mark_left_out` | An entity cone that leaves a raised mark out, and its state-model findings |  | `Deadlock_Order_status_placed`, `Deadlock_Payment_status_unpaid`, `Witness_Order_status_shipped`, `Witness_Payment_status_paid`, `Witness_Notice_status_received`, `Witness_Notice_status_read` cex |
 | `cone_handler_mark_left_out` | A handler whose raised mark the cone leaves out |  | `ShipsUnfair`, `ShipsFair`, `Deadlock_Order_status_paid` cex |
 | `cone_independent_loop` | An independent loop outside the cone keeps the whole model's `WF_vars(Next)` met |  | `PaidShipsUnfair` cex; `PaidShips` ok |
 | `cone_outside_monotone` | A var outside the cone that is monotone only because nothing deletes it |  | `PaidShipsStamp`, `PaidShipsNotes` ok |
@@ -223,8 +226,8 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `cone_reduced_loop_fair_enabled` | A reduced class loops, but the fair step is enabled there, so it is no place to stop | `--instance-count 1` | `JobStarts` ok |
 | `cone_reduced_loop_unreached` | A reduced class can loop, but not from the states the cone reaches it in | `--instance-count 1` | `SeenFinishes` ok; `Deadlock_Gate_phase_pa`, `Deadlock_Job_status_waiting` cex |
 | `cone_reduced_no_loop_capped` | A reduced sub-lifecycle with no loop, and an unreduced cone past the cap | `--max-states 300` | `JobStarts` ok |
-| `cone_rise_param_on_a_stub` | A rise with a `Parent` param on an entity the reduction stubs, which must bind there for the T step to have its rise (P67) |  | `Forbidden_Order_0` cex, z3 refuted; `Deadlock_Order_status_paid` cex, TLC none |
-| `cone_triggered_param_on_a_stub` | A folded handler with a `Triggered` param beside its key, on an entity the reduction stubs, which must bind there for the reduced cone to find the violation the cone has (P67) |  | `Forbidden_Order_0` cex, z3 refuted; `Deadlock_Order_status_paid` cex |
+| `cone_rise_param_on_a_stub` | A rise with a `Parent` param on an entity the reduction stubs, which must bind there for the T step to have its rise |  | `Forbidden_Order_0` cex, z3 refuted; `Deadlock_Order_status_paid` cex, TLC none |
+| `cone_triggered_param_on_a_stub` | A folded handler with a `Triggered` param beside its key, on an entity the reduction stubs, which must bind there for the reduced cone to find the violation the cone has |  | `Forbidden_Order_0` cex, z3 refuted; `Deadlock_Order_status_paid` cex |
 | `fair_counted_exposes_lost_run` | The latch hides a missing raise that counting exposes |  | `OrderComplete`, `Deadlock_Order_delivered_partial`, `Witness_Order_delivered_complete` cex; `ParcelComplete` ok; `EventOverflow_Order_EvDispatched_Deliver` ok, z3 proved, BFS ok/ok/ok |
 | `fair_creating_use_case` | A fair use case that creates (a `New` parameter) and runs out of slots |  | `PendingPays` cex; `BillPays` ok |
 | `fair_enabled_by_leaving_step` | A fair instance whose only step leaves the goal-false region is still enabled |  | `PaidShips` ok |
@@ -249,20 +252,20 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `safety_count_guard_order` | Two count guards that point opposite ways on one row |  | `Forbidden_Shelf_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Shelf_status_open` cex |
 | `safety_count_per_entity` | A count over an entity with its own slot count, in both directions | `--instances Loan=4 --instances Shelf=3` | `Quantifier_Member_0`, `Quantifier_Shelf_1` cex, z3 refuted |
 | `safety_counted_once_per_raise` | A counted handler runs once per raise, where the latch lets one raise drive two runs |  | `Forbidden_Box_0`, `EventOverflow_Box_EvShipped_Receive` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Crate_1` cex, z3 refuted; `BoxBothIn` ok |
-| `safety_created_set_beside_transitions` | A guarded `sets` and `transitions` write one created row's lifecycle column in one use case, which the engines read differently (P24); the build rejects it |  | `ConflictingEffects_Order_Place_status` cex, TLC none; `Forbidden_Order_0` none |
+| `safety_created_set_beside_transitions` | A guarded `sets` and `transitions` write one created row's lifecycle column in one use case, which the engines read differently; the build rejects it |  | `ConflictingEffects_Order_Place_status` cex, TLC none; `Forbidden_Order_0` none |
 | `safety_delete_cascade` | `.on_delete(cascade)` keeps its one-row delete, with no guard and no `DanglingKey_*` |  | `Forbidden_OrderLine_0` cex, z3 refuted |
 | `safety_delete_restrict` | A delete the key's children reject waits until no present child names the row |  | `DanglingKey_OrderLine_Order`, `DanglingKey_Payment_Order` ok, z3 proved, BFS ok/ok/ok |
 | `safety_delete_set_null` | `.on_delete(set_null)` keeps its one-row delete, with no guard and no `DanglingKey_*` |  | `Forbidden_OrderLine_0` cex, z3 refuted |
-| `safety_edge_free_cone` | A cone of checks alone keeps no edge list (#296 2.1) |  | `AfterAssert_Deliver_0`, `AfterAssert_Refund_1` ok; `Forbidden_Ticket_0` cex, z3 refuted; `Witness_Order_status_refunded` cex |
+| `safety_edge_free_cone` | A cone of checks alone keeps no edge list |  | `AfterAssert_Deliver_0`, `AfterAssert_Refund_1` ok; `Forbidden_Ticket_0` cex, z3 refuted; `Witness_Order_status_refunded` cex |
 | `safety_event_overflow` | A raise past `k` is `EventOverflow`, and the raiser never waits for it |  | `EventOverflow_Inbox_EvNoted_Read` cex, z3 refuted; `EventOverflow_Outbox_EvQueued_Send` ok, z3 proved, BFS ok/ok/ok |
 | `safety_exactly_along` | Counts along a path, and `exactly` in a guard and a rule |  | `Quantifier_Member_0` ok, z3 proved, BFS ok/ok/ok; `Quantifier_Member_1`, `Quantifier_Member_2` ok, z3 unproved, BFS ok/ok/cex; `Deadlock_Member_status_pending` cex |
 | `safety_max_card_range` | A card's high end above 1 (`0..2:1`) adds `MaxCard_Copy_Shelf` |  | `MaxCard_Copy_Shelf` ok, z3 unproved, BFS ok/ok/cex |
-| `safety_null_columns_cross` | A cross-entity comparison of two null columns (#355) |  | `MultiForbidden_Line_0` ok, z3 proved, BFS ok/ok/ok; `MultiForbidden_Line_1`, `MultiForbidden_Line_2` cex, z3 refuted |
-| `safety_null_columns_eq` | The reverse of #355: `==` on two null columns never holds, and `!=` always does |  | `Forbidden_Item_0`, `Required_Item_0`, `Forbidden_Item_2`, `Required_Item_1` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Item_1` cex, z3 refuted; `LimNeverMet` ok; `ABNeverMet` cex |
-| `safety_null_columns_ne` | Two `@null` columns that both hold null are not equal, so `!=` holds and `==` fails (#355) |  | `Forbidden_Item_0`, `Required_Item_0` cex, z3 refuted |
-| `safety_null_derived_in` | `in` / `not in` in a logical `@derived` are null while the column is; a list with `null` holds there; rules and guards read a null as in no list (#374) |  | `Forbidden_Item_0`, `Forbidden_Item_1`, `Forbidden_Item_3`, `Forbidden_Item_4`, `Required_Item_0`, `Forbidden_Box_6` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Item_2`, `Forbidden_Item_5`, `Forbidden_Box_7` cex, z3 refuted |
-| `safety_null_enum_bool_columns` | Two `@null` Enum or Bool columns that both hold null are not equal; a column with null and one without compare value by value (#359) |  | `Forbidden_Item_0`, `Forbidden_Item_1`, `Forbidden_Item_3`, `Forbidden_Item_4` cex, z3 refuted; `Forbidden_Item_2`, `Required_Item_0` ok, z3 proved, BFS ok/ok/ok |
-| `safety_null_enum_bool_literals` | A `@null` Enum or Bool column starts null and holds null as a value (#359) |  | `Forbidden_Item_0`, `Forbidden_Item_3`, `Required_Item_3` cex, z3 refuted; `Forbidden_Item_1`, `Forbidden_Item_2`, `Forbidden_Item_4`, `Forbidden_Item_5`, `Required_Item_0`, `Required_Item_1`, `Required_Item_2`, `Unique_Tag_color` ok, z3 proved, BFS ok/ok/ok |
+| `safety_null_columns_cross` | A cross-entity comparison of two null columns |  | `MultiForbidden_Line_0` ok, z3 proved, BFS ok/ok/ok; `MultiForbidden_Line_1`, `MultiForbidden_Line_2` cex, z3 refuted |
+| `safety_null_columns_eq` | `==` on two null columns never holds, and `!=` always does |  | `Forbidden_Item_0`, `Required_Item_0`, `Forbidden_Item_2`, `Required_Item_1` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Item_1` cex, z3 refuted; `LimNeverMet` ok; `ABNeverMet` cex |
+| `safety_null_columns_ne` | Two `@null` columns that both hold null are not equal, so `!=` holds and `==` fails |  | `Forbidden_Item_0`, `Required_Item_0` cex, z3 refuted |
+| `safety_null_derived_in` | `in` / `not in` in a logical `@derived` are null while the column is; a list with `null` holds there; rules and guards read a null as in no list |  | `Forbidden_Item_0`, `Forbidden_Item_1`, `Forbidden_Item_3`, `Forbidden_Item_4`, `Required_Item_0`, `Forbidden_Box_6` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Item_2`, `Forbidden_Item_5`, `Forbidden_Box_7` cex, z3 refuted |
+| `safety_null_enum_bool_columns` | Two `@null` Enum or Bool columns that both hold null are not equal; a column with null and one without compare value by value |  | `Forbidden_Item_0`, `Forbidden_Item_1`, `Forbidden_Item_3`, `Forbidden_Item_4` cex, z3 refuted; `Forbidden_Item_2`, `Required_Item_0` ok, z3 proved, BFS ok/ok/ok |
+| `safety_null_enum_bool_literals` | A `@null` Enum or Bool column starts null and holds null as a value |  | `Forbidden_Item_0`, `Forbidden_Item_3`, `Required_Item_3` cex, z3 refuted; `Forbidden_Item_1`, `Forbidden_Item_2`, `Forbidden_Item_4`, `Forbidden_Item_5`, `Required_Item_0`, `Required_Item_1`, `Required_Item_2`, `Unique_Tag_color` ok, z3 proved, BFS ok/ok/ok |
 | `safety_precedes_latch` | `precedes` reads a latch, not the current state |  | `ShippedAfterPaid` ok; `ShippedAfterAudit` cex |
 | `safety_stable_across_delete` | `stable` and `unchanged` across delete and create |  | `CapturedStays`, `AmountKept` ok; `PendingStays` cex |
 | `safety_stable_frees_slots` | `stable` and `unchanged` on a cone that frees slots |  | `StaysBeforeD`, `CKept` ok |
@@ -278,24 +281,24 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `sym_per_entity_bounds` | Per-entity bounds give two classes different slot counts | `--instances Room=3 --instances Booking=2` | `MultiForbidden_Booking_0` ok, z3 proved, BFS ok/ok/ok |
 | `sym_relink_loop` | A move into the class of its own source, a loop the stored graph keeps as a loop | `--instances Ticket=1` | `TicketCloses`, `TicketClosesFair` cex |
 | `sym_self_owned` | An entity whose key names its own rows |  | `Forbidden_Task_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Task_status_open` cex |
-| `width_nullable_enum_256` | A nullable Enum of 256 values is one value past a byte with its null (P54); the build rejects it |  | `DomainTooLarge_Row_s` cex, TLC none; `Forbidden_Row_0` none |
-| `width_nullable_int_top` | The top value of a nullable Int at `--int-range-max 255` is one value past a byte (P40); the build rejects it | `--int-range-max 255 --instance-count 1` | `DomainTooLarge_Item_n` cex, TLC none; `Forbidden_Item_0` none |
-| `z3_cti_true_rule` | A true rule that is not inductive alone; no mined lemma relates its rows, and z3 proves it with a lemma generalized from its CTI (#428) |  | `MultiForbidden_Light_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Door_state_closed`, `Deadlock_Light_state_on` cex |
+| `width_nullable_enum_256` | A nullable Enum of 256 values is one value past a byte with its null; the build rejects it |  | `DomainTooLarge_Row_s` cex, TLC none; `Forbidden_Row_0` none |
+| `width_nullable_int_top` | The top value of a nullable Int at `--int-range-max 255` is one value past a byte; the build rejects it | `--int-range-max 255 --instance-count 1` | `DomainTooLarge_Item_n` cex, TLC none; `Forbidden_Item_0` none |
+| `z3_cti_true_rule` | A true rule that is not inductive alone; no mined lemma relates its rows, and z3 proves it with a lemma generalized from its CTI |  | `MultiForbidden_Light_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Door_state_closed`, `Deadlock_Light_state_on` cex |
 | `z3_enum_bool_default_outside_values` | An Enum or Bool default outside its values; the model does not load |  | `Forbidden_Item_0` none |
-| `z3_guarded_null_beside_present` | A `.when`-guarded `null` write beside a `.when`-guarded `present` of one nullable Int; its guard holds of no row at 0..5, but at 6 it does, and z3 must encode the null step (P66) | `--int-range-max 5 --instance-count 1` | `Forbidden_Item_0` ok, z3 unproved |
-| `z3_guarded_present_past_the_top` | A `.when`-guarded `present` write to a nullable Int; no state has `n > 5` at 0..5, but at 0..6 the write reaches 6, and z3 must not read it as capped at the run's top (P43, #481) | `--int-range-max 5 --instance-count 1` | `Forbidden_Item_0` ok, z3 unproved |
+| `z3_guarded_null_beside_present` | A `.when`-guarded `null` write beside a `.when`-guarded `present` of one nullable Int; its guard holds of no row at 0..5, but at 6 it does, and z3 must encode the null step | `--int-range-max 5 --instance-count 1` | `Forbidden_Item_0` ok, z3 unproved |
+| `z3_guarded_present_past_the_top` | A `.when`-guarded `present` write to a nullable Int; no state has `n > 5` at 0..5, but at 0..6 the write reaches 6, and z3 must not read it as capped at the run's top | `--int-range-max 5 --instance-count 1` | `Forbidden_Item_0` ok, z3 unproved |
 | `z3_inductive` | An invariant z3 proves by induction, beside a real violation |  | `Forbidden_Order_0` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Order_1` cex, z3 refuted, BFS cex/cex/cex |
 | `z3_int_and_now_boundary` | Int columns and `now` at the top of the range |  | `Forbidden_Item_0`, `Forbidden_Coupon_3` ok, z3 proved, BFS ok/ok/ok; `Forbidden_Item_1` cex, z3 refuted, BFS cex/cex/cex; `Forbidden_Coupon_2` ok, z3 unproved, BFS ok/ok/ok |
 | `z3_int_default_out_of_range` | An Int default outside the range, which every engine would read the same wrong way |  | `IntLiteralOutOfBounds_Item_7` cex, TLC none; `Forbidden_Item_0` none |
-| `z3_int_listing_guard` | A guard that lists every Int value up to the top holds of no row at 0..5, but z3 has no top (#425) |  | `Forbidden_Item_0` ok, z3 unproved, BFS ok/ok/ok; `Deadlock_Item_status_open` cex, TLC none; `Witness_Item_status_flagged` cex |
+| `z3_int_listing_guard` | A guard that lists every Int value up to the top holds of no row at 0..5, but z3 has no top |  | `Forbidden_Item_0` ok, z3 unproved, BFS ok/ok/ok; `Deadlock_Item_status_open` cex, TLC none; `Witness_Item_status_flagged` cex |
 | `z3_int_listing_past_the_top` | The rule of `z3_int_listing_whole_range` with two more values of range | `--int-range-max 7` | `Forbidden_Item_0` cex, z3 refuted, BFS cex/cex/cex |
-| `z3_int_listing_whole_range` | A rule that lists every Int value up to the top holds at 0..5, but z3 has no top (#425) |  | `Forbidden_Item_0` ok, z3 unproved, BFS ok/ok/ok |
+| `z3_int_listing_whole_range` | A rule that lists every Int value up to the top holds at 0..5, but z3 has no top |  | `Forbidden_Item_0` ok, z3 unproved, BFS ok/ok/ok |
 | `z3_lemma` | A `.lemma()` rule supplies the fact a CTI needs, and the rule is proved |  | `MultiForbidden_Light_0`, `MultiForbidden_Light_1` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Door_state_closed`, `Deadlock_Light_state_on` cex |
-| `z3_lemma_run_mark` | A `.lemma()` that reads a run mark (`Door.in_run(Open)`) supplies the fact a CTI needs, and the rule is proved (#428) |  | `MultiForbidden_Light_0` ok, z3 proved, BFS ok/ok/ok; `MultiForbidden_Light_1` (the lemma, which no `verify` cone holds) none, z3 proved, BFS ok/none/none; `Deadlock_Light_state_on`, `Deadlock_Sign_state_dark` cex |
-| `z3_needs_count` | A true rule whose proof needs two count lemmas ("a closed shelf has at most two copies", "a crowded one at least three") past what BFS reaches at 2 instances, mined from the guards' bounds (#428) |  | `Forbidden_Shelf_0` ok, z3 proved, BFS ok/ok/ok |
-| `z3_needs_exists` | A true rule whose proof needs a ∀∃ lemma over a key ("every ready order has a sent shipment"), mined as a count of at least one from Prepare's guard (#428) |  | `Quantifier_Order_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Order_status_open` cex |
-| `z3_needs_exists_global` | A true rule whose proof needs a ∀∃ lemma over rows no key links ("while a gate is ajar, some guard is on duty"), mined from what every reached state shows (#428) |  | `Quantifier_Gate_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Gate_state_shut`, `Deadlock_Guard_state_on` cex |
-| `z3_needs_run_mark` | A true rule whose proof needs a lemma that reads a run mark and relates rows no key links, which no mined lemma states; `z3_lemma_run_mark` adds it as a `.lemma()` (#428) |  | `MultiForbidden_Light_0` ok, z3 unproved, BFS ok/ok/ok; `Deadlock_Light_state_on`, `Deadlock_Sign_state_dark` cex |
+| `z3_lemma_run_mark` | A `.lemma()` that reads a run mark (`Door.in_run(Open)`) supplies the fact a CTI needs, and the rule is proved |  | `MultiForbidden_Light_0` ok, z3 proved, BFS ok/ok/ok; `MultiForbidden_Light_1` (the lemma, which no `verify` cone holds) none, z3 proved, BFS ok/none/none; `Deadlock_Light_state_on`, `Deadlock_Sign_state_dark` cex |
+| `z3_needs_count` | A true rule whose proof needs two count lemmas ("a closed shelf has at most two copies", "a crowded one at least three") past what BFS reaches at 2 instances, mined from the guards' bounds |  | `Forbidden_Shelf_0` ok, z3 proved, BFS ok/ok/ok |
+| `z3_needs_exists` | A true rule whose proof needs a ∀∃ lemma over a key ("every ready order has a sent shipment"), mined as a count of at least one from Prepare's guard |  | `Quantifier_Order_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Order_status_open` cex |
+| `z3_needs_exists_global` | A true rule whose proof needs a ∀∃ lemma over rows no key links ("while a gate is ajar, some guard is on duty"), mined from what every reached state shows |  | `Quantifier_Gate_0` ok, z3 proved, BFS ok/ok/ok; `Deadlock_Gate_state_shut`, `Deadlock_Guard_state_on` cex |
+| `z3_needs_run_mark` | A true rule whose proof needs a lemma that reads a run mark and relates rows no key links, which no mined lemma states; `z3_lemma_run_mark` adds it as a `.lemma()` |  | `MultiForbidden_Light_0` ok, z3 unproved, BFS ok/ok/ok; `Deadlock_Light_state_on`, `Deadlock_Sign_state_dark` cex |
 | `z3_now_past_the_top` | The `now` rule of `z3_int_and_now_boundary` with one more value of range | `--int-range-max 6` | `Forbidden_Coupon_0` cex, z3 refuted, BFS cex/cex/cex |
 | `z3_two_ok_three_fails` | An invariant true at 2 instances and false at 3 |  | `Forbidden_Order_0` ok, z3 unproved, BFS ok/ok/cex; `Deadlock_Order_status_c`, `Witness_Order_status_d` cex |
 
@@ -306,8 +309,9 @@ every case's whole model.
 
 <!-- derived-from #agreement-rules -->
 
-When the corpus was written, six bugs were planted in the checker, one at a time, and the
-suite was run on each; each was reverted afterwards. The case counts are those of that time.
+Six bugs were planted in the checker, one at a time, and the suite was run on each; each was
+reverted afterwards. The table records those runs; the case counts are those of the corpus
+they ran on.
 
 | Planted bug | Where | Cases that failed | Caught by |
 |---|---|---|---|
@@ -316,7 +320,7 @@ suite was run on each; each was reverted afterwards. The case counts are those o
 | A `_WF` ok is final on any cone, not only one that holds every written var | `after_wf` in `property_cone.rs` | 7 cases | the header only: both engines share the ladder |
 | A counterexample on a cone that frees slots is taken as the whole model's | `counterexample` in `property_cone.rs` | `cone_always_frees_slots` | the header only |
 | On a capped graph, every state counts as expanded | `expanded` in `explore/liveness.rs` | `cap_memory_limit` and the capped-graph test | `LassoFault`, rule 7 |
-| `stable` and `unchanged` read only the edges back to an earlier state (#201) | `breaking_step` in `explore/properties.rs` | `safety_stable_across_delete` | the header, rule 1, `EngineDisagreement` |
+| `stable` and `unchanged` read only the edges back to an earlier state | `breaking_step` in `explore/properties.rs` | `safety_stable_across_delete` | the header, rule 1, `EngineDisagreement` |
 
 The third and fourth rows are why every case states its verdicts: the shared ladder moved
 verdicts in both engines at once, rules 1 to 3 saw nothing, and only the stated verdicts failed.
@@ -346,7 +350,7 @@ canonical form still gives the plain verdicts; only the exhaustive test and the 
 see them. Phase 3 (a reduced safety cone up to `G_T`) planted one more: dropping the input, key,
 and S-action rules of `Reduction::fixed_why` together is caught by the `reduced_orbit_run` twin
 on a `shadow` build and by `reduced_domain_cones_decide_what_the_cones_decide`. Phase 4's entity
-cones (#370) planted five bugs in `orbit/findings.rs`, caught by the `orbit_state_models` twin and
+cones planted five bugs in `orbit/findings.rs`, caught by the `orbit_state_models` twin and
 the case `sym_arm_reorders`.
 
 ## The sample comparison
@@ -367,7 +371,7 @@ A cone whose BFS, reduced as `verify` explores it, passes 300,000 states at 2 in
 compared at 1 instance only. `VERIFY_FALLBACK` lists these cones and the test fails when the
 list changes; [Known verification gaps](./formal-verification.md#known-verification-gaps) gives
 each one's size. `scripts/tlc-roots.txt` names the sample roots with such a cone, and CI's
-`formal-verify` job runs TLC on them at their header bounds instead (#305). oidc-auth's header
+`formal-verify` job runs TLC on them at their header bounds instead. oidc-auth's header
 runs 1 instance, so its 13 cones on that list meet TLC at 2 instances nowhere: its browser-flow
 cone passes 2,000,000 states there, a TLC run of over an hour.
 
@@ -381,7 +385,7 @@ release with `RDRA_REQUIRE_TLC=1`.
 
 ### The reduction on random models
 
-`scripts/reduction-diff.py` (#102) generates random models of three to five entities, with
+`scripts/reduction-diff.py` generates random models of three to five entities, with
 `relate` chains, `has` and `none` guards, `.along` rules, a split use case, `chooses`, a `Date`
 deadline and a timer, `after` assertions, and temporal properties, at 2 or 3 instances. Per seed
 it runs `verify --deny-undecided` as users run it and again with every cone unreduced
@@ -411,7 +415,7 @@ nix develop -c python3 -I scripts/reduction-diff.py --timeout 120 \
 ### Batch JVMs
 
 Most of `engine_equivalence`'s TLC runs take milliseconds inside a JVM that takes far longer
-to start. The flake's `tlc-batch` (`nix/tlc-batch/RdraTlcBatch.java`, #310) keeps a JVM up and
+to start. The flake's `tlc-batch` (`nix/tlc-batch/RdraTlcBatch.java`) keeps a JVM up and
 runs one TLC job after another in it; `crates/rdra-ish-cli/src/tlc_batch.rs` pools one JVM per
 test thread. `verify --with-tlc` does not use it.
 
@@ -514,9 +518,9 @@ builds and tests never compile it.
 | `segments_hold_every_row_and_no_more_than_a_doubling_vec` | `explore/segments.rs` | the segments that hold `n` rows hold room for all of them and never more than a doubling `Vec` | every `n` up to 2^40, segments of 4 |
 | `store_bytes_never_overflows` | `explore/store.rs` | `store_bytes` neither overflows nor panics | every input, every shape |
 | `store_bytes_only_grows` | `explore/store.rs` | each term of the memory model only grows with more or wider states and edges, saturating at `u64::MAX`; the harness does not call `store_bytes`, whose growth follows because it adds and multiplies these terms, all at least 0 | every count up to `u64::MAX`, segments of 4 and of 2^14 |
-| `store_bytes_is_at_most_the_model_before` | `explore/store.rs` | at segments of 2^14 rows and without the lists of segments, the model never counts more than the one before #296 (the lists, 24 bytes a slot past `2 * SEG` rows, can make `store_bytes` count more at a power of two) | every input, every shape |
+| `store_bytes_is_at_most_the_model_before` | `explore/store.rs` | at segments of 2^14 rows and without the lists of segments, the model never counts more than the model it replaced, which charged an 8-byte parent per state and a 12-byte edge in doubling `Vec`s (the lists, 24 bytes a slot past `2 * SEG` rows, can make `store_bytes` count more at a power of two) | every input, every shape |
 | `a_push_takes_the_bytes_bytes_with_said_and_reads_back` | `explore/arena.rs` | a pushed state reads back at the address it was pushed to, and `bytes_with` predicts the push | states of one byte, up to 9 pushes |
-| `pack_then_unpack_is_the_state` | `explore/packing.rs` | packing by 64-bit words and one cell at a time give the same bytes, and a state that fits reads back whole, so two states pack alike only when equal (#296 2.3) | 4 cells, every width from 0 to 8 bits, every value |
+| `pack_then_unpack_is_the_state` | `explore/packing.rs` | packing by 64-bit words and one cell at a time give the same bytes, and a state that fits reads back whole, so two states pack alike only when equal | 4 cells, every width from 0 to 8 bits, every value |
 | `a_cell_across_a_word_reads_back` | `explore/packing.rs` | the same, with a cell starting, ending, or straddling bit 64 | seven 8-bit cells and four of every width up to 8 bits |
 | `a_patch_is_the_pack` | `explore/packing.rs` | patching a packed state with the cells where another differs gives the other's bytes | the same 11 cells, every pair of states that fit |
 | `apply_of_a_composition_is_the_composition_of_applies` | `explore/symmetry/mod.rs` | `apply(g ∘ h) = apply(g) ∘ apply(h)`, keys relabelled on present rows only | a 2-slot parent and a 2-slot child with a key to it |
