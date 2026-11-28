@@ -10,8 +10,8 @@ use crate::memory::{MemoryPool, MemorySize};
 use super::cone::{load, SAMPLES};
 use super::*;
 use crate::lifecycle::{
-    Action, ActionOrigin, ComponentRun, EntId, Fold, FoldKey, QuotientCache, Reduction,
-    ReplayError, State, Step, Target, TargetExploration, VarSet,
+    Action, ActionOrigin, ComponentRun, Cone, EntId, Fold, FoldKey, QuotientCache, Reduction,
+    ReplayError, Seed, State, Step, Target, TargetExploration, VarSet,
 };
 
 const DOMAIN_SAMPLES: &[&str] = &[
@@ -1850,6 +1850,136 @@ fn a_rise_with_a_param_on_a_stub_is_a_rise_of_the_extended_sub_lifecycle() {
     for b in [Bounds::STATES, Bounds::VERIFY] {
         assert!(assert_reduction_exact("RISE_ON_A_STUB", &model, b) >= 1);
     }
+}
+
+/// The corpus cases whose fold and rise keep a param on a stub (claim A8).
+const STUB_CASES: &[(&str, &str)] = &[
+    (
+        "cone_triggered_param_on_a_stub",
+        include_str!(
+            "../../../../rdra-ish-cli/tests/engine_corpus/cone_triggered_param_on_a_stub.rdra"
+        ),
+    ),
+    (
+        "cone_rise_param_on_a_stub",
+        include_str!("../../../../rdra-ish-cli/tests/engine_corpus/cone_rise_param_on_a_stub.rdra"),
+    ),
+];
+
+/// Every target and property cone of `ts`, with its seed.
+fn cones_with_seeds(ts: &TransitionSystem) -> Vec<(Cone, Seed)> {
+    let targets = ts
+        .targets()
+        .into_iter()
+        .filter(|t| !matches!(t, Target::Reach(_)))
+        .map(|t| (ts.target_cone(t), ts.target_seed(t)));
+    let properties = (0..ts.properties().len()).map(|i| (ts.property_cone(i), ts.property_seed(i)));
+    targets.chain(properties).collect()
+}
+
+/// The check every build makes on the extended sub-lifecycle (claim A8) fires when
+/// `bind_stub_params` is dropped: on the two corpus cases whose fold (`Issue`'s `Triggered`
+/// Order) and rise (`Note`'s `Parent` Order) keep a param on a stub, the check names that
+/// param, and the cone is decided unreduced, as the cone decides. With the switch off the same
+/// cones reduce and the check passes.
+#[test]
+fn a_param_left_on_a_stub_makes_the_cone_decide_unreduced() {
+    use crate::lifecycle::explore::symmetry::witnesses::dropping;
+    let caps = Caps::new(usize::MAX, 200_000);
+    for (name, src) in STUB_CASES {
+        let model = model_from(src);
+        let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
+        let (mut faults, mut fallbacks) = (0, 0);
+        for (cone, seed) in cones_with_seeds(&ts) {
+            let (sys, local) = ts.cone_system(&cone, [seed]);
+            let kept = sys.stub_check(&local, true);
+            let reduced = sys.reduced(&local, caps);
+            let dropped = dropping("bind_stub_params", || {
+                (sys.stub_check(&local, true), sys.reduced(&local, caps))
+            });
+            if let Some((_, fault)) = &kept {
+                assert_eq!(fault, &None, "{name}: the check passes on main");
+            }
+            let Some((0, Some(fault))) = dropped.0 else {
+                continue;
+            };
+            faults += 1;
+            assert!(
+                fault.contains("Issue") || fault.contains("Note"),
+                "{name}: the fault names the fold's or the rise's param: {fault}"
+            );
+            if reduced.reduction().is_none() {
+                continue;
+            }
+            fallbacks += 1;
+            assert!(
+                dropped.1.reduction().is_none(),
+                "{name}: the cone is decided unreduced"
+            );
+            assert!(dropped.1 == sys, "{name}: the unreduced cone is the cone");
+            let run = |s: &TransitionSystem| -> BTreeSet<String> {
+                let run = s.clone().run(caps);
+                assert!(run.complete, "{name}");
+                run.diags.iter().map(|d| d.diag.name(&[])).collect()
+            };
+            assert_eq!(run(&dropped.1), run(&reduced), "{name}: verdicts");
+        }
+        assert!(faults > 0, "{name}: the check fires");
+        assert!(fallbacks > 0, "{name}: a reduced cone falls back");
+    }
+}
+
+/// The check never fires on the samples, the domain samples, and the engine corpus cases that
+/// build a model: for every
+/// target and property cone, with and without the inputs of S, the extended sub-lifecycle
+/// `reduced_with` builds binds no param on a stub that needs a present row. Only the top
+/// level is built here; a nested one, built in `Classes::of`, goes through the same check in
+/// every run, which a debug or `shadow` build turns into a panic.
+#[test]
+fn no_extended_sub_lifecycle_leaves_a_param_on_a_stub() {
+    let corpus = concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/../rdra-ish-cli/tests/engine_corpus"
+    );
+    let cases = std::fs::read_to_string(format!("{corpus}/CASES")).expect("CASES");
+    let mut models: Vec<(String, SemanticModel)> = SAMPLES
+        .iter()
+        .chain(DOMAIN_SAMPLES)
+        .map(|s| (s.to_string(), load(s)))
+        .collect();
+    for case in cases
+        .lines()
+        .filter(|l| !l.starts_with('#') && !l.is_empty())
+    {
+        let src = std::fs::read_to_string(format!("{corpus}/{case}.rdra")).expect(case);
+        // A case whose model has errors (a `check` case) builds no system.
+        let (ast, _) = rdra_ish_syntax::parse(&src);
+        let (model, diags) = crate::analysis::build_model(&ast);
+        if diags.iter().all(|d| d.is_warning) {
+            models.push((case.to_string(), model));
+        }
+    }
+    let (mut built, mut rebound) = (0, 0);
+    for (name, model) in &models {
+        for bounds in [Bounds::STATES, Bounds::VERIFY] {
+            let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+            for (cone, seed) in cones_with_seeds(&ts) {
+                let (sys, local) = ts.cone_system(&cone, [seed]);
+                for inputs in [true, false] {
+                    let Some((n, fault)) = sys.stub_check(&local, inputs) else {
+                        continue;
+                    };
+                    assert_eq!(fault, None, "{name}: a cone of {:?}", cone.vars);
+                    built += 1;
+                    rebound += n;
+                }
+            }
+        }
+    }
+    assert!(
+        built > 0 && rebound > 0,
+        "{built} built, {rebound} params rebound"
+    );
 }
 
 /// The reduction is a divergence-blind stuttering bisimulation, and `Deadlock` reads "no

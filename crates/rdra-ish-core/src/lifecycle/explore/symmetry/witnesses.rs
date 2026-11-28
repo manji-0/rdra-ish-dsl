@@ -26,7 +26,7 @@ thread_local! {
 }
 
 /// `f` with the rule `name` dropped on this thread.
-pub(super) fn dropping<T>(name: &str, f: impl FnOnce() -> T) -> T {
+pub(crate) fn dropping<T>(name: &str, f: impl FnOnce() -> T) -> T {
     DROPPED.with(|d| *d.borrow_mut() = Some(name.to_string()));
     let out = f();
     DROPPED.with(|d| *d.borrow_mut() = None);
