@@ -15,16 +15,25 @@ With `--with-tlc` both runs pass `--with-tlc`, so TLC runs every cone beside the
 checker, and every check on which the two engines differ (an `error[EngineDisagreement]`
 line, or an `error[LassoFault]` line for a native counterexample that fails its own check)
 is recorded. Such a seed is listed under `disagreed`, its model copied to
-`<work>/disagreed/seed<N>.rdra`, whatever the reduced and unreduced runs compare to.
+`<work>/disagreed/seed<N>.rdra`, whatever the reduced and unreduced runs compare to. So is a
+seed whose reduced run prints that an extended sub-lifecycle failed its stub check (claim
+A8), with or without TLC: the run decides that cone unreduced, so the verdicts agree.
 
   python3 -I scripts/reduction-diff.py run BIN --seeds 0:40 [--jobs N] [--fail-on-timeout] [--with-tlc] [--counted]
-      [--min-compared N] [--min-reduced N]
+      [--stubs] [--min-compared N] [--min-reduced N] [--min-stub-fold N] [--min-stub-rise N] [--min-up-to-h N]
   (--seeds @FILE reads the seeds and ranges from FILE, as scripts/reduction-diff-pr-seeds.txt)
-  (--timeout S and --work DIR go before the subcommand)
-  python3 -I scripts/reduction-diff.py gen SEED [--counted]
+  (--timeout S, --work DIR and --symmetry MODE go before the subcommand)
+  python3 -I scripts/reduction-diff.py gen SEED [--counted] [--stubs]
 
 `--counted` puts `.counted(k)`, k of 1 or 2, on every `triggers` line the seed draws (#220),
 so the reduced and unreduced runs also compare a model whose handler runs once per raise.
+`--stubs` draws each seed's model from `gen_stubs` instead: a cone whose reduction binds a
+param on a stub to any slot (claims A8, T9), which `gen`'s models draw rarely. The reduced
+run prints a `reduction-shape:` line per reduction it builds (`RDRA_ISH_REDUCTION_SHAPE_STATS`),
+and the summary counts the seeds whose reduction bound a fold's T param on a stub other than
+its key (`stub_fold`), bound a rise's (`stub_rise`), nested a reduction (`nested`), or ran S
+up to `H` (`up_to_h`, under `--symmetry always` with `RDRA_ISH_FORCE_S_UP_TO_H` in a `shadow`
+build). `--min-stub-fold`, `--min-stub-rise` and `--min-up-to-h` fail a run with fewer.
   python3 -I scripts/reduction-diff.py compare BIN MODEL.rdra [--instance-count N] [--with-tlc]
   python3 -I scripts/reduction-diff.py minimize BIN MODEL.rdra OUT.rdra [--instance-count N] [--with-tlc]
   python3 -I scripts/reduction-diff.py selfcheck
@@ -284,6 +293,139 @@ def gen(seed, counted=False):
     return "\n".join(out) + "\n", instances
 
 
+def gen_stubs(seed, counted=False):
+    """A model for a seed whose cone reduces with a param on a stub (claims A8, T9), and the
+    instance count to verify it at. Order O is the root of a T side that reads its child
+    Voucher V, which an S action Use moves; V's owner keeps O in the extended sub-lifecycle
+    as a stub, absent in every state of it. Use waits on an issued Ticket K, which T does not
+    read, and on rows that only these actions reach:
+
+    - Issue, which moves K, as the handler of an event an O step raises: it has a
+      `Triggered` param on O beside its key, a folded S action with a param on the stub;
+    - a T action Note, guarded by O's status or by `O.hold`, which Hold and Release set, that
+      creates Sheet Sh under O, whose existence Use reads: a rise with a `Parent` param on
+      the stub, or an `Existing` one when Note also clears `O.hold`.
+
+    A seed draws one or both (without the first, Issue is a plain S action),
+    the value counts, extra steps, a chain under K or V that the cone's S can reduce again
+    (nested reductions), and the check. With `counted`, Issue does not fold, so the seeds
+    keep only the rise.
+    Drawn from a generator of its own, so `gen`'s seeds keep their models."""
+    r = random.Random(seed * 15485863 + 3)
+    instances = r.choice([1, 2, 2, 2, 2])
+    shapes = [s for s, p in (("trigger", 0.75), ("rise", 0.6)) if r.random() < p] or [r.choice(["trigger", "rise"])]
+    out = []
+    ents = {}
+
+    def entity(name, vals, extra=""):
+        ents[name] = vals
+        out.append(
+            f'entity {name} "{name.lower()}" {{ id: Int @pk  status: Enum({", ".join(vals)}) '
+            f"@default({vals[0]}){extra} }}"
+        )
+
+    def vals(lo, hi):
+        return [f"s{j}" for j in range(r.randint(lo, hi))]
+
+    note_writes_o = "rise" in shapes and r.random() < 0.4
+    hold = note_writes_o or ("rise" in shapes and r.random() < 0.3)
+    entity("O", vals(3, 4), "  hold: Bool @default(false)" if hold else "")
+    entity("V", vals(2, 3))
+    out.append("relate(V, O, N:1)")
+    entity("K", vals(2, 3))
+    k_under = r.choice([None, None, None, "V", "V", "V", "O"])
+    if k_under:
+        out.append(f"relate(K, {k_under}, N:1)" + (".optional()" if r.random() < 0.5 else ""))
+    if "rise" in shapes:
+        entity("Sh", vals(1, 2))
+        out.append("relate(Sh, O, N:1)")
+    chains = []
+    for top in r.sample(["K", "V"], r.choice([0, 0, 0, 1])):
+        name = f"W{top}"
+        entity(name, vals(2, 3))
+        out.append(f"relate({name}, {top}, N:1)")
+        chains.append((name, top))
+    out.append("")
+    cidx = [0]
+
+    def cond(body):
+        name = f"C{cidx[0]}"
+        cidx[0] += 1
+        out.append(f'condition {name} "{name}"\nholds({name}, {body})')
+        return name
+
+    def step(uc, e, a, b, when=None):
+        out.append(f"transitions({uc}, {e}.status, {a} -> {b})" + (f".when({when})" if when else ""))
+
+    def walk(e, prefix, when=None):
+        """Use cases that move `e` along its values, one per step, the last guarded by `when`."""
+        v = ents[e]
+        for j in range(len(v) - 1):
+            uc = f"{prefix}{j}"
+            out.append(f'usecase {uc} "{uc}"\nupdates({uc}, {e})')
+            step(uc, e, v[j], v[j + 1], when if j == len(v) - 2 else None)
+        return [f"{prefix}{j}" for j in range(len(v) - 1)]
+
+    o, v, k = ents["O"], ents["V"], ents["K"]
+    out.append('usecase Place "place"\ncreates(Place, O)')
+    o_steps = walk("O", "Go")
+    # The last step of O waits on a used voucher: the T side reads S.
+    used = cond(f"V.status == {v[-1]}")
+    out.append(f"applies_to({used}, {o_steps[-1]})")
+    out.append('usecase Grant "grant"\ncreates(Grant, V)')
+    out.append('usecase Draft "draft"\ncreates(Draft, K)')
+    out.append('usecase Issue "issue"\nupdates(Issue, K)')
+    step("Issue", "K", k[0], k[-1])
+    use_guards = [cond(f"K.status == {k[-1]}")]
+    if "trigger" in shapes:
+        raiser = r.choice(o_steps[:-1] or o_steps)
+        count = f".counted({r.choice([1, 2])})" if counted else ""
+        out.append(f'event Ev "ev"\nraises({raiser}, Ev)\ntriggers(Ev, Issue){count}')
+    if "rise" in shapes:
+        out.append('usecase Note "note"\ncreates(Note, Sh)')
+        if note_writes_o:
+            out.append("updates(Note, O)\nsets(Note, O.hold == false)")
+        if hold:
+            out.append(f"applies_to({cond('O.hold == true')}, Note)")
+        else:
+            out.append(f"applies_to({cond(f'O.status == {r.choice(o[1:-1] or o)}')}, Note)")
+        use_guards.append(cond(f"Sh.status == {r.choice(ents['Sh'])}"))
+    if hold:
+        out.append('usecase Hold "hold"\nupdates(Hold, O)\nsets(Hold, O.hold == true)')
+        if r.random() < 0.7:
+            out.append('usecase Release "release"\nupdates(Release, O)\nsets(Release, O.hold == false)')
+    out.append('usecase Use "use"\nupdates(Use, V)')
+    step("Use", "V", v[0], v[-1])
+    for g in use_guards:
+        out.append(f"applies_to({g}, Use)")
+    for e in ("V", "K"):
+        if r.random() < 0.4 and len(ents[e]) > 2:
+            uc = f"Back{e}"
+            out.append(f'usecase {uc} "{uc}"\nupdates({uc}, {e})')
+            a, b = r.sample(ents[e], 2)
+            step(uc, e, a, b)
+    for name, top in chains:
+        walk(name, f"G{name}")
+        out.append(f'usecase New{name} "new{name}"\ncreates(New{name}, {name})')
+        # The chain's last value gates a step of its parent, which stays inside S.
+        gate = cond(f"{name}.status == {ents[name][-1]}")
+        uc = f"Up{top}"
+        out.append(f'usecase {uc} "{uc}"\nupdates({uc}, {top})')
+        a, b = r.sample(ents[top], 2)
+        step(uc, top, a, b, gate)
+    out.append("")
+    kind = r.choice(["forbidden", "forbidden", "invariant", "leads", "always"])
+    if kind == "forbidden":
+        out.append(f"forbidden(O, status == {o[-1]})")
+    elif kind == "invariant":
+        out.append(f"invariant(O).when(status == {o[-1]}).none(V.status == {v[0]})")
+    elif kind == "leads":
+        out.append(f"property P0\n  leads_to(O.status == {o[1]}, O.status == {o[-1]})")
+    else:
+        out.append(f"property P0\n  always(O.status != {o[-1]})")
+    return "\n".join(out) + "\n", instances
+
+
 def sh(cmd, timeout, env=None, cwd=None):
     """(exit code, stdout+stderr), or ("timeout", "") with the process group killed."""
     p = subprocess.Popen(
@@ -308,6 +450,10 @@ VERDICT = re.compile(r"^\S+ \[([^\]]*)\]: (ok|counterexample|tool_error|not deci
 # A check the native checker and TLC decide differently, or a native counterexample that
 # fails its own check: a tool bug, recorded apart from the comparison of the two runs.
 ENGINE_BUG = re.compile(r"^error\[(?:EngineDisagreement|LassoFault)\]: (.*)$", re.M)
+
+# An extended sub-lifecycle that failed the stub check of claim A8, a tool bug the run then
+# hides by deciding the cone unreduced.
+STUB_FAULT = re.compile(r"^warning: (the extended sub-lifecycle of a cone failed its stub check.*)$", re.M)
 
 
 # A state-model finding a cone left open at a bound (the state cap, the pattern cap, or the
@@ -347,8 +493,8 @@ STOP_NAMES = ("StateCapReached", "PatternCapReached", "MemoryCapReached", "TimeB
 
 def observe(rc, out):
     """What both runs must agree on, and the engine bugs each run reports."""
-    disagreements = ENGINE_BUG.findall(out)
-    out = ENGINE_BUG.sub("", out)
+    disagreements = ENGINE_BUG.findall(out) + STUB_FAULT.findall(out)
+    out = STUB_FAULT.sub("", ENGINE_BUG.sub("", out))
     names = sorted(set(re.findall(r"^(?:error|warning|info)\[([^\]]+)\]", out, re.M)))
     opened = sorted({open_name(m) for m in OPEN_FINDING.finditer(out)})
     # A cone's line gives the cone's outcome, and the cones group checks differently when
@@ -430,16 +576,23 @@ def has_reduced_cone(d):
     return d.is_dir() and any("S_class" in f.read_text() for f in d.glob("*.tla"))
 
 
+# `verify --symmetry` for both runs, when `--symmetry` is given.
+SYMMETRY = None
+
+
 def verify_both(bin_, model, instances, timeout, work, with_tlc=False):
     """Each side's observation, or "timeout"; and whether the users' run reduced a cone."""
     sides = {}
     for side in ("reduced", "plain"):
         shutil.rmtree(work / side, ignore_errors=True)
-    for side, extra in (("reduced", {}), ("plain", {"RDRA_ISH_NO_REDUCE": "1"})):
+    sides_env = (("reduced", {"RDRA_ISH_REDUCTION_SHAPE_STATS": "1"}), ("plain", {"RDRA_ISH_NO_REDUCE": "1"}))
+    for side, extra in sides_env:
         d = work / side
-        env = {k: v for k, v in os.environ.items() if k != "RDRA_ISH_NO_REDUCE"}
+        env = {k: v for k, v in os.environ.items() if k not in ("RDRA_ISH_NO_REDUCE", "RDRA_ISH_REDUCTION_SHAPE_STATS")}
         env.update(extra)
         cmd = [bin_, "verify", "--deny-undecided", "--instance-count", str(instances), "-o", str(d), str(model)]
+        if SYMMETRY:
+            cmd += ["--symmetry", SYMMETRY]
         if with_tlc:
             cmd.append("--with-tlc")
         rc, out = sh(cmd, timeout, env=env, cwd=work)
@@ -451,6 +604,34 @@ def verify_both(bin_, model, instances, timeout, work, with_tlc=False):
     if has_reduced_cone(work / "plain"):
         sys.exit("RDRA_ISH_NO_REDUCE did not keep the cones unreduced: is BIN this tree's build?")
     return sides, has_reduced_cone(work / "reduced")
+
+
+SHAPE = re.compile(r"^reduction-shape: (.*)$", re.M)
+
+
+def shapes(out):
+    """What the reduced run's `reduction-shape:` lines say, one per reduction built (nested
+    ones included): the deepest nesting, whether S ran up to `H`, and the params on a stub
+    bound to any slot, summed per kind. A line a panic's message cut short counts the
+    fields it kept."""
+    got = dict(depth=0, up_to_h=False)
+    for line in SHAPE.findall(out):
+        fields = dict(re.findall(r"(\w+)=(\d+|true|false)\b", line))
+        got["depth"] = max(got["depth"], int(fields.pop("depth", 0)))
+        got["up_to_h"] |= fields.pop("up_to_h", "") == "true"
+        for name, n in fields.items():
+            got[name] = got.get(name, 0) + int(n)
+    return got
+
+
+# The shapes the summary counts seeds by: a fold's T param on a stub other than its key, a
+# rise's param on a stub, a nested reduction, and S run up to `H`.
+SHAPES = dict(
+    stub_fold=lambda g: any(g.get(f"fold_{r}", 0) for r in ("existing", "parent", "triggered")),
+    stub_rise=lambda g: any(g.get(f"rise_{r}", 0) for r in ("existing", "parent", "triggered")),
+    nested=lambda g: g["depth"] >= 2,
+    up_to_h=lambda g: g["up_to_h"],
+)
 
 
 def loads(bin_, model, timeout, work):
@@ -468,7 +649,7 @@ def one(args, seed):
 def compare_seed(args, seed):
     work = Path(args.work) / f"seed{seed}"
     work.mkdir(parents=True, exist_ok=True)
-    text, instances = gen(seed, args.counted)
+    text, instances = (gen_stubs if args.stubs else gen)(seed, args.counted)
     model = work / "m.rdra"
     model.write_text(text)
     res = dict(seed=seed, instances=instances)
@@ -477,6 +658,8 @@ def compare_seed(args, seed):
         return dict(res, status="load_error", detail=out[:300])
     sides, reduced = verify_both(args.bin, model, instances, args.timeout, work, args.with_tlc)
     res["reduced"] = reduced
+    red_out = work / "reduced.out"
+    res["shape"] = shapes(red_out.read_text()) if red_out.exists() else shapes("")
     if disagreed(sides):
         bad = Path(args.work) / "disagreed"
         bad.mkdir(exist_ok=True)
@@ -532,6 +715,7 @@ def cmd_run(args):
         loaded=len(results) - len(by("load_error")),
         compared=len(compared),
         reduced=sum(1 for x in compared if x["reduced"]),
+        **{name: sum(1 for x in compared if has(x["shape"])) for name, has in SHAPES.items()},
         three_instances=sum(1 for x in compared if x["instances"] == 3),
         plain_undecided=[x["seed"] for x in by("plain_undecided")],
         reduced_undecided=[x["seed"] for x in by("reduced_undecided")],
@@ -547,7 +731,13 @@ def cmd_run(args):
         print(f"seed {seed} does not load: {detail.strip()}")
     short = [
         f"{what} {summary[what]} < {floor}"
-        for what, floor in (("compared", args.min_compared), ("reduced", args.min_reduced))
+        for what, floor in (
+            ("compared", args.min_compared),
+            ("reduced", args.min_reduced),
+            ("stub_fold", args.min_stub_fold),
+            ("stub_rise", args.min_stub_rise),
+            ("up_to_h", args.min_up_to_h),
+        )
         if summary[what] < floor
     ]
     if short:
@@ -585,7 +775,7 @@ def cmd_lemma6(args):
 
 
 def cmd_gen(args):
-    text, instances = gen(args.seed, args.counted)
+    text, instances = (gen_stubs if args.stubs else gen)(args.seed, args.counted)
     sys.stdout.write(f"// instance count {instances}\n{text}")
     return 0
 
@@ -658,6 +848,7 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--work", default="target/reduction-diff")
     ap.add_argument("--timeout", type=int, default=120, help="seconds per verify run")
+    ap.add_argument("--symmetry", choices=["never", "always"], help="pass `verify --symmetry` to both runs")
     sub = ap.add_subparsers(dest="cmd", required=True)
     p = sub.add_parser("run")
     p.add_argument("bin")
@@ -665,12 +856,17 @@ def main():
     p.add_argument("--fail-on-timeout", action="store_true", help="exit 1 when a seed times out")
     p.add_argument("--min-compared", type=int, default=1, help="exit 1 when fewer seeds were compared")
     p.add_argument("--min-reduced", type=int, default=0, help="exit 1 when fewer compared seeds reduced a cone")
+    p.add_argument("--min-stub-fold", type=int, default=0, help="exit 1 when fewer compared seeds bound a fold's T param on a stub")
+    p.add_argument("--min-stub-rise", type=int, default=0, help="exit 1 when fewer compared seeds bound a rise's param on a stub")
+    p.add_argument("--min-up-to-h", type=int, default=0, help="exit 1 when fewer compared seeds ran S up to H")
     p.add_argument("--jobs", type=int, default=max(1, (os.cpu_count() or 2) // 2))
     p.add_argument("--with-tlc", action="store_true", help="run TLC beside the native checker and record where they differ")
     p.add_argument("--counted", action="store_true", help="count the raises of every triggers line (#220)")
+    p.add_argument("--stubs", action="store_true", help="draw models whose reduction binds params on a stub (gen_stubs)")
     p = sub.add_parser("gen")
     p.add_argument("seed", type=int)
     p.add_argument("--counted", action="store_true", help="count the raises of every triggers line (#220)")
+    p.add_argument("--stubs", action="store_true", help="draw models whose reduction binds params on a stub (gen_stubs)")
     sub.add_parser("selfcheck")
     p = sub.add_parser("lemma6")
     p.add_argument("--seeds", required=True, help="as for run")
@@ -687,6 +883,8 @@ def main():
         p.add_argument("--with-tlc", action="store_true", help="run TLC beside the native checker")
     args = ap.parse_args()
     args.work = str(Path(args.work).resolve())
+    global SYMMETRY
+    SYMMETRY = args.symmetry
     cmds = dict(run=cmd_run, gen=cmd_gen, lemma6=cmd_lemma6, compare=cmd_compare, minimize=cmd_minimize, selfcheck=cmd_selfcheck)
     return cmds[args.cmd](args)
 

@@ -282,6 +282,22 @@ jobs:
           python3 -I scripts/reduction-diff.py lemma6 --profile ci-checked --min-reduced 300 \
             --seeds @scripts/reduction-diff-pr-seeds.txt
         timeout-minutes: 15
+      - name: Reduced and unreduced verify agree on random models with params on a stub
+        # `--stubs` draws models whose reduction binds a param on a stub to any slot
+        # (`bind_stub_params`, claims A8 and T9): a folded S action's `Triggered` param, and a
+        # rise's `Parent`, `Existing` or `Triggered` param. Of the seeds above, one PR seed
+        # draws the first and none the second. The seeds are the 95 of 0 to 99 that took at
+        # most 1.5 s in a local sweep; they take seconds, without TLC, on a pull request and on
+        # main. With the rebind dropped (`RDRA_ISH_DROP_RULE=bind_stub_params`, a `shadow`
+        # build), the stub check flags 89 of them as `disagreed`; with that check off as well,
+        # 82 diverge. The floors fail a run whose models stopped reaching the shapes: on
+        # 2026-11-28 the seeds compared 95, all reduced a cone, 68 bound a fold's param on a
+        # stub and 57 a rise's.
+        run: |
+          python3 -I scripts/reduction-diff.py --work target/reduction-diff-stubs run target/ci-checked/rdra-ish \
+            --stubs --fail-on-timeout --seeds 0:25,26:31,32:45,46:68,69:74,75:100 \
+            --min-compared 90 --min-reduced 85 --min-stub-fold 50 --min-stub-rise 40
+        timeout-minutes: 10
 
   engine-equivalence:
     # The longest check; a job of its own so it runs beside formal-verify.
@@ -417,6 +433,17 @@ jobs:
       - name: Every sample against its expect header, each fast path held to its twin
         run: scripts/verify-samples.sh target/ci-checked/rdra-ish
         timeout-minutes: 20
+      - name: Random models with params on a stub, S up to H, each fast path held to its twin
+        # The first 30 quick `--stubs` seeds of formal-verify, reduced against unreduced under
+        # `--symmetry always` and the test-only `RDRA_ISH_FORCE_S_UP_TO_H`, so every reduction
+        # runs its S up to `H` beside the `s_up_to_h` twin (claims A8, A22, T9). About 10 s;
+        # on 2026-11-28 all 30 ran S up to `H`, 18 bound a fold's param on a stub and 16 a rise's.
+        run: |
+          RDRA_ISH_FORCE_S_UP_TO_H=1 python3 -I scripts/reduction-diff.py --symmetry always \
+            --work target/reduction-diff-stubs-h run target/ci-checked/rdra-ish \
+            --stubs --fail-on-timeout --seeds 0:25,26:31 \
+            --min-compared 30 --min-reduced 28 --min-stub-fold 12 --min-stub-rise 10 --min-up-to-h 28
+        timeout-minutes: 10
       - name: The adversarial corpus, each fast path held to its twin
         run: RDRA_REQUIRE_TLC=1 RDRA_REQUIRE_Z3=1 cargo test --profile ci-checked -p rdra-ish-cli --features shadow --test engine_corpus
         timeout-minutes: 20
