@@ -54,6 +54,7 @@ not (
       | test(=a_stopped_entity_cone_leaves_its_room_on_any_number_of_threads)
       | test(=safety_and_property_passes_stop_where_they_stop_one_at_a_time)))
   | (binary_id(rdra-ish-core) & test(=lifecycle::tests::oracle::can_reach_and_deadlocks_agree_with_a_naive_oracle))
+  | (binary_id(rdra-ish-core) & test(=lifecycle::tests::reduce::a_triggered_param_on_a_stub_binds_in_the_extended_sub_lifecycle))
   | (binary_id(rdra-ish-cli::guards_cli) & test(=oidc_auth_readme_rules_table_is_what_the_report_finds))
   | (binary_id(rdra-ish-cli::check_cli) & test(=check_defaults_to_a_pattern_cap_that_follows_the_instance_count_and_no_state_cap))
   | (binary_id(rdra-ish-cli::verify_cli) & (
