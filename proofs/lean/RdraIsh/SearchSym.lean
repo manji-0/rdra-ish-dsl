@@ -621,4 +621,435 @@ theorem oAccepts_of_behaviour (he : LiveEqui h L trig goal stop after) (hG : Fin
 
 end Complete
 
+/-! ## (⇐) An accepted pair gives a fair violating behaviour of `M` -/
+
+theorem orbitSeq_walkSeq {γ : Type} (act : G → γ → γ) (p : Nat → G) (x : γ) :
+    ∀ j, orbitSeq act p x j = walkSeq act p x j
+  | 0 => rfl
+  | j + 1 => by
+    show act (p j) (orbitSeq act p x j) = act (p j) (walkSeq act p x j)
+    rw [orbitSeq_walkSeq act p x j]
+
+theorem orbitSeq_shift {γ : Type} (act : G → γ → γ) (p : Nat → G) (x : γ) (c j : Nat) :
+    orbitSeq act p x (c + j) = orbitSeq act (fun i => p (c + i)) (orbitSeq act p x c) j := by
+  rw [orbitSeq_walkSeq, orbitSeq_walkSeq, orbitSeq_walkSeq, walkSeq_shift]
+
+theorem orbitSeq_congr {γ : Type} (act : G → γ → γ) {p q : Nat → G} (x : γ) (j : Nat)
+    (hpq : ∀ i, i < j → p i = q i) : orbitSeq act p x j = orbitSeq act q x j := by
+  rw [orbitSeq_walkSeq, orbitSeq_walkSeq]; exact walkSeq_congr _ _ j hpq
+
+theorem walkSeq_map {γ : Type} (act : G → γ → γ) (g : σ → G) (t : Nat → σ) (x : γ) :
+    ∀ j, walkSeq act (fun i => g (t i)) x j = walkSeq (fun s y => act (g s) y) t x j
+  | 0 => rfl
+  | j + 1 => by
+    show act (g (t j)) (walkSeq act (fun i => g (t i)) x j) = act (g (t j)) _
+    rw [walkSeq_map act g t x j]
+
+/-- Every value is the image, after `n` permutations, of some value. -/
+theorem orbitSeq_surj {γ : Type} (act : G → γ → γ) (hinv : ∀ g y, act g (act (h.inv g) y) = y)
+    (P : Nat → G) : ∀ n y, ∃ x, orbitSeq act P x n = y
+  | 0, y => ⟨y, rfl⟩
+  | n + 1, y => by
+    obtain ⟨x, hx⟩ := orbitSeq_surj act hinv P n (act (h.inv (P n)) y)
+    exact ⟨x, by show act (P n) (orbitSeq act P x n) = y; rw [hx, hinv]⟩
+
+/-- A sequence of images that closes on `[n₀, m)` is read through the fold by its index. -/
+theorem orbitSeq_fold {γ : Type} (act : G → γ → γ) (P : Nat → G) (x : γ) {n₀ m : Nat}
+    (hc : orbitSeq act P x m = orbitSeq act P x n₀) :
+    ∀ n, orbitSeq act (fun k => P (foldIdx n₀ m k)) x n = orbitSeq act P x (foldIdx n₀ m n)
+  | 0 => rfl
+  | n + 1 => by
+    show act (P (foldIdx n₀ m n)) (orbitSeq act (fun k => P (foldIdx n₀ m k)) x n) =
+      orbitSeq act P x (if foldIdx n₀ m n + 1 = m then n₀ else foldIdx n₀ m n + 1)
+    rw [orbitSeq_fold act P x hc n]
+    split
+    · next he =>
+      have e' : orbitSeq act P x (foldIdx n₀ m n + 1) = orbitSeq act P x m := congrArg _ he
+      rw [← hc, ← e']; rfl
+    · rfl
+
+section Sound
+
+variable {L : SymLive h Φ β} {K : Canon h} {goal trig : β → σ → Prop} {stop : σ → Prop}
+  {after : β → σ → Prop}
+
+theorem snd_walkSeq_pn (t : Nat → σ) (u : σ × β) :
+    ∀ j, (walkSeq (pn L K) t u j).2 = orbitSeq L.actB (fun i => K.π (t i)) u.2 j
+  | 0 => rfl
+  | j + 1 => by
+    show L.actB (K.π (t j)) (walkSeq (pn L K) t u j).2 = _
+    rw [snd_walkSeq_pn t u j]; rfl
+
+theorem snd_walkSeq_tn' (t : Nat → σ) (a : (σ × β) × Φ) (j : Nat) :
+    (walkSeq (tn L K) t a j).2 = walkSeq (fun s y => L.actF (K.π s) y) t a.2 j := by
+  rw [snd_walkSeq_tn, orbitSeq_walkSeq, walkSeq_map]
+
+/-- An instance at a stored state, with the edge to `t` from it: not enabled, or taken. -/
+def Ev (L : SymLive h Φ β) (y : Φ) (r t : σ) : Prop :=
+  ¬ M.Enabled L.inst y r ∨ M.Takes L.inst y r t
+
+/-- A walk of `n` edges from `u` to `v` inside the component of `e`. -/
+def ZW (L : SymLive h Φ β) (K : Canon h) (goal : β → σ → Prop) (e u : σ × β) (t : Nat → σ)
+    (n : Nat) (v : σ × β) : Prop :=
+  (∀ j, j < n → ZOk L K goal e (walkSeq (pn L K) t u j) (t j)) ∧ walkSeq (pn L K) t u n = v
+
+theorem ZW.cat {e u v w : σ × β} {t₁ t₂ : Nat → σ} {n₁ n₂ : Nat}
+    (h₁ : ZW L K goal e u t₁ n₁ v) (h₂ : ZW L K goal e v t₂ n₂ w) :
+    ZW L K goal e u (catT t₁ n₁ t₂) (n₁ + n₂) w := by
+  refine ⟨fun j hj => ?_, by rw [walkSeq_catT_add, h₁.2, h₂.2]⟩
+  by_cases hjn : j < n₁
+  · rw [walkSeq_catT_le _ _ (by omega), catT_lt hjn]; exact h₁.1 j hjn
+  · obtain ⟨i, rfl⟩ : ∃ i, j = n₁ + i := ⟨j - n₁, by omega⟩
+    rw [walkSeq_catT_add, catT_add, h₁.2]; exact h₂.1 i (by omega)
+
+/-- A path of pairs between two pairs of the component is a walk inside it. -/
+theorem zw_of_star {e u v : σ × β} (hu : SameP L K goal e u) (hv : SameP L K goal e v)
+    (hp : Star (PEdge L K goal) u v) : ∃ t n, ZW L K goal e u t n v := by
+  obtain ⟨t, n, hw, hn⟩ := star_walkSeq (pn L K) (ok := POk L K goal) (fun _ _ h => h) u.1 hp
+  have hst := walkSeq_star (pn L K) (E := PEdge L K goal) (fun _ _ h => ⟨_, h, rfl⟩) hw
+  have hin : ∀ j, j ≤ n → SameP L K goal e (walkSeq (pn L K) t u j) := by
+    intro j hj
+    refine hu.extend (hst 0 j (Nat.zero_le _) hj) ?_
+    have := hst j n hj (Nat.le_refl _)
+    rw [hn] at this
+    exact this.trans (hv.2.trans hu.1)
+  exact ⟨t, n, fun j hj => ⟨hin j (by omega), hin (j + 1) (by omega), hw j hj⟩, hn⟩
+
+/-- A component with a cycle has a closed walk with at least one edge. -/
+theorem Candidate.cycle {e : σ × β} (hc : Candidate L K goal e) :
+    ∃ t n, 0 < n ∧ ZW L K goal e e t n e := by
+  have hee : SameP L K goal e e := ⟨.refl e, .refl e⟩
+  rcases hc with ⟨v, hne, hv⟩ | ⟨t₀, hok, hee'⟩
+  · obtain ⟨t₁, n₁, hz₁⟩ := zw_of_star hee hv hv.1
+    obtain ⟨t₂, n₂, hz₂⟩ := zw_of_star hv hee hv.2
+    refine ⟨_, _, ?_, hz₁.cat hz₂⟩
+    have : n₁ ≠ 0 := fun h0 => by subst h0; exact hne hz₁.2.symm
+    omega
+  · refine ⟨fun _ => t₀, 1, by omega, fun j hj => ?_, hee'.symm⟩
+    have : j = 0 := by omega
+    subst this
+    exact ⟨hee, by show SameP L K goal e (pn L K t₀ e); rw [← hee']; exact hee, hok⟩
+
+/-- **The thread decomposition.** In a fair component, from any pair `u` of it and any
+instance `y`, a walk inside the component back to `e` meets a stored state where the
+thread of `y` is not enabled or an edge that takes it. The piece of `(u, y)` holds a covered
+node; a path of thread edges reaches it (`Conn.star`); the walk follows that path, then the
+covering edge or a closed walk, then returns to `e`. -/
+theorem FairPComp.cover_one (hG : FiniteGroups h) {e u : σ × β}
+    (hfc : FairPComp L K goal e) (hu : SameP L K goal e u) (y : Φ) :
+    ∃ t n, ZW L K goal e u t n e ∧ ∃ j, j < n ∧
+      Ev L (walkSeq (fun s y => L.actF (K.π s) y) t y j) (walkSeq (pn L K) t u j).1 (t j) := by
+  have hee : SameP L K goal e e := ⟨.refl e, .refl e⟩
+  obtain ⟨z, hc, hcov⟩ := hfc.2.2.2 (u, y) hu
+  have hst := hc.star hG
+  have hz : SameP L K goal e z.1 :=
+    hst.keep (P := fun a => SameP L K goal e a.1) (fun _ _ ⟨_, hok, hb⟩ => hb ▸ hok.2.1) hu
+  obtain ⟨t₁, n₁, hw₁, hn₁⟩ := star_walkSeq (tn L K) (ok := fun c t => ZOk L K goal e c.1 t)
+    (fun _ _ ⟨t, hok, hb⟩ => ⟨t, hok, hb⟩) u.1 hst
+  have hz₁ : ZW L K goal e u t₁ n₁ z.1 :=
+    ⟨fun j hj => by have := hw₁ j hj; rwa [fst_walkSeq_tn] at this,
+     by rw [← hn₁, fst_walkSeq_tn]⟩
+  have hy₁ : walkSeq (fun s y => L.actF (K.π s) y) t₁ y n₁ = z.2 := by
+    rw [← hn₁, snd_walkSeq_tn']
+  rcases hcov with hdis | ⟨t₀, hok₀, htk⟩
+  · obtain ⟨t₂, n₂, hz₂⟩ := zw_of_star hz hee hz.2
+    obtain ⟨t₃, n₃, hn₃, hz₃⟩ := hfc.2.2.1.cycle
+    refine ⟨_, _, hz₁.cat (hz₂.cat hz₃), n₁, by omega, .inl ?_⟩
+    rw [walkSeq_catT_le _ _ (Nat.le_refl _), walkSeq_catT_le _ _ (Nat.le_refl _), hy₁, hz₁.2]
+    exact hdis
+  · obtain ⟨t₂, n₂, hz₂⟩ := zw_of_star hok₀.2.1 hee hok₀.2.1.2
+    have hz₀ : ZW L K goal e z.1 (fun _ => t₀) 1 (pn L K t₀ z.1) := by
+      refine ⟨fun j hj => ?_, rfl⟩
+      have : j = 0 := by omega
+      subst this; exact hok₀
+    refine ⟨_, _, hz₁.cat (hz₀.cat hz₂), n₁, by omega, .inr ?_⟩
+    rw [walkSeq_catT_le _ _ (Nat.le_refl _), walkSeq_catT_le _ _ (Nat.le_refl _), hy₁, hz₁.2,
+      catT_self, catT_lt (by omega)]
+    exact htk
+
+/-- **The covering loop.** A fair component has a closed walk at `e`, with at least one edge,
+on which the thread of every instance enabled at `e`'s stored state meets a state where it
+is not enabled or an edge that takes it: one walk of `cover_one` per instance of a list,
+each from where the previous ones left that instance's thread. -/
+theorem FairPComp.cover (hG : FiniteGroups h) {e : σ × β} (hfc : FairPComp L K goal e)
+    (LΦ : List Φ) (hLΦ : ∀ x, M.Enabled L.inst x e.1 → x ∈ LΦ) :
+    ∃ t n, 0 < n ∧ ZW L K goal e e t n e ∧ ∀ x, M.Enabled L.inst x e.1 → ∃ j, j < n ∧
+      Ev L (walkSeq (fun s y => L.actF (K.π s) y) t x j) (walkSeq (pn L K) t e j).1 (t j) := by
+  have hee : SameP L K goal e e := ⟨.refl e, .refl e⟩
+  have main : ∀ T : List Φ, ∃ t n, 0 < n ∧ ZW L K goal e e t n e ∧ ∀ x, x ∈ T → ∃ j, j < n ∧
+      Ev L (walkSeq (fun s y => L.actF (K.π s) y) t x j) (walkSeq (pn L K) t e j).1 (t j) := by
+    intro T
+    induction T with
+    | nil =>
+      obtain ⟨t, n, hn, hz⟩ := hfc.2.2.1.cycle
+      exact ⟨t, n, hn, hz, fun _ h => nomatch h⟩
+    | cons x T ih =>
+      obtain ⟨t, n, hn, hz, hT⟩ := ih
+      obtain ⟨t', n', hz', j', hj', hev⟩ :=
+        hfc.cover_one hG hee (walkSeq (fun s y => L.actF (K.π s) y) t x n)
+      refine ⟨_, _, by omega, hz.cat hz', fun x' hx' => ?_⟩
+      rcases List.mem_cons.mp hx' with rfl | hx'
+      · refine ⟨n + j', by omega, ?_⟩
+        rw [walkSeq_catT_add, walkSeq_catT_add, catT_add, hz.2]; exact hev
+      · obtain ⟨j, hj, hev'⟩ := hT x' hx'
+        refine ⟨j, by omega, ?_⟩
+        rw [walkSeq_catT_le _ _ (by omega), walkSeq_catT_le _ _ (by omega), catT_lt hj]
+        exact hev'
+  obtain ⟨t, n, hn, hz, hT⟩ := main LΦ
+  exact ⟨t, n, hn, hz, fun x hx => hT x (hLΦ x hx)⟩
+
+/-- A finite piece of an annotated run: stutters or steps from `R j` to `T j`, stored as
+`R (j+1) = P j (T j)` with `P j ∈ G_{T j}`. -/
+def ASeg (h : Sym M G) (R T : Nat → σ) (P : Nat → G) (n : Nat) : Prop :=
+  ∀ j, j < n → (T j = R j ∨ M.Next (R j) (T j)) ∧ h.mem (T j) (P j) ∧
+    R (j + 1) = h.act (P j) (T j)
+
+
+theorem ASeg.cat {R₁ T₁ R₂ T₂ : Nat → σ} {P₁ P₂ : Nat → G} {n₁ n₂ : Nat}
+    (h₁ : ASeg h R₁ T₁ P₁ n₁) (h₂ : ASeg h R₂ T₂ P₂ n₂) (hj : R₁ n₁ = R₂ 0) :
+    ASeg h (catW R₁ n₁ R₂) (catT T₁ n₁ T₂) (catT P₁ n₁ P₂) (n₁ + n₂) := by
+  intro j hj'
+  by_cases hjn : j < n₁
+  · rw [catW_le (by omega), catW_le (by omega), catT_lt hjn, catT_lt hjn]; exact h₁ j hjn
+  · obtain ⟨i, rfl⟩ : ∃ i, j = n₁ + i := ⟨j - n₁, by omega⟩
+    rw [catW_add hj, show n₁ + i + 1 = n₁ + (i + 1) by omega, catW_add hj, catT_add, catT_add]
+    exact h₂ i (by omega)
+
+theorem aseg_of_pairs {u : σ × β} {t : Nat → σ} {n : Nat}
+    (hw : ∀ j, j < n → REdge M (walkSeq (pn L K) t u j).1 (t j)) :
+    ASeg h (fun j => (walkSeq (pn L K) t u j).1) t (fun j => K.π (t j)) n :=
+  fun j hj => ⟨.inr (hw j hj).2, K.hπ _, K.hcan _⟩
+
+/-- A reachable stored state is the end of an annotated piece from the canonical form of an
+initial state. -/
+theorem qreach_aseg {r : σ} (hr : (quotient M K.can).Reach r) :
+    ∃ c₀ R T n, M.init c₀ ∧ R 0 = K.can c₀ ∧ R n = r ∧ ASeg h R T (fun j => K.π (T j)) n := by
+  induction hr with
+  | @init r hi =>
+    obtain ⟨c₀, hc₀, rfl⟩ := hi
+    exact ⟨c₀, fun _ => K.can c₀, fun _ => K.can c₀, 0, hc₀, rfl, rfl,
+      fun j hj => absurd hj (Nat.not_lt_zero _)⟩
+  | @step r a r' _ hst ih =>
+    obtain ⟨c₀, R, T, n, hc₀, h0, hn, hs⟩ := ih
+    obtain ⟨t, hrt, rfl⟩ := hst
+    refine ⟨c₀, snocW R n (K.can t), catT T n (fun _ => t), n + 1, hc₀,
+      by rw [snocW_le (Nat.zero_le _), h0], snocW_succ, fun j hj => ?_⟩
+    dsimp only
+    by_cases hjn : j < n
+    · rw [snocW_le (by omega), snocW_le (by omega), catT_lt hjn]; exact hs j hjn
+    · have : j = n := by omega
+      subst this
+      rw [snocW_le (Nat.le_refl _), snocW_succ, catT_self, hn]
+      exact ⟨.inr ⟨a, hrt⟩, K.hπ t, K.hcan t⟩
+
+/-- The fold of an annotated piece that closes on `[n₀, m)` is an annotated run. -/
+theorem fold_arun {R T : Nat → σ} {P : Nat → G} {n₀ m : Nat} (hs : ASeg h R T P m)
+    (hnm : n₀ < m) (hmo : R m = R n₀) (hinit : ∃ c g, M.init c ∧ h.mem c g ∧ R 0 = h.act g c) :
+    ARun h (fun n => R (foldIdx n₀ m n)) (fun n => T (foldIdx n₀ m n))
+      (fun n => P (foldIdx n₀ m n)) := by
+  refine ⟨hinit, fun n => (hs _ (foldIdx_lt hnm n)).1, fun n => (hs _ (foldIdx_lt hnm n)).2.1,
+    fun n => ?_⟩
+  have := foldSeq_succ R hmo n
+  show foldSeq R (n₀ := n₀) (m := m) (n + 1) = _
+  rw [this]; exact (hs _ (foldIdx_lt hnm n)).2.2
+
+/-- Along stutters the stop rule reads the same at every stored state. -/
+theorem ARun.stop_stutter {r t : Nat → σ} {p : Nat → G} (ha : ARun h r t p)
+    (hstop : ∀ {s g}, h.mem s g → (stop (h.act g s) ↔ stop s)) {N : Nat}
+    (hst : ∀ m, N ≤ m → t m = r m) : ∀ d, stop (r (N + d)) ↔ stop (r N)
+  | 0 => Iff.rfl
+  | d + 1 => by
+    have e1 := ha.next (N + d)
+    have e2 := hst (N + d) (by omega)
+    have hm : h.mem (r (N + d)) (p (N + d)) := by rw [← e2]; exact ha.mem _
+    show stop (r (N + d + 1)) ↔ _
+    rw [e1, e2, hstop hm]; exact ARun.stop_stutter ha hstop hst d
+
+/-- **The counterexample's annotated run.** From a stored pair `s` where the trigger holds
+and the goal fails, a path of pairs in `N` to `e`, then a cycle at `e` given as an annotated
+piece whose pairs stay in `N` and whose binding comes back: an annotated run that violates
+the property, from some time on runs round the cycle, and starts a round of it after any
+time. -/
+theorem run_of_parts {s e : σ × β} (hrs : (quotient M K.can).Reach s.1) (hts : trig s.2 s.1)
+    (hps : PN goal s) {t₂ : Nat → σ} {n₂ : Nat}
+    (hw₂ : ∀ j, j < n₂ → POk L K goal (walkSeq (pn L K) t₂ s j) (t₂ j))
+    (he₂ : walkSeq (pn L K) t₂ s n₂ = e) {R₃ T₃ : Nat → σ} {P₃ : Nat → G} {n₃ : Nat}
+    (hn₃ : 0 < n₃) (hs₃ : ASeg h R₃ T₃ P₃ n₃) (h30 : R₃ 0 = e.1) (h3n : R₃ n₃ = e.1)
+    (hb₃ : orbitSeq L.actB P₃ e.2 n₃ = e.2)
+    (hpn₃ : ∀ j, j < n₃ → PN goal (R₃ j, orbitSeq L.actB P₃ e.2 j)) :
+    ∃ r t p b', ARun h r t p ∧ AViolates L trig goal r p b' ∧
+      (∃ N₀, ∀ n, N₀ ≤ n → ∃ j, j < n₃ ∧ r n = R₃ j ∧ t n = T₃ j ∧ p n = P₃ j) ∧
+      ∀ N, ∃ c₀, N ≤ c₀ ∧ ∀ j, j < n₃ → r (c₀ + j) = R₃ j ∧ t (c₀ + j) = T₃ j ∧
+        p (c₀ + j) = P₃ j := by
+  obtain ⟨c₀, R₁, T₁, n₁, hc₀, h10, h1n, hs₁⟩ := qreach_aseg (K := K) hrs
+  let R₂ : Nat → σ := fun j => (walkSeq (pn L K) t₂ s j).1
+  let P₂ : Nat → G := fun j => K.π (t₂ j)
+  have hs₂ : ASeg h R₂ t₂ P₂ n₂ := aseg_of_pairs fun j hj => (hw₂ j hj).2.2
+  have j23 : R₂ n₂ = R₃ 0 := by rw [h30]; show (walkSeq (pn L K) t₂ s n₂).1 = _; rw [he₂]
+  have hs23 := hs₂.cat hs₃ j23
+  have j12 : R₁ n₁ = catW R₂ n₂ R₃ 0 := by rw [catW_le (Nat.zero_le _), h1n]; rfl
+  have hs0 := hs₁.cat hs23 j12
+  let R0 := catW R₁ n₁ (catW R₂ n₂ R₃)
+  let T0 := catT T₁ n₁ (catT t₂ n₂ T₃)
+  let P0 := catT (fun j => K.π (T₁ j)) n₁ (catT P₂ n₂ P₃)
+  let n₀ := n₁ + n₂
+  let m := n₀ + n₃
+  have hm : m = n₁ + (n₂ + n₃) := by omega
+  have hR3 : ∀ j, R0 (n₀ + j) = R₃ j := fun j => by
+    show catW R₁ n₁ _ (n₁ + n₂ + j) = _
+    rw [Nat.add_assoc, catW_add j12, catW_add j23]
+  have hT3 : ∀ j, T0 (n₀ + j) = T₃ j := fun j => by
+    show catT T₁ n₁ _ (n₁ + n₂ + j) = _; rw [Nat.add_assoc, catT_add, catT_add]
+  have hP3 : ∀ j, P0 (n₀ + j) = P₃ j := fun j => by
+    show catT _ n₁ _ (n₁ + n₂ + j) = _; rw [Nat.add_assoc, catT_add, catT_add]
+  have hR2 : ∀ j, j ≤ n₂ → R0 (n₁ + j) = R₂ j := fun j hj => by
+    show catW R₁ n₁ _ (n₁ + j) = _; rw [catW_add j12, catW_le hj]
+  have hP2 : ∀ j, j < n₂ → P0 (n₁ + j) = P₂ j := fun j hj => by
+    show catT _ n₁ _ (n₁ + j) = _; rw [catT_add, catT_lt hj]
+  have hnm : n₀ < m := by omega
+  have hmo : R0 m = R0 n₀ := by
+    show R0 (n₀ + n₃) = R0 (n₀ + 0); rw [hR3, hR3, h3n, h30]
+  have hinit : ∃ c g, M.init c ∧ h.mem c g ∧ R0 0 = h.act g c :=
+    ⟨c₀, K.π c₀, hc₀, K.hπ c₀, by
+      show catW R₁ n₁ _ 0 = _; rw [catW_le (Nat.zero_le _), h10, K.hcan]⟩
+  have ha := fold_arun (hm ▸ hs0 : ASeg h R0 T0 P0 m) hnm hmo hinit
+  -- The binding: chosen so that it is `s`'s at the trigger.
+  obtain ⟨b', hb'⟩ := orbitSeq_surj (h := h) L.actB L.actB_inv' P0 n₁ s.2
+  have hO2 : ∀ j, j ≤ n₂ → orbitSeq L.actB P0 b' (n₁ + j) = (walkSeq (pn L K) t₂ s j).2 := by
+    intro j hj
+    rw [orbitSeq_shift, hb', snd_walkSeq_pn]
+    exact orbitSeq_congr _ _ j fun i hi => hP2 i (by omega)
+  have hO0 : orbitSeq L.actB P0 b' n₀ = e.2 := by rw [hO2 n₂ (Nat.le_refl _), he₂]
+  have hO3 : ∀ j, orbitSeq L.actB P0 b' (n₀ + j) = orbitSeq L.actB P₃ e.2 j := by
+    intro j
+    rw [orbitSeq_shift, hO0]
+    exact orbitSeq_congr _ _ j fun i _ => hP3 i
+  have hclose : orbitSeq L.actB P0 b' m = orbitSeq L.actB P0 b' n₀ := by
+    show orbitSeq L.actB P0 b' (n₀ + n₃) = _; rw [hO3, hb₃, hO0]
+  have hfold := orbitSeq_fold L.actB P0 b' hclose
+  -- The pairs from the trigger on are goal-free.
+  have hpn2 : ∀ j, j ≤ n₂ → PN goal (walkSeq (pn L K) t₂ s j) := by
+    intro j hj
+    induction j with
+    | zero => exact hps
+    | succ j ih => exact (hw₂ j (by omega)).2.1
+  have hpn : ∀ j, n₁ ≤ j → j < m → PN goal (R0 j, orbitSeq L.actB P0 b' j) := by
+    intro j h1 h2
+    by_cases hj : j ≤ n₀
+    · obtain ⟨i, rfl⟩ : ∃ i, j = n₁ + i := ⟨j - n₁, by omega⟩
+      rw [hR2 i (by omega), hO2 i (by omega)]; exact hpn2 i (by omega)
+    · obtain ⟨i, rfl⟩ : ∃ i, j = n₀ + i := ⟨j - n₀, by omega⟩
+      rw [hR3, hO3]; exact hpn₃ i (by omega)
+  have hR20 : R0 n₁ = s.1 := hR2 0 (Nat.zero_le _)
+  refine ⟨_, _, _, b', ha, ⟨n₁, ?_, fun j hj => ?_⟩, ⟨n₀, fun n hn => ?_⟩, fun N => ?_⟩
+  · show trig (orbitSeq L.actB (fun k => P0 (foldIdx n₀ m k)) b' n₁) (R0 (foldIdx n₀ m n₁))
+    rw [hfold, foldIdx_eq n₁ (by omega), hb', hR20]
+    exact hts
+  · show ¬ goal (orbitSeq L.actB (fun k => P0 (foldIdx n₀ m k)) b' j) (R0 (foldIdx n₀ m j))
+    rw [hfold]
+    refine hpn _ ?_ (foldIdx_lt hnm j)
+    by_cases hjn : j < n₀
+    · rw [foldIdx_eq j (by omega)]; exact hj
+    · have := foldIdx_ge hnm j (by omega); omega
+  · have h1 := foldIdx_ge hnm n hn
+    have h2 := foldIdx_lt hnm n
+    obtain ⟨i, hi⟩ : ∃ i, foldIdx n₀ m n = n₀ + i := ⟨foldIdx n₀ m n - n₀, by omega⟩
+    refine ⟨i, by omega, ?_, ?_, ?_⟩
+    · show R0 _ = _; rw [hi, hR3]
+    · show T0 _ = _; rw [hi, hT3]
+    · show P0 _ = _; rw [hi, hP3]
+  · obtain ⟨d, hd, _⟩ := foldIdx_reaches hnm (max N n₀) (by omega) n₀ (Nat.le_refl _) hnm
+    refine ⟨max N n₀ + d, by omega, fun j hj => ?_⟩
+    have hidx : foldIdx n₀ m (max N n₀ + d + j) = n₀ + j := by
+      rw [foldIdx_add _ j (by omega), hd]
+    refine ⟨?_, ?_, ?_⟩
+    · show R0 _ = _; rw [hidx, hR3]
+    · show T0 _ = _; rw [hidx, hT3]
+    · show P0 _ = _; rw [hidx, hP3]
+
+/-- **N9 up to symmetry, (⇐).** If the orbit search accepts, some binding has a behaviour of
+`M` that satisfies `Fair_P`, stays forever only where `stop` holds, and violates the
+property. The accepted pair gives an annotated run (`run_of_parts`): the stored path, the
+path of pairs, then a stutter at a stop pair or the covering loop of a fair component
+round and round; it is thread-fair and stops only where the rule allows, and Theorem A23's
+lift (`a23_lift`) carries it to `M`. -/
+theorem behaviour_of_oAccepts (he : LiveEqui h L trig goal stop after) (hG : FiniteGroups h)
+    (hΦ : ∀ r, ∃ LΦ : List Φ, ∀ x, M.Enabled L.inst x r → x ∈ LΦ)
+    (hacc : OAccepts L K goal stop trig) :
+    ∃ b c, M.Behaviour c ∧ M.FairP L.inst c ∧ StopsOnly stop c ∧
+      Violates (trig b) (goal b) c := by
+  obtain ⟨s, e, hrs, hts, hps, hpath, hend⟩ := hacc
+  obtain ⟨t₂, n₂, hw₂, he₂⟩ :=
+    star_walkSeq (pn L K) (ok := POk L K goal) (fun _ _ h => h) s.1 hpath
+  suffices hrun : ∃ r t p b', ARun h r t p ∧ AFair L r t p ∧ AStops stop r t ∧
+      AViolates L trig goal r p b' by
+    obtain ⟨r, t, p, b', ha, hf, hs, hv⟩ := hrun
+    obtain ⟨c, b, hb, hfc, hsc, hvc⟩ := a23_lift L he ha hf hs hv
+    exact ⟨b, c, hb, hfc, hsc, hvc⟩
+  rcases hend with ⟨hpe, hnone, hstop⟩ | hfc
+  · -- Stutter at the stop pair, with a permutation that acts as the identity.
+    let g := h.mul (K.π e.1) (h.inv (K.π e.1))
+    have hgid : h.act g e.1 = e.1 := by rw [h.act_mul, h.act_inv']
+    have hgB : L.actB g e.2 = e.2 := by rw [L.actB_mul, L.actB_inv']
+    have hgm : h.mem e.1 g := h.mul_mem (K.hπ _) (h.inv_mem (K.hπ _))
+    have hseg : ASeg h (fun _ => e.1) (fun _ => e.1) (fun _ => g) 1 :=
+      fun _ _ => ⟨.inl rfl, hgm, hgid.symm⟩
+    obtain ⟨r, t, p, b', ha, hv, ⟨N₀, hev⟩, _⟩ :=
+      run_of_parts hrs hts hps hw₂ he₂ (by omega) hseg rfl rfl hgB (fun j hj => by
+        have : j = 0 := by omega
+        subst this; exact hpe)
+    refine ⟨r, t, p, b', ha, fun x ⟨N, hN⟩ => ?_, fun N hst => ?_, hv⟩
+    · exfalso
+      obtain ⟨_, _, hr, _⟩ := hev (max N N₀) (by omega)
+      have : M.Enabled L.inst (orbitSeq L.actF p x (max N N₀)) (r (max N N₀)) := hN _ (by omega)
+      rw [hr] at this
+      exact hnone _ this
+    · have := ha.stop_stutter he.stop_act hst (max N N₀ - N)
+      rw [show N + (max N N₀ - N) = max N N₀ by omega] at this
+      obtain ⟨_, _, hr, _⟩ := hev (max N N₀) (by omega)
+      rw [hr] at this
+      exact this.1 hstop
+  · -- Round the covering loop.
+    obtain ⟨LΦ, hLΦ⟩ := hΦ e.1
+    obtain ⟨t₃, n₃, hn₃, ⟨hz₃, he₃⟩, hcov⟩ := hfc.cover hG LΦ hLΦ
+    have hseg := aseg_of_pairs (L := L) (K := K) (u := e) (t := t₃) (n := n₃)
+      fun j hj => (hz₃ j hj).2.2.2.2
+    have hpair : ∀ j, (((walkSeq (pn L K) t₃ e j : σ × β)).1,
+        orbitSeq L.actB (fun i => K.π (t₃ i)) e.2 j) = walkSeq (pn L K) t₃ e j :=
+      fun j => Prod.ext rfl (snd_walkSeq_pn t₃ e j).symm
+    obtain ⟨r, t, p, b', ha, hv, _, hcopy⟩ :=
+      run_of_parts hrs hts hps hw₂ he₂ hn₃ hseg rfl
+        (by show (walkSeq (pn L K) t₃ e n₃ : σ × β).1 = e.1; rw [he₃])
+        (by rw [← snd_walkSeq_pn, he₃]) (fun j hj => by rw [hpair]; exact (hz₃ j hj).2.2.1)
+    refine ⟨r, t, p, b', ha, fun x ⟨N, hN⟩ N' => ?_, fun N hst => ?_, hv⟩
+    · obtain ⟨c₀, hc₀, hcp⟩ := hcopy (max N N')
+      let y := orbitSeq L.actF p x c₀
+      have htr : ∀ j, j ≤ n₃ → orbitSeq L.actF p x (c₀ + j) =
+          walkSeq (fun s y => L.actF (K.π s) y) t₃ y j := by
+        intro j hj
+        rw [orbitSeq_shift, orbitSeq_congr _ _ j fun i hi => (hcp i (by omega)).2.2,
+          orbitSeq_walkSeq, walkSeq_map]
+      have hr0 : r c₀ = e.1 := (hcp 0 hn₃).1
+      have hen : M.Enabled L.inst y e.1 := by
+        have : M.Enabled L.inst (orbitSeq L.actF p x c₀) (r c₀) := hN c₀ (by omega)
+        rwa [hr0] at this
+      obtain ⟨j, hj, hev⟩ := hcov y hen
+      obtain ⟨hr, ht, _⟩ := hcp j hj
+      rcases hev with hdis | htk
+      · exfalso
+        have : M.Enabled L.inst (orbitSeq L.actF p x (c₀ + j)) (r (c₀ + j)) := hN _ (by omega)
+        rw [htr j (by omega), hr] at this
+        exact hdis this
+      · refine ⟨c₀ + j, by omega, ?_⟩
+        show M.Takes L.inst (orbitSeq L.actF p x (c₀ + j)) (r (c₀ + j)) (t (c₀ + j))
+        rw [htr j (by omega), hr, ht]; exact htk
+    · exfalso
+      obtain ⟨c₀, hc₀, hcp⟩ := hcopy N
+      obtain ⟨hr, ht, _⟩ := hcp 0 hn₃
+      have h1 := hst (c₀ + 0) (by omega)
+      rw [hr, ht] at h1
+      exact (hz₃ 0 hn₃).2.2.2.2.1 h1
+
+end Sound
+
 end RdraIsh
