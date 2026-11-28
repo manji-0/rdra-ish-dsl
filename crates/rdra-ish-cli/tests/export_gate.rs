@@ -2,7 +2,8 @@
 //! export writes with one note on stderr; every other output writes without exploring the
 //! lifecycle, so it says nothing about it. `EXPECTED` classifies every `--kind` of `list`,
 //! `csv`, `diagram`, and `export`; the table in docs/cli-reference.md#lifecycle-errors must
-//! say the same.
+//! say the same. The last two tests hold docs/theory to its claims inventory: the summary by
+//! evidence class recounts the rows, and the index's known limitations name every open gap.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -337,4 +338,138 @@ fn the_cli_reference_table_states_every_kinds_gate() {
         }
     }
     assert!(rows.contains(&("states".to_string(), None, Gate::Report)));
+}
+
+/// The themes of docs/theory/claims.md, by the letter of a row's ID, in the column order of
+/// its summary table.
+const THEMES: [(char, &str); 5] = [
+    ('I', "(0)"),
+    ('A', "(a)"),
+    ('B', "(b)"),
+    ('N', "(c)"),
+    ('T', "(d)"),
+];
+
+/// A row of the claims inventory: its ID, the classes its Classes cell lists, and whether its
+/// Open gap is empty.
+struct Claim {
+    id: String,
+    classes: Vec<String>,
+    gap: bool,
+}
+
+fn claims() -> Vec<Claim> {
+    let doc = std::fs::read_to_string(repo().join("docs/theory/claims.md")).unwrap();
+    doc.lines()
+        .filter(|l| {
+            let mut c = l.chars().skip(2);
+            l.starts_with("| ")
+                && c.next()
+                    .is_some_and(|t| THEMES.iter().any(|(x, _)| *x == t))
+                && c.next().is_some_and(|d| d.is_ascii_digit())
+        })
+        .map(|line| {
+            let cells: Vec<&str> = line
+                .trim()
+                .trim_matches('|')
+                .split(" | ")
+                .map(str::trim)
+                .collect();
+            assert_eq!(cells.len(), 8, "claims.md: a row of 8 cells: {line}");
+            Claim {
+                id: cells[0].to_string(),
+                classes: cells[3].split(',').map(|c| c.trim().to_string()).collect(),
+                gap: !cells[7].is_empty(),
+            }
+        })
+        .collect()
+}
+
+/// Every row with an open gap has a bullet under "Known limitations" in docs/theory/README.md
+/// that leads with its ID, and every such bullet names a row with a gap.
+#[test]
+fn the_theory_index_lists_every_open_gap_of_the_claims() {
+    let doc = std::fs::read_to_string(repo().join("docs/theory/README.md")).unwrap();
+    let (_, section) = doc.split_once("\n## Known limitations\n").expect("section");
+    let section = section.split("\n## ").next().unwrap();
+    let listed: BTreeSet<String> = section
+        .lines()
+        .filter_map(|l| l.strip_prefix("- **"))
+        .filter_map(|l| l.split_once(".**"))
+        .map(|(id, _)| id.to_string())
+        .collect();
+    let open: BTreeSet<String> = claims()
+        .into_iter()
+        .filter(|c| c.gap)
+        .map(|c| c.id)
+        .collect();
+    let missing: Vec<_> = open.difference(&listed).collect();
+    let extra: Vec<_> = listed.difference(&open).collect();
+    assert!(
+        missing.is_empty() && extra.is_empty(),
+        "docs/theory/README.md, Known limitations: no bullet for the open gaps of {missing:?}; \
+         a bullet for {extra:?}, whose rows in claims.md have no open gap"
+    );
+}
+
+/// The summary by evidence class in docs/theory/claims.md is a count of the rows' Classes
+/// cells, theme by theme, and its first line counts the rows.
+#[test]
+fn the_claims_summary_counts_the_classes_of_the_rows() {
+    let rows = claims();
+    let doc = std::fs::read_to_string(repo().join("docs/theory/claims.md")).unwrap();
+    let (_, section) = doc
+        .split_once("\n## Summary by evidence class\n")
+        .expect("section");
+    let line = format!(
+        "{} rows: {}.",
+        rows.len(),
+        THEMES
+            .iter()
+            .map(|(t, name)| {
+                let n = rows.iter().filter(|c| c.id.starts_with(*t)).count();
+                format!("{n} in {name}")
+            })
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    let first = section.trim_start().split('\n').next().unwrap();
+    assert!(
+        first.starts_with(&line),
+        "claims.md: the summary should open with {line:?}, not {first:?}"
+    );
+    let mut seen = BTreeSet::new();
+    let table = section
+        .lines()
+        .filter(|l| l.starts_with("| ") && !l.starts_with("| Class "));
+    for table_row in table {
+        let cells: Vec<&str> = table_row
+            .trim_matches('|')
+            .split(" | ")
+            .map(str::trim)
+            .collect();
+        // The row "none written (true by construction, ...)" counts the class "none written".
+        let class = cells[0].split(" (").next().unwrap();
+        let counts: Vec<usize> = THEMES
+            .iter()
+            .map(|(t, _)| {
+                (rows.iter())
+                    .filter(|c| c.id.starts_with(*t) && c.classes.iter().any(|k| k == class))
+                    .count()
+            })
+            .collect();
+        let mut want: Vec<String> = counts.iter().map(usize::to_string).collect();
+        want.push(counts.iter().sum::<usize>().to_string());
+        assert_eq!(
+            cells[1..],
+            want.iter().map(String::as_str).collect::<Vec<_>>()[..],
+            "claims.md, summary by evidence class, row {class:?}: (0), (a), (b), (c), (d), rows"
+        );
+        seen.insert(class.to_string());
+    }
+    let used: BTreeSet<String> = rows.iter().flat_map(|c| c.classes.clone()).collect();
+    assert_eq!(
+        seen, used,
+        "claims.md: the summary's classes are the classes the rows use"
+    );
 }

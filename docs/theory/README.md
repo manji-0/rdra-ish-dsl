@@ -128,9 +128,10 @@ CTI clauses ([z3.md](./z3.md); claims B1 to B18).
 The guarantees above hold given these components and assumptions, none of which the project
 verifies:
 
-- **z3** answers `unsat` only for unsatisfiable queries (H1), and the prover takes each
-  answer for the check that asked it (H4); z3 5.1.0 is deterministic under a fixed resource
-  limit (B13, B15). Every (b) row assumes H1 and H4.
+- **z3** answers `unsat` only for unsatisfiable queries (H1), the SMT text the prover prints
+  means the `Expr` it was built from (H2), and the prover takes each answer for the check that
+  asked it (H4); z3 5.1.0 is deterministic under a fixed resource limit (B13, B15). Every (b)
+  row assumes H1, H2 and H4.
 - **TLC** (1.7.4, 1.8.0) and the JVM are correct. Every (d) row assumes it; CI runs the
   devShell's 1.8.0 pre-release on JDK 25.
 - **The build** returns `T_β(M)` (I1). It is shared by every engine, together with the
@@ -155,7 +156,8 @@ Every run, in every build:
 - refuses, at build time, a column domain past a byte (`DomainTooLarge`), a state past the
   packed width (`StateTooWide`), and an action that writes one slot twice
   (`ConflictingEffects`) (I1, N2, T1);
-- panics on an edge number past `u32` instead of wrapping it (`edges.rs::edge_number`, N1);
+- panics on an edge number past `u32` instead of wrapping it (`core/explore/edges.rs::edge_number`,
+  and the orbit self-edge index of `core/explore/bfs.rs::Bfs::take`, N1);
 - certifies the stability of the reduction's partition and falls back to the sweeps'
   partition when the certificate fails (`partition/reference.rs::stable`, A8);
 - refuses to prove anything from an unsatisfiable premise (`prove/mod.rs::premise`, B2);
@@ -202,80 +204,125 @@ documents arrive at them from their own side.
 
 <!-- derived-from ./claims.md -->
 
-Each item is open at this commit, and each names the claims rows that state it. The list is
-what has been found, not a bound on what exists.
+Each item is open at this commit. There is one bullet per row of the
+[claims inventory](./claims.md) whose Open gap is not empty, led by that row's ID, and it
+states every part of that gap; a test in `cli/tests/export_gate.rs` fails when a row with a
+gap has no bullet here, or a bullet names a row without one. The list is what has been found,
+not a bound on what exists.
 
 **The build and the language**
 
-- Outside the reference interpreter's subset, only the corpus headers check model to `T`,
-  on the models they name; the reference shares the parser, `build_model`, the rule names,
-  and which Int columns are numbers (I1, T7). The subset is listed in I1.
-- Nothing checks at run time that a bound in a proof's printed `--int-range-max` range
-  builds the same system; Lemma U is a reading of the code (B2, I1).
-- semantics.md takes which models are well-formed from the code's list of error diagnostics
-  (I1).
-- Verification executes no referential action, while the SQL export writes
+- **I1.** Outside the reference interpreter's subset, or past its 20,000 states, and for the
+  verdicts of properties, only hand-written expectations such as the corpus headers check
+  model to `T`, on the models they name. The reference shares the parser, `build_model`, the
+  rule names, and which Int columns are numbers. semantics.md takes which models are
+  well-formed from the code's list of error diagnostics.
+- **I2.** No sample or corpus model draws the `negated-order-admits-null` warning.
+- **I3.** Verification executes no referential action, while the SQL export writes
   `ON DELETE CASCADE` / `SET NULL` / `SET DEFAULT`, so a rule over the children can be `ok`
-  in the model and broken against that database; executing them is the owner's call (I3).
-- No sample or corpus model draws the `negated-order-admits-null` warning (I2).
+  in the model and broken against that database; executing them is the owner's call.
 
 **Cones, the reduction, and symmetry**
 
-- Lemma 6, which ties the extended sub-lifecycle to the cone, is argued, not proved; the
-  tests check its fold equivalence and its silent steps on the models and bounds they run
-  (A8, A11; A5, A6, A10, A15 rest on it).
-- A release build does not check that a step changes only the variables `Wr(a)` names; debug
-  and `shadow` builds do (A1, B6).
-- No test makes the reduction reject a quotient past the TLA+ cell budget (A13); A14 and A27
-  have no test of their own.
-- No Kani harness proves the canonical form invariant under the group; it rests on an
-  exhaustive unit test and a twin (A18, T13).
-- That a counterexample a cap-stopped safety cone finds is real has no test (A24).
-- Most of the lift's look-up faults are reached by no test (A16).
-- The memory limit does not bound the process (A26).
+- **A1.** A release build does not check that a step changes only the variables `Wr(a)`
+  names; debug and `shadow` builds do.
+- **A2.** That `Trace::free_triggers` lists every step that runs an action reading a mark
+  outside the cone is a reading of the code, with no test of its own; that the exact cone's
+  counterexample is vouched for is a `debug_assert!` only.
+- **A5.** Rests on Lemma 6, which is argued, not proved (A8).
+- **A6.** Rests on Lemma 6 (A8).
+- **A8.** Lemma 6, which ties the extended sub-lifecycle to the cone, is argued, not proved;
+  the tests check what it assumes on the models and bounds they run.
+- **A10.** Rests on Lemma 6 (A8).
+- **A11.** The fold equivalence is tested on the models and bounds of the fold tests only;
+  Lemma 6 is argued (A8).
+- **A13.** No test makes `reduced_with` reject a reduction past the TLA+ cell budget; that
+  rejection is read from the code only.
+- **A14.** No test targets the cone of its own that a dropped check gets.
+- **A15.** Relative to A8's hypotheses, which include Lemma 6.
+- **A16.** No test reaches most of the lift's look-up faults (a class with no initial S state,
+  an S path up to `H` that starts elsewhere, a rise or a target with no block, an S action
+  that is not the cone's, `Length`). The lifted start is not checked against the unreduced
+  cone's initial states. The panics left on a lift's way stop the run.
+- **A18.** No Kani harness proves the canonical form invariant under the group; it rests on an
+  exhaustive unit test and the `Canonical` twin. The `g6.rs` test has no `always` or
+  `unchanged`.
+- **A20.** Whether each symmetry rule is needed is open: eleven reasons have no
+  witness of their own: the seven of `Reduced` and four of the six of `Observed`.
+- **A23.** The theorem that liveness and entity-cone findings up to symmetry decide what the
+  plain run decides is not written out.
+- **A24.** That a counterexample a cap-stopped safety cone finds is real has no test.
+- **A26.** The memory limit does not bound the process.
+- **A27.** Covered cones have no test of their own.
 
 **Proofs with z3**
 
-- `Enc::compare` re-implements `expr.rs::compare` and is tied to it by reading and
-  differential tests only; no code under `core/prove/` has a Kani harness or a twin (B1).
-- `proof_equivalence` skips 130 comparisons on the samples, cones whose BFS passes its state
-  cap (B1).
-- The checks z3 gives up on by itself are counted, not asserted (B16).
-- No test checks that an unstateable rule is `out of scope` or a guard is dropped (B7), plants
-  a false mined lemma (B9), or asserts that `proved` covers state rules only (B18); B6 has
-  no test. Determinism across machines and solver counts is empirical (B13, B14).
+- **B1.** `Enc::compare` re-implements `expr.rs::compare` and is tied to it by reading and
+  differential tests only; no code under `core/prove/` has a Kani harness or a twin.
+  `proof_equivalence` skips 130 comparisons on the samples. The header of
+  `z3_guarded_null_beside_present` says BFS breaks its rule at `--int-range-max 6`, which no
+  test runs.
+- **B2.** Nothing checks at run time that a bound in a proof's printed `--int-range-max` range
+  builds the same system; Lemma U is a reading of the code, checked by the reference
+  interpreter on its subset.
+- **B6.** Step pruning has no test; that a step changes only `Wr(a)` is checked in debug and
+  `shadow` builds only.
+- **B7.** No test checks that an unstateable rule is `out of scope`, that a guard is dropped or
+  a write havocked, or the `note:` line.
+- **B9.** No test plants a false or capped mined lemma.
+- **B11.** The sketch covers only its central case, a false `.lemma()` being dropped.
+- **B12.** H4 is assumed: no test drives `Z3::exec` or `Solver::check_sat`.
+- **B13.** No test compares runs on two machines.
+- **B14.** Independence from the solver count is empirical.
+- **B16.** The checks z3 gives up on by itself are counted, not asserted. A wrong `proved`
+  turns a cone stopped at the memory limit into a wrong `ok`, and no run-time check sees it
+  (residual risk 2).
+- **B18.** No test asserts that `proved` covers state rules only.
 
 **The native verifier**
 
-- The loom model, test jitter, and probe harness of native-bfs-parallel.md are not built, and
-  no workflow runs Miri (N4).
-- The naive oracle shares the step relation and the evaluator, and does not cover entity
-  cones up to symmetry (N8, N14).
-- No test checks an `always` trace against an expected one (N5), drives a stored path that
-  fails to replay through `trace_violations` (N16), or runs the second half of
-  `a_path_that_does_not_replay_is_a_fault` (N13).
-- No Kani harness inserts into the state table and looks a row up (N2).
-- The internal invariants of [Panics left on a lift's way](./claims.md#panics-left-on-a-lifts-way)
+- **N2.** No Kani harness inserts into the state table and looks a row up.
+- **N4.** The loom model, test jitter, and probe harness of native-bfs-parallel.md are not
+  built, and no workflow runs Miri.
+- **N5.** No test checks an `always` trace against an expected one.
+- **N8.** TLC cannot state `can_reach`. The naive oracle shares the step relation and the
+  evaluator, and does not cover entity cones up to symmetry. That the reported state is the
+  first in BFS order rests on the proof alone.
+- **N11.** The lasso checks share code with the search they certify (`moves` and
+  `Property::fair_instance`; `holds_bound` and `triggers`), so a fault there passes both.
+- **N13.** The second half of `a_path_that_does_not_replay_is_a_fault` never runs.
+- **N14.** No test has a value whose only way out is a delete. TLC's deadlock is another
+  reading (T6).
+- **N16.** No test drives `trace_violations` with a stored path that fails to replay. The
+  internal invariants of [Panics left on a lift's way](./claims.md#panics-left-on-a-lifts-way)
   are unchecked; among them, that `Extended::rebuild` reproduces `Extended::of` is not
-  checked (N16).
+  checked, and that every restriction that keeps `Tick` keeps `now` is not argued.
+- **N17.** As N4: the output's independence from `RDRA_JOBS` has the same open items.
 
 **Agreement with TLC**
 
-- The 25 `VERIFY_FALLBACK` cones meet TLC at 1 instance only, and oidc-auth's browser flow at
-  2 instances rests on the native checker alone (T5).
-- The printed reduced step has no per-construct argument, and that no two params of one
-  action that can bind one slot write one variable is assumed, not checked (T1).
-- TLC's deadlock check is one-sided (T6); batch JVMs are compared with processes only on
-  cones of at most 5,000 states (T11).
-- A call above a shadow twin's cap is not compared (T14).
-- The TLC-side mutation run's kill rate is not recorded, and the mutation runs start only by
-  hand (T15).
+- **T1.** The printed reduced step has no per-construct argument, and that no two params of
+  one action that can bind one slot write one variable is assumed, not checked.
+- **T5.** The 25 `VERIFY_FALLBACK` cones meet TLC at 1 instance only, and oidc-auth's browser
+  flow at 2 instances rests on the native checker alone; whether an entity cone of the other
+  roots shares its variables with an invariant's cone, and so meets TLC there, is open.
+- **T6.** TLC's deadlock check is one-sided.
+- **T7.** Each corpus header checks only the model it names.
+- **T8.** A wrong `ok` is not checked at run time (residual risk 2).
+- **T9.** The random-model comparison is no required check (Process, below).
+- **T11.** Batch JVMs are compared with processes only on cones of at most 5,000 states, and
+  in no required check.
+- **T13.** No Kani harness covers the canonical form, the TLA+ printer or the comparison.
+- **T14.** A call above a shadow twin's cap is not compared, and a twin checks two
+  implementations, not a specification.
+- **T15.** No TLC-side mutation run has completed, so it has no kill rate; the mutation runs
+  start only by hand and are no required check.
 
 **Process**
 
 - None of the CI checks is required: main has no branch protection and the repository no
-  ruleset (`gh api`, checked 2026-11-28), so merging on green checks is a convention
-  (T9, T11, T15; [tlc-agreement.md, "Process gates"](./tlc-agreement.md#5-process-gates)).
+  ruleset (`gh api`), so merging on green checks is a convention (T9, T11, T15;
+  [tlc-agreement.md, "Process gates"](./tlc-agreement.md#5-process-gates)).
 - The proposal to restate items 2, 3 and 7 of the release gate to match what runs
   ([native-temporal-verification.md, "Migration", "The release gate"](../design/native-temporal-verification.md#migration))
   awaits the owner's decision.
