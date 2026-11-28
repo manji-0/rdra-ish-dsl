@@ -1445,7 +1445,7 @@ fn an_escalation_past_ten_times_the_store_decides_nothing() {
 /// The encoding read only the numbers (`c ≥ 1`), so it had no step that writes null: with the
 /// cone stopped at the state cap, `Forbidden_Item_0` printed `proved` and the run `OK`, though
 /// BFS breaks it in three steps (Add, Close, then Fill writes null). The step that writes null
-/// is now encoded, and its counterexample to induction is the one BFS walks.
+/// is now encoded, and its counterexample to induction is the step BFS takes last.
 #[test]
 fn a_guarded_null_beside_a_guarded_present_is_a_step_of_the_proof() {
     if !tool("z3", "RDRA_REQUIRE_Z3") {
@@ -1481,12 +1481,13 @@ forbidden(Item, n == null)
         &model,
     ]);
     let stdout = String::from_utf8_lossy(&out.stdout);
+    // The counterexample to induction is z3's choice but for the step and its write.
     assert!(
-        stdout.contains(
-            "unproved: Forbidden_Item_0: not inductive; Fill(Item#1) breaks it from a state where it, every proved rule, and every kept lemma hold (not necessarily reachable)\n  Item#1 (present) open=false, n=0 -> n=null\n"
-        ),
+        stdout.contains("unproved: Forbidden_Item_0: not inductive; Fill(Item#1) breaks it"),
         "{stdout}"
     );
+    assert!(stdout.contains("open=false, n="), "{stdout}");
+    assert!(stdout.contains(" -> n=null\n"), "{stdout}");
     assert!(!stdout.contains("proved: Forbidden_Item_0 ("), "{stdout}");
     assert!(
         stdout.contains("; 0 of 1 rules proved for any number of rows"),

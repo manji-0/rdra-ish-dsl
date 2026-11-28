@@ -106,6 +106,35 @@ fn a_rule_proved_at_one_int_range_holds_at_wider_ones() {
     assert!(wrong.is_empty(), "{}", wrong.join("\n"));
 }
 
+const GUARDED_NULL: &str =
+    "entity Item \"item\" {\n  id: Int @pk\n  open: Bool @default(true)\n  n: Int @null\n}\n\
+    usecase Add \"add\"\nusecase Close \"close\"\nusecase Fill \"fill\"\n\
+    creates(Add, Item)\nsets(Add, Item.n == 1)\n\
+    updates(Close, Item)\nsets(Close, Item.open == false)\nupdates(Fill, Item)\n\
+    condition IsOpen \"open\"\nholds(IsOpen, Item.open == true)\n\
+    condition IsClosed \"closed\"\nholds(IsClosed, Item.open == false)\n\
+    sets(Fill, Item.n == present).when(IsOpen)\n\
+    sets(Fill, Item.n == null).when(IsClosed)\n\
+    forbidden(Item, n == null)\n";
+
+/// P66: a guarded `null` beside a guarded `present` of one column is a step of the proof, so
+/// `forbidden(Item, n == null)`, which Add, Close and Fill break, is not proved; the
+/// reference breaks it at every range.
+#[test]
+fn a_guarded_null_beside_a_guarded_present_is_no_proof() {
+    let Some(z3) = z3() else {
+        return;
+    };
+    let model = try_model(GUARDED_NULL).expect("the model builds");
+    let got = proved(&z3, &model, 5);
+    let (wrong, explored) = broken_later(&model, 5, &got);
+    assert_eq!(
+        explored, 4,
+        "the reference explored {explored} of its 4 systems"
+    );
+    assert!(wrong.is_empty(), "{}", wrong.join("\n"));
+}
+
 /// The same on random models of the subset, on main only (.config/nextest.toml).
 #[test]
 fn rules_proved_on_random_models_hold_at_wider_int_ranges() {
