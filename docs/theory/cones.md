@@ -1002,7 +1002,7 @@ From `Lemma6Hyp` it proves both `S_a` halves, with the cone's binding equal to t
 outside the fold's free `T` parameters (`s_fwd`, `s_back`), and the rise half through the
 stages (`rise_fwd`). So the hypotheses `Lemma6By`, `Lemma6Staged` and `Lemma6` of the Lean
 proof of Theorem A8 are theorems (`lemma6_by`, `lemma6_staged`, `lemma6`). `Lemma6Hyp` holds
-per-action facts read from the code:
+per-action facts read from the code, among them (the Lean README lists every field):
 
 - `Local` and Lemma 5 (a)–(c), which `split_faults` certifies;
 - a `New` parameter's existence is written;
@@ -1013,8 +1013,9 @@ per-action facts read from the code:
 - a folded action's effect reads `S_v ∪ inputs`;
 - step (c): a rise's effect on the inputs reads `S_v ∪ inputs`.
 
-The stub and dropped cells of an unfolded `S_a` action, and a `New` `T` parameter of a folded
-one, are derived from Lemma 5 (a)(c) (`unfolded_side`). The cone is the cone without the steps
+The stub and dropped cells of an unfolded `S_a` action, for every role that reads its row (an
+`Earlier` parameter binds any slot on both sides), and a `New` `T` parameter of a folded one,
+are derived from Lemma 5 (a)(c) (`unfolded_side`). The cone is the cone without the steps
 of an action that writes nothing and is not kept, which `X` does not hold either: such steps
 stutter, and the two reach the same states (`coneW_reach_iff`). `Lemma6Example.lean`
 discharges `Lemma6Hyp` on a model with a folded action whose free `T` parameter is on a stub,
@@ -1023,7 +1024,9 @@ an unfolded action with a kept conjunct, and a rise with a parameter on a stub. 
 
 The model leaves out node folds, groups of folds sharing a bit, the renumbering of step (b)
 (a binding of `X` keeps the cone's positions, and nothing states that `X`'s conjuncts and
-effects ignore the slots of dropped parameters), and the nested case. It takes `X`'s initial
+effects ignore the slots of dropped parameters), the rule that a fold whose key the
+restriction drops stays unfolded (`X` reads the bit at the key's position whatever its side,
+so `Fold::key_kept` and `Fault::KeyDropped` play no part), and the nested case. It takes `X`'s initial
 states to be the projections of the cone's, and does not derive them from `restrict_to` and
 `fold_initial`. It reads the model, not `Extended::build`.
 
@@ -1700,7 +1703,8 @@ Evidence: none beyond the reading of `escalate` and the guide.
 - **Partition and Lemma 6.** A8, A15, and every reduced cone's verdict rest on (B1)–(B3), which
   every build certifies on the partition it uses, given that one non-splitting sweep of
   `stuttering_blocks` is (B2), argued by inspection; and on Lemma 6, argued over a reading of
-  the code and not proved. Its fold half is checked against the cone's step relation on the
+  the code and proved in Lean only over an action model of the cone and `X`, from
+  hypotheses read from the code. Its fold half is checked against the cone's step relation on the
   domain samples and the built models only; its parameter matrix is checked cell by cell on
   built models, with three reachable cells that no model fills; and its parameters on a stub
   also on two corpus cases. Among those verdicts are the printed `ok` of a property's `Plain` run (A5.1) and of a

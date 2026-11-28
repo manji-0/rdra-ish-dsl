@@ -368,8 +368,9 @@ The model (`Ext`, `Ext.ext`):
 Each field is a fact about one action, read from the code:
 
 - `local_`, `lemma5`, `reads`: `Local`, and Lemma 5 (a)(b) and (c), with a fold's reads
-  those of `Fold::reads`. `reduce/lemma5.rs::split_faults` certifies Lemma 5 at run time,
-  and `lemma5ab_of_closed` and `lemma5_of_closed` derive it from Definition 3.
+  those of `Fold::reads`. `reduce/lemma5.rs::split_faults` certifies Lemma 5 at run time.
+  `lemma5ab_of_closed` derives (a)(b) from Definition 3, and `lemma5_of_closed` derives (c)
+  given `FoldData` (`reads_of_lemma5`).
 - `shape`: an action's guard is its role conjuncts followed by `og`.
 - `new_writes`: a `new` parameter comes with its `Create`, which writes its entity's
   existence (`build/actions.rs`).
@@ -380,7 +381,8 @@ Each field is a fact about one action, read from the code:
   conjuncts of it.
 - `exact`: step (a), `Fold::holds` computes the bit exactly. The bit at slot `c` holds at
   `t` iff some binding with the key at `c` puts each `T` parameter whose role needs a
-  present row on one and makes every folded guard true.
+  present row on one and makes every folded guard true. It is stated for every slot number,
+  where the code has bits only for the key entity's slots.
 - `folded_names`: the folded guards name only `T` parameters and the key (`fold_of`'s
   `s_keys`).
 - `other_names`, `eff_names`: no other conjunct and no effect names a `T` parameter but the
@@ -400,7 +402,10 @@ Each field is a fact about one action, read from the code:
 - **Parameter positions.** A binding of `X` keeps the cone's positions, so step (b) (the
   renumbering of `Extended::cone_params`) is not modelled. Nothing states that `X`'s kept
   conjuncts and a rise's effects ignore the slots of the parameters `X` drops. A silent
-  edge's binding is the cone's outside the fold's free `T` parameters, either way.
+  edge's binding is the cone's outside the fold's free `T` parameters, either way. `X` reads
+  a fold's bit at the key's position whatever the key's side, so the rule that a fold whose
+  key the restriction drops stays unfolded (`Fold::key_kept`, `Fault::KeyDropped`) plays no
+  part.
 - **The rest.** The nested case is not modelled, and nothing reads `StubCheck`, which checks
   at run time that the built `X` is the one `bind_stub_params` is meant to build.
 - **Consequences 2 to 4.** These are stated for `coneW`. `a8_actions_holds_iff` reads
