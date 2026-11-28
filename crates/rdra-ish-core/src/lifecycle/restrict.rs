@@ -269,6 +269,15 @@ impl TransitionSystem {
             }
         }
         out.layout();
+        // A tick is kept with the clock it writes, so the step relation finds `now` (N16).
+        assert!(
+            out.now.is_some()
+                || out
+                    .actions
+                    .iter()
+                    .all(|a| !a.effects.contains(&Effect::Tick)),
+            "restrict_to keeps a tick without the clock"
+        );
         (out, map)
     }
 }

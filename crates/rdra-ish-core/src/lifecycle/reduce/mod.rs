@@ -41,6 +41,7 @@ mod hypotheses;
 mod lemma5;
 #[cfg(test)]
 pub(crate) mod lemma6;
+mod lemma6hyp;
 mod lift;
 mod partition;
 #[cfg(feature = "shadow")]
@@ -84,7 +85,9 @@ enum Unreduced {
     /// Nothing reduces.
     Nothing,
     /// The split failed the check every build makes on it (`split_faults`, Lemma 5), the
-    /// extended sub-lifecycle failed its own (`StubCheck`), or its quotient failed one of the
+    /// extended sub-lifecycle failed its own (`StubCheck`, and `lemma6_faults` for Lemma 6's
+    /// syntactic hypotheses), the sweeps' partition that replaces an uncertified one failed
+    /// its certificate, or its quotient failed one of the
     /// checks of `hypotheses.rs` (the rise table and the stages, the loop marks, the inner
     /// split), so no quotient of it is trusted: a tool bug, and the cone is decided unreduced.
     Untrusted,
@@ -164,6 +167,9 @@ pub struct Reduction {
     /// S was explored up to `H` (#212 phase 2), after its plain run stopped at the memory
     /// limit: the lift explores it so again.
     up_to_h: bool,
+    /// The digest of the extended sub-lifecycle the classes were read off
+    /// (`Extended::digest`), which a rebuild for a lift or a class table must reproduce.
+    digest: u64,
 }
 
 impl Reduction {
@@ -817,6 +823,16 @@ impl TransitionSystem {
             );
             return Err(Unreduced::Untrusted);
         }
+        // Lemma 6's syntactic hypotheses (`lemma6hyp.rs`): what `X` keeps, folds and starts
+        // from, read afresh from the actions. A fault is a tool bug; a debug or `shadow` build
+        // stops here unless a test planted it (`dropped`).
+        if let Some(fault) = self.lemma6_faults(&split, &ext).0.first() {
+            crate::shadow_assert!(dropped("bit_starts"), "shadow: lemma6_faults: {fault}");
+            eprintln!(
+                "warning: the extended sub-lifecycle of a cone failed its check of Lemma 6's hypotheses ({fault}); deciding the cone unreduced (a tool bug)"
+            );
+            return Err(Unreduced::Untrusted);
+        }
         // Past the budget, the split without inputs is worth a try when this one had any.
         let over_budget = || match split.inputs.is_empty() && split.folds.is_empty() {
             true => Unreduced::Nothing,
@@ -890,6 +906,7 @@ impl TransitionSystem {
             .iter()
             .map(|a| self.action_writes(a).is_disjoint(&input_reads))
             .collect();
+        let digest = ext.digest();
         let reduction = Reduction {
             vars: split.s.iter().copied().collect(),
             inputs: split.inputs.iter().copied().collect(),
@@ -913,6 +930,7 @@ impl TransitionSystem {
             loops,
             divergence,
             up_to_h: classes.up_to_h,
+            digest,
         };
         if reduction.tla_cells() > TLA_CELL_BUDGET {
             return Err(over_budget());
@@ -944,6 +962,27 @@ impl TransitionSystem {
         let ext = Extended::of(self, &split);
         let fault = ext.stubs.fault.as_ref().map(ToString::to_string);
         Some((ext.stubs.rebound, fault))
+    }
+
+    /// The check of Lemma 6's hypotheses (`lemma6hyp.rs`) on the extended sub-lifecycle
+    /// `reduced_with` builds for `seeds`, with or without the inputs of S: `None` when that
+    /// attempt builds none or its stub check fails, else what the check read and its faults.
+    #[cfg(test)]
+    pub(in crate::lifecycle) fn lemma6_check(
+        &self,
+        seeds: &[Seed],
+        inputs: bool,
+    ) -> Option<(lemma6hyp::Seen, Vec<String>)> {
+        let split = self.split_with(seeds, inputs);
+        if split.s.is_empty() || split.s.is_subset(&split.obs) {
+            return None;
+        }
+        let ext = Extended::of(self, &split);
+        if ext.stubs.fault.is_some() {
+            return None;
+        }
+        let (faults, seen) = self.lemma6_faults(&split, &ext);
+        Some((seen, faults.iter().map(ToString::to_string).collect()))
     }
 
     /// Drops the checks the reduced cone cannot evaluate: an invariant or after-assert that

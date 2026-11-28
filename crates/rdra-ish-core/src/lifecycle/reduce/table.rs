@@ -26,6 +26,9 @@ pub enum NoClassTable {
     /// The extended sub-lifecycle has more states than `CLASS_TABLE_CAP`, nested ones
     /// expanded.
     TooLarge(usize),
+    /// The extended sub-lifecycle did not rebuild as it was built
+    /// (`Extended::rebuild_checked`).
+    Rebuilt,
 }
 
 impl std::fmt::Display for NoClassTable {
@@ -39,6 +42,9 @@ impl std::fmt::Display for NoClassTable {
                 f,
                 "the sub-lifecycle has more than {CLASS_TABLE_CAP} states ({n} at least)"
             ),
+            NoClassTable::Rebuilt => {
+                f.write_str("the sub-lifecycle did not rebuild as the reduction built it")
+            }
         }
     }
 }
@@ -79,7 +85,7 @@ impl TransitionSystem {
         if r.up_to_h {
             return Err(NoClassTable::UpToH);
         }
-        let ext = Extended::rebuild(self, r);
+        let ext = Extended::rebuild_checked(self, r).ok_or(NoClassTable::Rebuilt)?;
         let mut sub = ext.system.clone();
         sub.reduction = r.inner.clone();
         let run = sub.clone().run(Caps::new(usize::MAX, CLASS_TABLE_CAP));

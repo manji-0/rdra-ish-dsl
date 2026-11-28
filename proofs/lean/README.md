@@ -259,8 +259,11 @@ The proofs assume the following hypotheses and do not derive them:
     over a model of the check ([below](#the-partition-certificate-and-monotone-variables)).
     That the run the check reads is `X`'s reachable graph (`Sweep.Complete`), that the
     depth-first marking of `partition/reference.rs::stuttering_blocks` computes
-    `Sweep.Marked`, and that the fallback partition of `partition/reference.rs::quotient_blocks`, used without the check,
-    meets `Sweep.Cert` when the sweeps stop are read from the code. On the flat runs of the
+    `Sweep.Marked` are read from the code. The fallback partition of
+    `partition/reference.rs::quotient_blocks` passes the same check, and a second reading of
+    (B2), `partition/reference.rs::marking_splits_nothing`, which marks by the rules of
+    `Sweep.Marked` alone and checks the hypotheses of `Sweep.b2_of_marking`; a fallback that
+    fails leaves the cone unreduced. On the flat runs of the
     samples, the domain samples and the corpus, `partition-check` checks the partition the
     code uses, whichever of the two it is, and the shape of the run
     ([below](#the-partitions-and-the-shape-of-x)).
@@ -678,7 +681,11 @@ The model (`Ext`, `Ext.ext`):
 
 ### What `Lemma6Hyp` assumes
 
-Each field is a fact about one action, read from the code:
+Each field is a fact about one action. Every build checks the fields marked (R) on the built
+`X` for `FoldKey::Param` folds, from the actions' syntax (`reduce/lemma6hyp.rs::lemma6_faults`, which names
+each field it checks in its module doc), and decides the cone unreduced on a fault; for node
+folds and groups of folds sharing a bit, and for the fields not marked, the fact is read from
+the code:
 
 - `local_`, `lemma5`, `reads`: `Local`, and Lemma 5 (a)(b) and (c), with a fold's reads
   those of `Fold::reads`. `reduce/lemma5.rs::split_faults` certifies Lemma 5 at run time.
@@ -687,21 +694,24 @@ Each field is a fact about one action, read from the code:
 - `shape`: an action's guard is its role conjuncts followed by `og`.
 - `new_writes`: a `new` parameter comes with its `Create`, which writes its entity's
   existence (`build/actions.rs`).
-- `kept_rd`: a conjunct `X` keeps reads only `S_v ∪ inputs` (`restrict_to`).
-- `cover`: every conjunct in `og` of an `S_a` action is kept or folded.
-- `rise_eff`: step (c), a `T_a` action's value on an input depends only on `S_v ∪ inputs`.
-- `fold_sa`, `folded_og`: a fold belongs to an `S_a` action, and its folded guards are
+- `kept_rd` (R, on `X`'s own guards): a conjunct `X` keeps reads only `S_v ∪ inputs`
+  (`restrict_to`).
+- `cover` (R; the tie to `X` is a count of its guards): every conjunct in `og` of an `S_a`
+  action is kept or folded.
+- `rise_eff` (R): step (c), a `T_a` action's value on an input depends only on
+  `S_v ∪ inputs`.
+- `fold_sa`, `folded_og` (R): a fold belongs to an `S_a` action, and its folded guards are
   conjuncts of it.
 - `exact`: step (a), `Fold::holds` computes the bit exactly. The bit at slot `c` holds at
   `t` iff some binding with the key at `c` puts each `T` parameter whose role needs a
   present row on one and makes every folded guard true. It is stated for every slot number,
   where the code has bits only for the key entity's slots.
-- `folded_names`: the folded guards name only `T` parameters and the key (`fold_of` lets
-  them name at most one `S` parameter, which is then the key).
-- `other_names`, `eff_names`: no other conjunct and no effect names a `T` parameter but the
-  key (`fold_of`'s link guards, and the one `T` parameter an effect may reference).
-- `eff_s`: a folded action's effect on its writes reads only `S_v ∪ inputs`. For an unfolded
-  action, `Local` and Lemma 5 (c) give it.
+- `folded_names` (R, with `FoldSpec.no_next`): the folded guards name only `T` parameters
+  and the key (`fold_of` lets them name at most one `S` parameter, which is then the key).
+- `other_names`, `eff_names` (R): no other conjunct and no effect names a `T` parameter but
+  the key (`fold_of`'s link guards, and the one `T` parameter an effect may reference).
+- `eff_s` (R): a folded action's effect on its writes reads only `S_v ∪ inputs`. For an
+  unfolded action, `Local` and Lemma 5 (c) give it.
 - `bind`: `bind_stub_params` runs.
 
 Over the slot model of [Theorem A18 over slots](#theorem-a18-over-slots), every field but
@@ -712,7 +722,8 @@ Over the slot model of [Theorem A18 over slots](#theorem-a18-over-slots), every 
 
 - **Initial states.** `X`'s initial states are the projections of the cone's. That
   `restrict_to`'s initial states are those projections (Lemma 2) and that every bit starts
-  where the cone starts (`fold_initial`) is not derived.
+  where the cone starts (`fold_initial`) is not derived; every build checks it on the built
+  `X` (`reduce/lemma6hyp.rs::lemma6_faults`).
 - **Folds.** The model has one bit per folded action. A group of folds sharing a bit (the
   disjunction of `push_bits`, `Signature::Param`) and node folds (`FoldKey::Linked`, which
   add a parameter) are not modelled.
@@ -724,7 +735,8 @@ Over the slot model of [Theorem A18 over slots](#theorem-a18-over-slots), every 
   key the restriction drops stays unfolded (`Fold::key_kept`, `Fault::KeyDropped`) plays no
   part.
 - **The rest.** The nested case is not modelled, and nothing reads `StubCheck`, which checks
-  at run time that the built `X` is the one `bind_stub_params` is meant to build.
+  at run time that the built `X` is the one `bind_stub_params` is meant to build, or
+  `reduce/lemma6hyp.rs::lemma6_faults`.
 - **Consequences 2 to 4.** These are stated for `coneW`. `a8_actions_holds_iff` reads
   invariants on `cone` itself.
 
@@ -979,6 +991,9 @@ in its own block of a marked state, self-loops dropped) are every state of a blo
   the depth-first marking of `partition/reference.rs::stuttering_blocks` computes it, and that `partition/reference.rs::same_partition` of
   the sweep's result holds iff the sweep split nothing (a split adds a block, and a sweep
   that splits nothing never changes the blocks its splitters see), are read from the code.
+  The fallback partition is also checked by `partition/reference.rs::marking_splits_nothing`,
+  which needs neither reading: it meets the hypotheses of `Sweep.b2_of_marking` (a marking
+  inside `Marked`, closed under its rules, all or none of each block).
   `stable` renumbers the blocks by first appearance, which is injective.
 - **`Mono.Sys`, `Mono.Sys.Succ`**: the effects (`Effect`) and the edges `monotone_vars`
   adds for each, and `each_successor`: the creates, assignments, single-arm transitions and

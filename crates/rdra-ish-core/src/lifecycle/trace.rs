@@ -42,6 +42,9 @@ pub enum ReplayError {
         to: usize,
         action: ActId,
     },
+    /// The reduction's extended sub-lifecycle did not rebuild as it was built
+    /// (`Extended::rebuild_checked`), so the path is not lifted.
+    Rebuilt,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
