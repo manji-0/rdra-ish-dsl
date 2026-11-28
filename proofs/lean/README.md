@@ -490,14 +490,15 @@ An accepted dump does not establish these:
 
 ### The same pattern for (B1)–(B3) and the shape of `X`
 
-The checker is not built yet. The pattern carries over as follows.
+No checker exists for these. The pattern carries over as follows.
 
-- **The data.** The certificate would carry exactly what `partition/reference.rs::stable`
-  reads: the number of states of `X`, its silent edges and its rises as pairs of state
-  numbers, the initial labels (`obs` and the input bytes per state), and the blocks. It
-  would add the representative of each block. For `Extended`, it would also give each
-  state's `S` key and input bytes, so that a check can test that a silent edge keeps the
-  input bytes and a rise keeps `S`.
+- **The data.** The certificate would carry what `partition/reference.rs::stable` reads: the
+  number of states of `X`, its silent edges and its rises as pairs of state numbers, the
+  initial labels (`Partition::initial`, each state's `obs` and inputs, numbered), and the
+  blocks. It would add the representative of each block. For (B1) to be checked rather than
+  read from the numbering, and for `Extended`, it would also give each state's `obs` values,
+  `S` values and input bytes, so that a check can test that a block agrees on `obs` and the
+  input bytes, a silent edge keeps the input bytes, and a rise keeps `S`.
 - **The checker.** It would test four things: that the blocks refine the labels (B1); that
   one sweep with every block a splitter splits nothing (B2); that the states of a block
   enter the same set of blocks by a rise (B3); and that each representative lies in its
