@@ -10,10 +10,10 @@ of [semantics.md](./semantics.md) (D1 to D25) without redefining it. `T` is the 
 build returns; that it is `T_β(M)` (D13) is claim [I1](./claims.md#0-the-build), not a step
 of any proof here.
 
-It describes the code at commit `5f59fae21e582b397b42c8b6594356ac5892420e` (origin/main,
-2026-11-28, the merge of #537), the commit the [index](./README.md) and every theme document
+It describes the code at commit `5ae62f2c2076f308d78a5d3fe97393664c574a9f` (origin/main,
+2026-11-28, the merge of #542), the commit the [index](./README.md) and every theme document
 are pinned to. The document was first written against `fb6928c7` and has been brought up to
-date three times. After the final audit of docs/theory it was re-read at `c97c88ef` (the
+date four times. After the final audit of docs/theory it was re-read at `c97c88ef` (the
 merge of #525): the code that the fixes of P19, P20, P50, P51, P52, P53, P54 and P55 changed
 (#470, #478, #479, #484, #487, #494, #510, #518, #522) was re-read there, and for every other
 function, type and constant this document names, its definition at `fb6928c7` was compared
@@ -25,13 +25,18 @@ cited code changed otherwise was re-read or marked `unread@pin`. It was then pin
 faults, and whose changes to `reduce/lift.rs`, `explore/orbit.rs`,
 `explore/orbit/findings.rs`, `explore/properties.rs` and `explore/graph.rs` were read; and
 #511, which changes only `Cargo.toml`, adding the `ci-checked` profile (Threats to validity,
-"Fixed-width integers"), and the CI workflow. From `41882b4f` to the pin, the crates change
+"Fixed-width integers"), and the CI workflow. From `41882b4f` to `5f59fae2` (the merge of #537), the crates change
 by #531 and #536 (`explore/orbit/liveness.rs`: the symmetric lasso lift faults instead of
-panicking), which were read at the pin; by #532 (`cli/src/prove.rs`,
-`cli/src/state_findings.rs`, `cli/src/verify/escalate.rs`, `cli/src/verify/refuted.rs`),
+panicking), which were read at `5f59fae2`; by #532 (`cli/src/prove.rs`,
+`cli/src/state_findings.rs`, `cli/src/verify/escalate.rs`, `cli/src/verify/refuted.rs`,
+`cli/tests/prove_cli.rs`),
 #534 (`cli/tests/proof_equivalence.rs`), #535 (`cli/tests/engine_corpus.rs`) and #537
 (`explore/symmetry/g6.rs`, a test, and its `mod` line), none of which this document cites;
-and #533 changes only `.config/nextest.toml`. Code is cited as in
+and #533 changes only `.config/nextest.toml`. From `5f59fae2` to the pin, the crates change
+only by #539 (`cli/tests/engine_equivalence.rs` runs TLC under `-lncheck final`; it changes no
+test this document cites in what it compares) and #541 (`reduce/lift.rs::lift` and
+`reduce/partition.rs::Succ::shortest_path`: a class move with no S path behind it is a fault,
+with a test in `core/tests/reduce.rs`), which were read at the pin. Code is cited as in
 [semantics.md](./semantics.md): paths are relative to `crates/rdra-ish-core/src/lifecycle/`
 unless they start with `cli/` (`crates/rdra-ish-cli/`) or name the crate root (`core-root/`,
 for `crates/rdra-ish-core/src/`).
@@ -267,7 +272,9 @@ more for its binding, so the edges alone exceed `verify`'s default memory limit 
 which stops the run first; a larger `--memory` reached it. Not reproduced. *Fixed in #479:* every edge number (`first`, the edge
 being pushed, a parent edge) goes through `edges.rs::edge_number`, which panics past the
 last `u32` below the `INITIAL` marker instead of wrapping
-(`edges.rs::tests::an_edge_number_past_u32_panics`).
+(`edges.rs::tests::an_edge_number_past_u32_panics`), and the index of an orbit self-edge
+through a checked `u32::try_from` of its own in `bfs.rs::Bfs::take`, which panics past `u32`
+too.
 
 ## Memory accounting and the stop rule
 
@@ -554,7 +561,11 @@ false vacuity warning, and P54 could have too, since the state that met the prem
 merged away or never built. On a reduced run or a
 run up to symmetry the stored states are representatives; that a premise met by some
 member of a class is met by its representative is theme (a). The `after` premise is read
-from the step's ends (`ComponentRun::step_ends`), filled by `Bfs::push` on every move.
+from the step's ends (`ComponentRun::step_ends`): on a run that keeps its edges, from the edge
+list, where an edge moves when its ends differ or it is an orbit self-edge
+(`graph.rs::ComponentRun::step_ends_with`); on a run that keeps none (one under
+`Caps::stop_when_all_violated`), from what `Bfs::push` recorded on every move
+(`edges.rs::StepEnds::read`).
 Until #494 a self-loop (`Probe::Loop`) counted as a run of the use case while the
 assertion is never evaluated on it (P51), so the two readers treated the step in opposite
 ways. Now `Ends::moved` records whether a move of the step changes the state (an orbit
@@ -613,7 +624,10 @@ and a fairness `F`. Let `N_b = {s ∈ S_G : ¬goal_b(s)}` and `E_N` the edges of
 ends in `N_b` and different ends. A **stop** is `s ∈ N_b` with `En(s) = ∅` (`Plain`) or
 `¬Moves(s)` (`WfNext`). A strongly connected component `C` of `(N_b, E_N)` is **fair** when
 `|C| ≥ 2` and every fair instance enabled at every state of `C` is in `Tk(C)`. The **ends**
-are the stops and the states of fair components.
+are the stops and the states of fair components. On the reduced graph with looping classes
+(`decide_liveness_reduced`, under `StopRule::Looping`), a state of `N_b` with no fair instance
+enabled is also a stop when its class can loop (`Reduction::can_loop`), not only when it has no
+move; that this is sound is theme (a).
 
 **N9 (Liveness by fair components).** On a complete `G`, if some `s ∈ S_G` with
 `trig_b(s) ∧ cause_b(s) ∧ ¬goal_b(s)` reaches an end by a path of `E_N` (of length zero
@@ -751,7 +765,8 @@ Three consequences.
 - *P20, fixed.* Every printed trace now replays on the system the run explored and, when that
   system is reduced or a quotient, lifts with every step checked against the unreduced cone
   (#518 for state rules and `after`; #522 for the rest; #529 for the lifts' own look-ups and
-  the `always` checks). Before, plain safety traces were not
+  the `always` checks; #541 for the search for a class move's S path, which panicked until
+  then). Before, plain safety traces were not
   replayed, reduced traces were lifted with `debug_assert!` checks only, and symmetric traces
   were replayed but failed by panic. A reduced liveness counterexample whose unreduced rerun
   stops still becomes `not decided` rather than printing the lifted lasso.
@@ -765,9 +780,16 @@ Three consequences.
   `explore/orbit/liveness.rs` `Product::new`'s permutations and the look-ups of the pair search
   before the lift (`lasso`, `thread_walk`, `walk_in`, `threads_covered`), and in
   `explore/liveness.rs` their counterparts on a plain run (`edge_between`, `fair_loop`,
-  `walk_in`); preconditions of a caller; and the deadlock lift's trace slot. The two that read a
-  lifted path, `lift_stop`'s state list and the last step of an `after` violation in
-  `explore/orbit.rs::run_orbits_annotating`, hold whatever path is lifted.
+  `walk_in`); preconditions of a caller; the deadlock lift's trace slot; and, outside those
+  files, the `expect`s and the `panic!` of the extended sub-lifecycle that `lift` rebuilds and
+  explores again (`reduce/extended.rs::Extended::build` and its helpers,
+  `reduce/mod.rs::TransitionSystem::moves_of_into`, `explore/moves.rs::TransitionSystem::initial_states`),
+  which hold if `Extended::rebuild` reproduces the build the reduction was made from (not
+  checked), `Canon::canonical`'s count of places, and the last state of a replayed lasso
+  (`lasso.rs::TransitionSystem::replay_lasso`, `::explain_property`, `::unfair_loop`; a replay
+  holds its start). Two read a lifted path, `lift_stop`'s state list and the last step of an
+  `after` violation in `explore/orbit.rs::run_orbits_annotating`, and both hold whatever path
+  of the system's own states is lifted; the lasso replays' last states hold for any replay.
   A failure there stops the command; none can print a trace that does not replay. Until #531
   the lasso lift of `explore/orbit/liveness.rs` held its own with an `expect` and two
   `assert!`s (that an edge is the move at its place and that its permutation takes the move
@@ -779,7 +801,11 @@ Three consequences.
   `explore/orbit.rs::lift_path` (that a stored edge is a move of its source) and
   `decide_property` (that the stored path breaks the property) held theirs the same way; each
   is now a `ReplayError` or `LassoFault::Satisfies` (test
-  `core/tests/reduce.rs::a_lift_from_no_initial_state_is_a_replay_error`).
+  `core/tests/reduce.rs::a_lift_from_no_initial_state_is_a_replay_error`). The search for the
+  S path behind a class move, `reduce/partition.rs::Succ::shortest_path`, ended in a `panic!`
+  until #541, after #529, and the list above, pinned at `5f59fae2`, left it out; it now
+  returns `None`, which `lift` reports as the `ReplayError::NoMove` of that step (test
+  `core/tests/reduce.rs::a_class_move_with_no_s_path_is_a_replay_error`).
 
 ### The lift's mechanics
 
@@ -789,7 +815,7 @@ only what the lift computes.
 - **Reduced, finite path** (`lift`). The S part of the start becomes an initial S state of
   its class; each T step is kept and the S rises it causes are inserted; each class move
   becomes a shortest S path (`Succ::shortest_path`) from the current concrete S state into
-  the target class. The S path is lifted again under an inner reduction, and, when S was
+  the target class, or, when there is none, the `NoMove` of that step (#541). The S path is lifted again under an inner reduction, and, when S was
   explored up to its group `H`, first lifted to concrete S states (`OrbitRun::lift_path`).
 - **Reduced, loop** (`lift_cycle`). The prefix and `c` copies of the loop are lifted for
   `c = 4, 8, …, 4,096` (`MAX_COPIES`), until the concrete state at the end of one copy
@@ -934,14 +960,16 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   the review rather than for this document (see the first paragraph). Each is now a test on
   a clean build ([Reproductions](#reproductions)).
 - **Read at the pin for the N16 table and the lift's mechanics:** `reduce/lift.rs::lift`
-  (every lifted step checked by `is_move`, and since #529 every look-up), `::lift_cycle` and
+  (every lifted step checked by `is_move`, since #529 every look-up, and since #541 the S-path
+  search, `reduce/partition.rs::Succ::shortest_path`), `::lift_cycle` and
   `::lift_stop` (a failed lift is `Spurious::Fails`), `explore/graph.rs::ComponentRun::lifted_path`,
   `explore/mod.rs::ComponentRun::trace_violations`, `explore/properties.rs::ComponentRun::decide_property`,
   `explore/orbit.rs::lift_path`, `::replays` and `OrbitRun::decide_always`, the safety lift of
   `explore/orbit.rs`, `explore/orbit/findings.rs::lift_to` and `trace_to_slot`, the lasso lift
   of `explore/orbit/liveness.rs`, `explore/liveness.rs::ComponentRun::decide_liveness` and
   `decide_liveness_reduced`, and the `TraceFault` arms of `targets.rs`. For N18,
-  `targets.rs::vacuity`, `unmet_of_rule` and `unmet_of_assert` (which reads `step_ends`)
+  `targets.rs::vacuity`, `unmet_of_rule` and `unmet_of_assert` (which reads `step_ends`),
+  `graph.rs::ComponentRun::step_ends_with` (which reads the edges of a run that keeps them)
   and `edges.rs::StepEnds::read` (which records whether a move changes the state,
   `Ends::moved`, since #494); for N14, the choice of the least `(idx, k)` per column value
   and the `has_way_on` filter in `findings.rs`.
@@ -1106,3 +1134,13 @@ Changes to statements of this document after it was first written, newest last.
   verdicts at 255; the test runs them at 255 only, against the verdicts written into it,
   and the paragraph says what the build test checks. The tests of the `pr` exclusion of
   `.config/nextest.toml`, among them the oracle's comparison, are marked main only.
+- **2026-11-28, fourth audit; re-pin to `5ae62f2c`** (the merge of #542), with the method of
+  the first paragraph. #541 made the search for a class move's S path a fault
+  (`Succ::shortest_path` returns `None`); at `5f59fae2` it was a release `panic!` on the lift's
+  path that the Counterexamples list left out. That list, the P20 consequence, the Reduced
+  bullet and the Threats now say so, and the list adds the `expect`s a lift reaches outside
+  the lift's files. The `after` premise was said to be read from what `Bfs::push` records on
+  every move; that holds only for a run that keeps no edges, and the others scan the edge
+  list (`step_ends_with`). N9's stops add the `StopRule::Looping` rule of a reduced graph. The
+  orbit self-edge's index has its own checked conversion beside `edge_number`. The #532 files
+  include `cli/tests/prove_cli.rs`.
