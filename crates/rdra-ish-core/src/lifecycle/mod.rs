@@ -10,6 +10,7 @@
 #![cfg_attr(not(test), deny(clippy::cast_possible_truncation))]
 
 mod build;
+mod certificate;
 mod cone;
 mod diag;
 mod explore;
@@ -33,6 +34,7 @@ mod view;
 #[cfg(test)]
 mod tests;
 
+pub use certificate::{CertFault, CertStats, ReachCertificate};
 pub use cone::{Cone, Seed, Target, VarSet};
 pub use diag::{
     created_via_apis, has_errors, label_prefix, Blocked, CapGrowth, Diag, Entry, Exit, Need,

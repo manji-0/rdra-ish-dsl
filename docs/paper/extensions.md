@@ -41,39 +41,47 @@ nixpkgs.
   `Decl`, `Init`, every `Step_a`, and the kept set `K`, with one initiation and one consecution query
   per member of `K`. Its size is about one Houdini round instead of the whole search.
 
-### BFS `ok`: a reachable-set certificate (investigated, not built)
+### BFS `ok`: a reachable-set certificate (built for unreduced cones)
 
-The certificate would be the set `R` of states a run stored, with a checker of three facts: every
-initial state is in `R`; every successor of a state of `R` is in `R`; every state of `R` satisfies the
-checked rules. Then `Reach ⊆ R`, so the rules hold. For a reduced cone the facts are about `R` of the
-reduced system, and the partition and split certificates (already checked on every run) carry it
-to the cone.
+The certificate is the set `R` of states a complete run stored.
+`crates/rdra-ish-core/src/lifecycle/certificate.rs` writes it (`ReachCertificate::write`: a magic
+line, the width, the count, then the raw states), reads it back, and checks three facts with the
+step relation alone (`TransitionSystem::check_reach_certificate`): every initial state is in `R`;
+every successor of every state of `R` is in `R`; every invariant holds in every state of `R`. Then
+`Reach ⊆ R`, so the invariants hold. The checker uses none of the search's code: no frontier, no
+parents, no packed store, no table, no threads. It refuses a reduced cone (`CertFault::Reduced`),
+whose class moves are not a cone's steps, and a run that stopped (`CertFault::Incomplete`).
 
-| Model (2 instances) | States in all BFS runs | Packed size of all runs | Largest run | Bits per state (largest) |
-|---|--:|--:|--:|--:|
-| patent-ops | 2,017,009 | 17.6 MB | 1,341,707 | 76 |
-| clinic-ops | 5,617,011 | 45.5 MB | 2,238,170 | 68 |
-| food-permit-ops | 7,009,703 | 79.1 MB | 4,846,569 | 106 |
-| insurance-claim-ops | 13,499,587 | 150.6 MB | 4,580,087 | 94 |
+`crates/rdra-ish-core/examples/paper_certify.rs` certifies every distinct safety cone of a sample,
+unreduced. It writes each certificate to a file, reads it back, checks it, and then plants two
+faults in the largest certificate, which the check must reject. Data:
+[eval/data/certificates.tsv](./eval/data/certificates.tsv).
 
-(From the `perf-run` lines of a `perf` build: states times `bits_packed`.)
+| Run | Cones certified | `ok` | Largest certificate | Its check |
+|---|--:|--:|---|--:|
+| five domain models, 1 instance | 51 | 51 | 30,277 states, 113,434 moves, 1.5 MB (oidc-auth) | 57 ms (run: 23 ms) |
+| patent-ops, 2 instances | 11 | 10 | 1,494,339 states, 9,285,628 moves, 66 MB | 3.8 s (run: 1.6 s) |
+| `formal-verification-fail/order.rdra`, 2 instances | 1 | 0 | 7 states | rejected: `Violated { invariant: "Inv_Order_0" }`, as the sample expects |
 
-- **Size.** 18 to 151 MB, before compression, for the domain models at the default bound. That is
-  small enough to write.
-- **Checking cost.** One successor computation per state: about the cost of one BFS pass, without
-  the frontier, the parents or the reductions' bookkeeping. It parallelizes trivially.
-- **What it would and would not catch.** A checker that recomputes successors with the same step
-  relation shares the builder, so it catches faults in the search, the store, the reductions' tables
-  and the canonical form, but not in the builder (residual risk 1). A checker with its own step
-  function, for example the reference interpreter of `core/tests/reference/` on its subset of the
-  language, would also catch builder faults.
-- **Liveness.** An `ok` for `eventually` or `leads_to` needs, beyond `R`, a certificate that no fair
-  lasso violates the property: a ranking over the goal-free part of the graph, or the component
-  decomposition with the fair-instance bits per component, re-checked by a small program. This is
-  open.
-
-**Status.** The `proved` cross-check is done for four of five domain models. The `ok` certificate is
-designed and sized here, not built.
+- Every certificate of a cone whose rules hold checks `ok`. The certificate of the failing sample is
+  rejected for the invariant that `verify` reports violated.
+- patent-ops' `Forbidden_OfficeAction_3` cone has more than 20 million states unreduced, so its run
+  stops at the example's cap and it gets no certificate. `verify` decides that cone reduced
+  (1,341,707 states). A certificate of a reduced cone would be the reduced run's states plus the
+  split and partition certificates that every build already checks, read by a checker of the class
+  moves. That checker is not built.
+- **Planted faults.** On every sample run, dropping one state from the largest certificate fails
+  with `SuccessorMissing` (patent-ops at 2 instances: a successor of state 1,494,178 by
+  `DecideFiling`). Adding a state with one changed byte fails too, since its successors are not
+  certified.
+- **Cost.** The check takes 2 to 3 times the run of the same cone. Raw certificates are 66 MB for
+  1.5 million states. Packing them as the store does (46 bytes to 76 bits per state on patent-ops) would make them
+  about 5 times smaller.
+- **Limits.** The checker computes successors with the same step relation as the run, so it does
+  not catch a fault in the builder (residual risk 1). It catches faults in the search, the store,
+  the parallel exploration and the caps. It covers state rules, not `after` assertions or
+  properties. It is an example, not a flag of `verify`: wiring it in as `verify --certify DIR` is
+  the remaining step.
 
 ## T17: the requirements-to-code chain
 
