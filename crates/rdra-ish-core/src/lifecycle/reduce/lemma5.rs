@@ -56,6 +56,71 @@ impl fmt::Display for SplitFault {
 }
 
 impl TransitionSystem {
+    /// Per action, the reads Lemma 5 checks (`action_reads` with `copy_reads`) and the
+    /// writes (`action_writes`).
+    fn read_write_sets(&self) -> (Vec<VarSet>, Vec<VarSet>) {
+        let reads = self
+            .actions
+            .iter()
+            .map(|a| {
+                let mut r = self.action_reads(a);
+                for (_, c) in self.copy_reads(a) {
+                    r.extend(c);
+                }
+                r
+            })
+            .collect();
+        let writes = self.actions.iter().map(|a| self.action_writes(a)).collect();
+        (reads, writes)
+    }
+
+    /// The sets `split_faults` checks, as one certificate for the Lean checker of
+    /// proofs/lean (`lake exe lemma5-check`, `RdraIsh/Lemma5Check.lean`): the reads and
+    /// writes per action, `monotone_vars`, the split's sets, each `S_a` action's folded reads,
+    /// and the seeds. Ids are `VarId::index` and `ActId::index`.
+    #[cfg(test)]
+    pub(in crate::lifecycle) fn lemma5_certificate(
+        &self,
+        seeds: &[Seed],
+        split: &Split,
+    ) -> serde_json::Value {
+        use serde_json::json;
+        let vars = |s: &VarSet| s.iter().map(|v| v.index()).collect::<Vec<_>>();
+        let acts =
+            |s: &std::collections::BTreeSet<ActId>| s.iter().map(|a| a.index()).collect::<Vec<_>>();
+        let (reads, writes) = self.read_write_sets();
+        let monotone: Vec<usize> = self
+            .monotone_vars()
+            .iter()
+            .enumerate()
+            .filter_map(|(i, m)| m.then_some(i))
+            .collect();
+        let folded: Vec<Vec<usize>> = self
+            .action_ids()
+            .map(|id| {
+                let fold = split.folds.iter().find(|f| f.act == id);
+                fold.map(|f| vars(&f.reads(self))).unwrap_or_default()
+            })
+            .collect();
+        let keep: Vec<usize> = seeds.iter().flat_map(|(_, kept)| acts(kept)).collect();
+        json!({
+            "nv": self.vars.len(),
+            "na": self.actions.len(),
+            "rd": reads.iter().map(vars).collect::<Vec<_>>(),
+            "wr": writes.iter().map(vars).collect::<Vec<_>>(),
+            "mono": monotone,
+            "t": vars(&split.t),
+            "s": vars(&split.s),
+            "ta": acts(&split.t_actions),
+            "sa": acts(&split.s_actions),
+            "obs": vars(&split.obs),
+            "inputs": vars(&split.inputs),
+            "folded": folded,
+            "seeds": seeds.iter().map(|(seed, _)| vars(seed)).collect::<Vec<_>>(),
+            "keep": keep,
+        })
+    }
+
     /// Every fault of `split` as the split of this cone system for `seeds` (Lemma 5 of
     /// docs/theory/cones.md, and the side rule of Definition 3); empty when it is one.
     pub(in crate::lifecycle) fn split_faults(
@@ -67,18 +132,7 @@ impl TransitionSystem {
         let mut fault = |clause, what: String| out.push(SplitFault { clause, what });
         let var = |v: &_| self.var_name(*v);
         let act = |a: &ActId| self.actions[a.index()].name.as_str();
-        let reads: Vec<VarSet> = self
-            .actions
-            .iter()
-            .map(|a| {
-                let mut r = self.action_reads(a);
-                for (_, c) in self.copy_reads(a) {
-                    r.extend(c);
-                }
-                r
-            })
-            .collect();
-        let writes: Vec<VarSet> = self.actions.iter().map(|a| self.action_writes(a)).collect();
+        let (reads, writes) = self.read_write_sets();
         let (t, s) = (&split.t, &split.s);
 
         for v in self.var_ids() {

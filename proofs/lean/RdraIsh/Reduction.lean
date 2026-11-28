@@ -26,8 +26,10 @@ What is simplified, against cones.md:
 - *Labels.* The bisimulation is over unlabelled steps, so the preservation of `T_a` action
   labels (Theorem A8, consequence 2) is not stated. The parameter bindings of Lemma 6
   ("Parameters") are inside the step relations, not modelled.
-- *Lemma 6 and (B1)–(B3) are hypotheses.* Nothing here derives them from `restrict_to`, the
-  folds or `quotient_blocks`. That gap, where the stub-param bug (P67) sat, stays open.
+- *Lemma 6 and (B1)–(B3) are hypotheses here.* `Lemma6.lean` derives Lemma 6 over the action
+  model of `Restrict.lean`, from per-action hypotheses read from `restrict_to` and the folds;
+  (B1)–(B3) are hypotheses here, and `Sweep.lean` derives them from the run-time check
+  `partition/reference.rs::stable` over a model of it.
 -/
 
 namespace RdraIsh

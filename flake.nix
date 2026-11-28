@@ -188,6 +188,11 @@
             pkgs.typescript
             pkgs.go
 
+            # Lean proofs (proofs/lean). elan installs the toolchain
+            # proofs/lean/lean-toolchain pins, on the first lake build.
+            # nixpkgs' lean4 is a different pin.
+            pkgs.elan
+
             pkgs.pre-commit
             # Mutation run over the liveness ladder (.cargo/mutants.toml, .github/workflows/mutants.yml)
             pkgs.cargo-mutants

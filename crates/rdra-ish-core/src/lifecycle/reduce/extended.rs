@@ -27,6 +27,8 @@ pub(super) struct Extended {
     pub(super) obs_local: VarSet,
     /// The raw inputs and the bit vars, in `system`'s ids.
     pub(super) inputs_local: VarSet,
+    /// The bit vars, in `system`'s ids: the inputs after the raw ones.
+    pub(super) bit_vars: VarSet,
     /// The bit groups, in the cone's ids.
     pub(super) bits: Vec<Vec<Fold>>,
     pub(super) variants: HashMap<ActId, Vec<ActId>>,
@@ -247,6 +249,7 @@ impl Extended {
             .map(|a| a.is_none_or(|a| !s_actions.contains(&a)))
             .collect();
         let mut inputs_local: VarSet = inputs.iter().map(local).collect();
+        let bit_vars: VarSet = groups.vars.iter().copied().collect();
         inputs_local.extend(groups.vars);
         let obs_local: VarSet = obs.iter().map(local).collect();
         // Each reason is one a `shadow` build or a test can drop (`dropped`,
@@ -294,6 +297,7 @@ impl Extended {
             rise,
             obs_local,
             inputs_local,
+            bit_vars,
             bits: groups.bits,
             variants: groups.variants,
             params: map.params,

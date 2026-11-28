@@ -571,6 +571,14 @@ because enlarging a cycle can only add states where an instance is disabled and 
 it is taken; strong fairness would need the recursive decomposition of Lichtenstein–Pnueli
 and Emerson–Lei, which is why the design note keeps it out of scope.
 
+*Lean.* `proofs/lean/RdraIsh/Search.lean` states the check on a system whose reachable states
+lie in a list, with a component as mutual reachability by `E_N` and the stop rule as a predicate
+(`True`, `¬ Moves`, or a looping class for `StopRule::Looping`), and proves both directions
+(`accepts_iff`): the check accepts iff a behavior that satisfies `F` violates the property.
+`SearchSym.lean` proves the same for the search on (state, binding) pairs of a run up to symmetry
+(`oAccepts_iff`), also with the commutation only on Theorem A18's set `W` (`oAccepts_on_iff`). Neither reads the code: Tarjan's components, the bit sets and N10's cut are
+read from it ([proofs/lean/README.md](../../proofs/lean/README.md#the-liveness-searches)).
+
 **N10 (Stopped graph).** On a stopped `G`, a state at or after `expanded(G)` is never a
 stop, and a component that holds one is never fair (`avoid`'s `open` and the `s < expanded`
 test). Then every end found has its out-edges fully recorded, so `En`, `Moves` and `Tk` are

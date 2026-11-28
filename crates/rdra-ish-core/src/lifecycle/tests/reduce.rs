@@ -2666,6 +2666,84 @@ fn every_split_passes_its_check() {
     assert!(reducing > 0, "{splits} splits, {reducing} with an S side");
 }
 
+/// Writes the sets of every split `every_split_passes_its_check` walks, one JSON certificate
+/// per line, to the file `RDRA_LEAN_CERTS` names, for the Lean checker of proofs/lean
+/// (`scripts/check-lean-certificates.sh` runs both). Equal certificates are written once.
+#[test]
+#[ignore = "run by scripts/check-lean-certificates.sh"]
+fn dump_lemma5_certificates() {
+    use std::io::Write;
+    let path = std::env::var("RDRA_LEAN_CERTS").expect("RDRA_LEAN_CERTS names the output");
+    let mut out = std::io::BufWriter::new(std::fs::File::create(&path).expect("create"));
+    let mut seen = std::collections::HashSet::new();
+    let (mut splits, mut written, mut reducing) = (0, 0, 0);
+    for (name, model) in &walked_models() {
+        for (label, bounds) in [("states", Bounds::STATES), ("verify", Bounds::VERIFY)] {
+            let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+            for (cone, seed) in cones_with_seeds(&ts) {
+                let (sys, local) = ts.cone_system(&cone, [seed]);
+                for inputs in [true, false] {
+                    let split = sys.split_with(&local, inputs);
+                    splits += 1;
+                    let mut cert = sys.lemma5_certificate(&local, &split);
+                    if !seen.insert(cert.to_string()) {
+                        continue;
+                    }
+                    cert["name"] = format!("{name} {label} inputs={inputs}").into();
+                    writeln!(out, "{cert}").expect("write");
+                    written += 1;
+                    reducing += usize::from(!split.s.is_empty());
+                }
+            }
+        }
+    }
+    out.flush().expect("flush");
+    eprintln!(
+        "{splits} splits, {written} distinct certificates ({reducing} with an S side) written \
+         to {path}"
+    );
+    assert!(reducing > 0, "a certificate with an S side");
+}
+
+/// The checks of `reduce/hypotheses.rs` (`RiseTable` and the stages of `Lemma6Staged`,
+/// `hloop`, the inner split) pass on the samples, the domain samples, and the engine corpus
+/// cases that build a model: every target and property cone is reduced at `Bounds::STATES`,
+/// where a fault panics in this debug build. The counts show each check ran: on rises, on
+/// runs with a class that can loop, on nested reductions, and on unobserved sub-lifecycles.
+#[test]
+fn every_quotient_passes_the_checks_of_its_hypotheses() {
+    let caps = Caps::new(usize::MAX, 50_000);
+    let before = crate::lifecycle::reduce::CHECKED.with(|c| c.get());
+    let mut reduced = 0;
+    for (_, model) in &walked_models() {
+        let ts = TransitionSystem::build(model, Bounds::STATES, &Scope::ALL).ts;
+        for (cone, seed) in cones_with_seeds(&ts) {
+            let (sys, local) = ts.cone_system(&cone, [seed]);
+            reduced += usize::from(sys.reduced(&local, caps).reduction().is_some());
+        }
+    }
+    let after = crate::lifecycle::reduce::CHECKED.with(|c| c.get());
+    let got = crate::lifecycle::reduce::Checked {
+        rises: after.rises - before.rises,
+        loop_runs: after.loop_runs - before.loop_runs,
+        looping: after.looping - before.looping,
+        inner: after.inner - before.inner,
+        unobserved: after.unobserved - before.unobserved,
+        faults: [0; 4],
+    };
+    eprintln!("{reduced} cones reduced; checked {got:?}");
+    assert!(
+        reduced > 0
+            && got.rises > 0
+            && got.loop_runs > 0
+            && got.looping > 0
+            && got.inner > 0
+            && got.unobserved > 0,
+        "{reduced} cones reduced; checked {got:?}"
+    );
+    assert_eq!(after.faults, before.faults, "no check fails");
+}
+
 /// The reduction is a divergence-blind stuttering bisimulation, and `Deadlock` reads "no
 /// path changes the column or deletes the row" (`can_leave`), a reachability the quotient
 /// keeps, not "no step at all", which it does not: a state looping forever in its block's

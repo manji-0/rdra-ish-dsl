@@ -21,9 +21,9 @@ This file states that structure and proves it changes nothing:
 - `reducedStaged` is `R` with the `T` move of the code; `staged_step_iff` shows its steps are
   those of `reduced` at every state related to a state of `C`, so `a8_staged` follows.
 
-`stages` itself is a parameter: nothing here reads its definition. Lemma 6 says the rises go
-through the stages it lists. That the list is what `extended.rs` makes the rises do is part of
-the Lemma 6 gap.
+`stages` is a parameter here. `Restrict.lean` defines it as `Reduction::stages` does (the raw
+inputs, then each bit that changes), and `Lemma6.lean::rise_fwd` proves that the rises of its
+`X` go through that list.
 -/
 
 namespace RdraIsh

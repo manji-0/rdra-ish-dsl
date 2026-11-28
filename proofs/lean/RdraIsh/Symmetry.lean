@@ -6,12 +6,15 @@ import RdraIsh.Stutter
 A group `G` acts on the states and the labels of `M`; `G_s` (`mem s`) is the subgroup that a
 state allows (cones.md, Definition 6: the permutations that fix the absent slots). The
 fields `step`, `mem_step` and `init` are the conclusion of Theorem A18's first sentence
-(steps commute with every `g ∈ G_s`, and `g ∈ G_t`) and of (G3); cones.md derives them from
-(G1)–(G6), which are not modelled here. Two differences from cones.md:
+(steps commute with every `g ∈ G_s`, and `g ∈ G_t`) and of (G3). Two differences from
+cones.md:
 
-- `step` is assumed on every state, where Theorem A18 states it for reachable states. The
-  quotient's states are images `g(s)` of reachable states, which are reachable only once
-  the theorem is proved, so the statement over all states is the simple one to use.
+- `step` is assumed on every state, where Theorem A18 states it on the states whose absent
+  rows hold base values, a set `W` that holds the initial states and is closed under steps
+  and every `G_s`. `SymOn` (`SymmetryLiveness.lean`) assumes it on such a `W`, and
+  `SymActions.lean` derives that `SymOn` from (G1)–(G6) over a slot-level model of the
+  cone system (`SymAct.Sys.symOn`). The liveness theorems and the orbit search have forms
+  over `SymOn` (`a23_on`, `liveHolds_iff_not_oAccepts_on`).
 - The group laws are only what the proofs use: `act` composes and has an inverse, `G_s` is
   closed under both, and `G_{g(s)} = G_s` for `g ∈ G_s` (`mem_act`). No group structure is
   imported.

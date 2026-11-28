@@ -458,7 +458,7 @@ impl QuotientCache {
         if store {
             let bytes = match &classes {
                 Classified::Classes(c) => c.bytes(),
-                Classified::Nothing | Classified::TooLarge => 0,
+                Classified::Nothing | Classified::TooLarge | Classified::Untrusted => 0,
             };
             let charge = caps.memory.map(|pool| Charge::hold(pool.root(), bytes));
             // A pool too full to hold the entry leaves it out; the result is the same.
@@ -678,7 +678,9 @@ mod tests {
     fn quotient(c: Classified) -> Arc<Classes> {
         match c {
             Classified::Classes(c) => c,
-            Classified::Nothing | Classified::TooLarge => panic!("a quotient"),
+            Classified::Nothing | Classified::TooLarge | Classified::Untrusted => {
+                panic!("a quotient")
+            }
         }
     }
 

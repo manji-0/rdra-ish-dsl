@@ -141,7 +141,7 @@ verifies:
   per-construct argument for the TLA+ printer (T1), the theorems marked `P-sketch` in the
   [summary by evidence class](./claims.md#summary-by-evidence-class).
 - **Lean** (4.36.0, its kernel and the three standard axioms) for the Lean proofs that the
-  M evidence of A8, A15, A18, A20, A21 and A23 cites ([proofs/lean](../../proofs/lean/README.md)).
+  M evidence of A8, A15, A18, A20, A21, A23 and N9 cites ([proofs/lean](../../proofs/lean/README.md)).
 - **Kani** and the Rust compiler. CI's verification jobs build with overflow checks (profile
   `ci-checked`), so a fixed-width integer that wraps panics there; release builds wrap
   silently.
@@ -252,10 +252,8 @@ not a bound on what exists.
   `unchanged`.
 - **A20.** Whether each symmetry rule is needed is open: eleven reasons have no
   witness of their own: the seven of `Reduced` and four of the six of `Observed`.
-- **A23.** The analogue of N9 for the annotated quotient is not proved: that a component the
-  orbit run's rule over thread pieces accepts holds a thread-fair violating annotated lasso, and
-  that every such lasso lies in an accepted component or reaches a stop. The entity-cone findings
-  up to symmetry have no theorem.
+- **A23.** The entity-cone findings up to symmetry have no theorem. The orbit run's search is
+  proved by its acceptance criterion, not by its code.
 - **A24.** That a counterexample a cap-stopped safety cone finds is real has no test.
 - **A26.** The memory limit does not bound the process.
 - **A27.** Covered cones have no test of their own.
@@ -294,6 +292,8 @@ not a bound on what exists.
 - **N8.** TLC cannot state `can_reach`. The naive oracle shares the step relation and the
   evaluator, and does not cover entity cones up to symmetry. That the reported state is the
   first in BFS order rests on the proof alone.
+- **N9.** The Lean proof states the acceptance criterion, not `avoid`'s code: Tarjan's
+  components, the bit sets and N10's cut are read from the code.
 - **N11.** The lasso checks share code with the search they certify (`moves` and
   `Property::fair_instance`; `holds_bound` and `triggers`), so a fault there passes both.
 - **N13.** The second half of `a_path_that_does_not_replay_is_a_fault` never runs.
