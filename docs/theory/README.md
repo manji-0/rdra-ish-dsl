@@ -259,8 +259,10 @@ not a bound on what exists.
   `each_successor` applies the deletes and then the choices last; it has no owner
   `Transition`, no data domain sizes and no `null` data values, and covers neither the reduced
   cone nor the extended sub-lifecycle (A22). That the model is `Group::apply`, `breaks.rs::scan`
-  and `each_successor` is read from the code. The least BFS depth of each class is a paper step
-  only.
+  and `each_successor` is read from the code, and so is `WF`. The Lean model's `G6` forbids
+  every guard read of a `New` row's owner, where the scan forbids it only when the parent's
+  class moves; the remaining case is a paper step. The least BFS depth of each class is a paper
+  step only.
 - **A20.** Whether each symmetry rule is needed is open: eleven reasons have no
   witness of their own: the seven of `Reduced` and four of the six of `Observed`; the snapshot
   shows only that dropping one changes which entities a cone's group leaves out. That `Hyp`

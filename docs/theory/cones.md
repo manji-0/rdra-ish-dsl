@@ -1460,12 +1460,17 @@ the Lean model `proofs/lean/RdraIsh/SymActions.lean` states them in that form (`
   pre-existing row that starts at its base names no row. That `I` is closed under every `G_s` is
   then step 2 of the proof.
 - (G4): a creation writes every owner of the created row whose base names a row.
-- (G6): no guard reads, in the state before the step, an owner on a `New` parameter.
+- (G6): no guard reads, in the state before the step, an owner on a `New` parameter whose
+  parent's class moves. The scan leaves the parent's class out when a guard makes such a read.
+  The Lean model's `G6` is stronger: it forbids every such read, whatever the parent's class.
 
-Each condition constrains only terms and effects naming rows of a class that moves, so it holds
-of a class the scan leaves out. Two more hypotheses enter. `WF`: a term reads, and an effect
-writes, a column or an owner on a row of its own entity, and every parameter it names exists,
-which the builder's typing gives. `Built`: the two facts of the builder above. (G5) is the
+(G1)–(G4) constrain only terms and effects naming rows of a class that moves, so they hold of a
+class the scan leaves out. The Lean model's `G6` does not mention the group. A guard that reads
+the pre-state owner of a `New` row whose parent's class does not move is outside the Lean model,
+and step 4 covers it on paper. Two more hypotheses enter. `WF`: a term reads, and an effect
+writes, a column or an owner on a row of its own entity, and every parameter it names exists.
+That the builder's typing gives `WF` is read from the code. `Built`: the two facts of the
+builder above. (G5) is the
 semantics of a delete: it resets the row's columns, not its run marks, and keeps its owners.
 
 Outside `W` the commutation can fail. Take an absent row whose optional owner names a row, and a
@@ -1486,8 +1491,8 @@ the slot model, where (G1)–(G6), `WF` and `Built` are the hypotheses above; st
    `hg ∈ G_s`).
 2. *The set `W`* (`W_init`, `SymActions.lean::W_step`,
    `SymActions.lean::W_act`, `SymActions.lean::init_act`). An initial state is in `W`: a created
-   entity starts absent at its base values. A step keeps `W`: by `WF` it writes only rows its
-   parameters bind, and step 3 shows each is present or deleted after the step. `apply` keeps an
+   entity starts absent at its base values. A step keeps `W`: it writes only rows its
+   parameters bind, and by `Built` (step 3) each is present or deleted after the step. `apply` keeps an
    absent row's values, since it fixes the slot and relabels an owner only on a row that is not
    absent, so `W` is closed under every `G_s`. By (G3), `I` is closed under every `G_s`: D4 gives
    every `Start::Any` variable every value of its domain, an identity start moves the child's slot
@@ -1503,10 +1508,16 @@ the slot model, where (G1)–(G6), `WF` and `Built` are the hypotheses above; st
    at slot `g(i)` in `g(s)`. By (G1) a row id is compared only by `=`/`≠` with a row id of its
    class, which a bijection preserves, or an optional owner with `null`, which relabelling
    preserves, and appears in no `In`. An owner read on a non-absent row is relabelled consistently
-   with the row ids it is compared with (G5 for deleted rows). None is read on an absent row: (G6)
-   forbids the pre-state owner of a `New` row, the other bound rows are not absent (step 3), and
-   `Forall`, `Exists`, and `Count` range over the present slots, a set `g` permutes. So every guard
-   of `a` has the same value at `(s, t, p)` and `(g(s), g(t), g(p))`.
+   with the row ids it is compared with (G5 for deleted rows). The other bound rows are not
+   absent (step 3), and `Forall`, `Exists`, and `Count` range over the present slots, a set `g`
+   permutes. The one read of an absent row's owner is the pre-state owner of a `New` row, which
+   (G6) allows only when the parent's class does not move. That row is absent, so in `s ∈ W` it
+   holds the owner's base, and `g` fixes its slot and keeps its values, so `g(s)` reads the same
+   base. As a row id of a class that does not move, it may be compared with any term that
+   names no row of a class that moves (G1), and the rest of this step gives such a term the same
+   value at `(g(s), g(t), g(p))` as at `(s, t, p)`. So the comparison is unchanged. This case is paper only: the Lean model's `G6`
+   excludes it. So every guard of `a` has the same value at `(s, t, p)` and
+   `(g(s), g(t), g(p))`.
 5. *Effects* (`SymActions.lean::post_comm`). For `s ∈ W`, the successor of `g(s)` under `g(p)` is
    `g` of the successor of `s` under `p`, location by location: a literal write is unchanged; a
    data column is written only from a literal or from the slot of a parameter whose class does not
@@ -1528,7 +1539,9 @@ the slot model, where (G1)–(G6), `WF` and `Built` are the hypotheses above; st
    an initial `s`, `can(s)`; for a step `s → t` with `g(s)` stored, `g(s) → g(t)` is a step
    (step 6), the run stores `can(g(t)) = π(g(t))(g(t))`, and `π(g(t)) g ∈ G_t` (step 1). By the
    same induction on the run, every stored state is such an image of a reachable state: an
-   initial one by (G3), a successor by step 6 read backwards. Both hold on the system restricted
+   initial one is `can(c)` of an initial `c`, and a successor is one by step 6 read backwards.
+   (G3) makes each stored initial state an initial state itself, which the replay of a lifted
+   counterexample needs (`PinnedStart`). Both hold on the system restricted
    to `W`, whose reachable states are `T`'s and whose stored states lie in `W` (step 2), and
    `SymOn.quotient_reach_iff` transfers them to `T`. *Depth.* By induction on `d`, the classes
    of the states at depth `≤ d` are the classes the search stores at depth `≤ d`, since `≈` maps
@@ -1542,9 +1555,9 @@ same slots. A step keeps `g ∈ G'_t`, since the slots of the classes left out s
 step 1 of the proof keeps the rest. These are the hypotheses of
 `proofs/lean/RdraIsh/Symmetry.lean::Sym.sub`. It gives a symmetry with the same commutation,
 since every `g ∈ G'_s` is in `G_s`. Over the slot model, the hypotheses of A18 reach the same
-end another way. Each condition of `Hyp` holds of a class that does not move, so marking more
-classes as not moving keeps `Hyp`, and `SymActions.lean::symOn` holds of the system with the
-smaller group. That `Hyp` keeps under marking a class as not moving is read off its definition,
+end another way. Each of (G1)–(G4) in `Hyp` holds of a class that does not move, and `G6` does
+not mention the group. So marking more classes as not moving keeps `Hyp`, and
+`SymActions.lean::symOn` holds of the system with the smaller group. That `Hyp` keeps under marking a class as not moving is read off its definition,
 case by case. No Lean theorem states it. So the scan can always leave a class out and lose only
 reduction (**A20**, P-full). A *witness*
 shows that a rule is needed. It is a model on which dropping the rule (`explore/symmetry/mod.rs::dropped`,
@@ -1746,7 +1759,9 @@ trigger, `present ∧ link`, reads rows that are present. The scan applies (G1) 
 of properties as to guards (`explore/symmetry/breaks.rs::scan`). So step 4 of A18's proof,
 applied to the trigger, makes it read the same on `s` and `g(s)`. Take `after(b)` to be the
 states at which every row of `b` is present or deleted. The trigger implies it, and a step keeps
-it, since a slot never becomes absent again. On it, the goal reads owners only on rows that
+it, since a slot never becomes absent again. The trigger of N9's search is D21's
+`trig_b ∧ cause_b`. `cause_b` is a predicate of the property too, so the scan applies (G1) to
+it, and it is read where the trigger holds, where the rows of `b` are present. On it, the goal reads owners only on rows that
 `apply` relabels (G5), so by (G1) it reads the same. (G6) above argues this for every read of a
 property. The stop rule of `Plain` is `True`; that of `WfNext` is step 2's `¬Moves`. This
 discharge is paper only: the Lean model has no properties, and
@@ -1754,7 +1769,8 @@ discharge is paper only: the Lean model has no properties, and
 code. `explore/symmetry/canon.rs::Canon::canonical` returns `apply(π, s)` for a `π ∈ G_s` that it
 computes from `s` alone; past `BRANCH_CAP` it keeps the first branch. `Twin::Canonical` checks
 the least layout when `|G_s| ≤ 1,296`. (Finite): the domains are bounded, and `G_s` is a product
-of permutation groups of finitely many slots.
+of permutation groups of finitely many slots. The fair instances enabled at a state are
+finitely many, since each is an action and a tuple of slots.
 
 *The search.* `explore/orbit/liveness.rs::Product::search` does not enumerate lassos. It searches
 pairs `(r, b)` of a stored state and a binding. `proofs/lean/RdraIsh/SearchSym.lean` defines what
@@ -1946,8 +1962,9 @@ self-edge stands for a concrete cycle inside its class and marks it (Definition 
 `cli/tests/engine_corpus.rs::each_h_reason_a_case_shows_has_a_witness` (shadow builds only).
 
 *Evidence for A18.* P-full given (G1)–(G6) in the form `breaks.rs::scan` states them, `WF`,
-and the two facts of the builder (`Built`), by the proof above. Its step on least depth and (G6)
-outside guards are paper only. M: the Lean proof
+and the two facts of the builder (`Built`), by the proof above. Three of its parts are paper
+only: the step on least depth, (G6) outside guards, and a guard's read of a `New` row's owner
+whose parent's class does not move. M: the Lean proof
 `proofs/lean/RdraIsh/SymActions.lean::step_comm` derives the commutation on `W` over a slot-level
 model of the cone system. In that model (G1)–(G4) and (G6) are conditions on the syntax of guards
 and effects, as `breaks.rs::scan` states them, (G5) is the semantics of a delete, and `WF` and
