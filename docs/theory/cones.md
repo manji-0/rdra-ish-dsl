@@ -998,7 +998,8 @@ hypothesis that every block whose silent edges between different states contain 
 loop (case 1 of Definition 5). The run's verdict is read as "no lasso of `R` that satisfies
 `Fair_P` and stops only where no move leaves or the class can loop violates `P`"; that the
 search over components finds such a lasso when one exists is N9, outside the Lean proof.
-Cases 2 to 4 of Definition 5 and the proof's (ii) and (iii) are not modelled.
+Cases 2 and 3 of Definition 5 and the proof's (ii) belong to the nested case, which is not
+modelled; case 4 enters only through the hypothesis, and the proof's (iii) is not formalized.
 `ExampleFair.eventually_flag` discharges every hypothesis on a cone whose one block holds a
 silent cycle. R: lift, replay, and fairness check of each candidate. D: corpus cases `cone_reduced_class_loops`, `cone_reduced_inner_class_loops`,
 `cone_reduced_loop_fair_enabled`, `cone_reduced_loop_unreached`, `cone_reduced_no_loop_capped`;

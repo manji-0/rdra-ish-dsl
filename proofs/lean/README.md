@@ -39,7 +39,8 @@ the script.
 - existentials;
 - a group action given by its laws;
 - finiteness, for A15's pigeonhole steps, given as a `List` that holds every reachable
-  state (core's `List.mem_flatMap` and `List.mem_map` are the only list lemmas used).
+  state, with core's list membership lemmas (`List.mem_cons`, `List.mem_flatMap`,
+  `List.mem_map`).
 
 All five are a few lines each. Mathlib would add its compiled cache, a download of
 thousands of files, to every CI run that misses the cache. Pinning it would also tie the
@@ -92,9 +93,10 @@ The proofs assume the following hypotheses and do not derive them:
   cones.md derives the commutation from (G1)–(G6). The Lean statement assumes it on every
   state, where cones.md states it on reachable states.
 - **A15's extra hypotheses** (`a15`).
-  - The reachable states of `X` and of `R` lie in lists (`LX`, `LR`). The code explores
-    both to completion, and a complete `R` graph is what the theorem's "`R`'s graph is
-    complete" asks.
+  - The reachable states of `X` and of `R` lie in lists (`LX`, `LR`). The model's
+    bounds make both finite. A complete `R` graph is what the theorem's "`R`'s graph is
+    complete" asks; when `obs = ∅` the code does not explore `X`, and `LX` is only a
+    hypothesis of the proof.
   - `hloop`: every block whose silent edges between different states contain a cycle from
     a reachable state can loop (`SilentCycle`, Definition 5, case 1). The code's
     `divergence` and, for `obs = ∅`, `s_cycles` must make it true; cones.md argues both.
@@ -133,8 +135,9 @@ The proofs assume the following hypotheses and do not derive them:
   - The nested case. Definition 5's cases 2 (an inner class that can loop) and 3 (an orbit
     self-edge of `S` up to `H`), and the proof's (ii), need the inner reduction, which
     Reduction.lean does not model.
-  - Case 4 (`obs = ∅`, `s_cycles` over `monotone_vars`) is inside `hloop`: the argument that
-    a variable whose write graph is acyclic changes finitely often is not formalized.
+  - Case 4 (`obs = ∅`, `s_cycles` over `monotone_vars`) enters only through the hypothesis
+    `hloop`. The proof's (iii), that a variable whose write graph is acyclic changes
+    finitely often, is not formalized.
 - **A23** (the annotated quotient, fairness up to symmetry). It is not started.
 - **A18's BFS depth.** The claim that each class is reached at its least depth is not stated.
 
