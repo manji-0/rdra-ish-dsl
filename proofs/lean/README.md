@@ -47,8 +47,8 @@ ones included, and takes under a second. It checks three things:
 Its docstring gives the exact rule.
 
 The toolchain is pinned in [lean-toolchain](./lean-toolchain) (`leanprover/lean4:v4.36.0`).
-elan installs it on the first build. Without elan, run `nix shell nixpkgs#elan` and then
-the script.
+elan installs it on the first build. `nix develop` provides elan; `nix shell nixpkgs#elan`
+does too.
 
 **No Mathlib.** The project imports only Lean's core. The proofs need five things:
 

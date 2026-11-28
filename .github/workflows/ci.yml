@@ -499,8 +499,9 @@ jobs:
 
   lean:
     # The Lean proofs under proofs/lean (proofs/lean/README.md), when a change touches them,
-    # and on every run on main. elan is not in the devShell, so the job runs outside it; the
-    # cache holds elan and the toolchain proofs/lean/lean-toolchain pins, which lake installs
+    # and on every run on main. The devShell provides elan. This job still installs elan
+    # 4.3.0 itself and stays outside the devShell, so it does not build the shell. The cache
+    # holds that elan and the toolchain proofs/lean/lean-toolchain pins, which lake installs
     # on the first build. The proofs import nothing beyond Lean's core, and build in seconds.
     needs: changes
     if: needs.changes.outputs.lean == 'true'
