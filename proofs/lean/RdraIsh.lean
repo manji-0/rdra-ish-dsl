@@ -25,5 +25,11 @@ import RdraIsh.SymActionsExample
 import RdraIsh.Search
 import RdraIsh.SearchSym
 import RdraIsh.SearchExample
+import RdraIsh.SymActSearch
+import RdraIsh.SymActModel
 import RdraIsh.Lemma5Cert
 import RdraIsh.Lemma5Check
+import RdraIsh.Sweep
+import RdraIsh.SweepExample
+import RdraIsh.Monotone
+import RdraIsh.MonotoneExample

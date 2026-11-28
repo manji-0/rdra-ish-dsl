@@ -576,7 +576,7 @@ lie in a list, with a component as mutual reachability by `E_N` and the stop rul
 (`True`, `¬ Moves`, or a looping class for `StopRule::Looping`), and proves both directions
 (`accepts_iff`): the check accepts iff a behavior that satisfies `F` violates the property.
 `SearchSym.lean` proves the same for the search on (state, binding) pairs of a run up to symmetry
-(`oAccepts_iff`). Neither reads the code: Tarjan's components, the bit sets and N10's cut are
+(`oAccepts_iff`), also with the commutation only on Theorem A18's set `W` (`oAccepts_on_iff`). Neither reads the code: Tarjan's components, the bit sets and N10's cut are
 read from it ([proofs/lean/README.md](../../proofs/lean/README.md#the-liveness-searches)).
 
 **N10 (Stopped graph).** On a stopped `G`, a state at or after `expanded(G)` is never a

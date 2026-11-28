@@ -638,6 +638,28 @@ impl Guard {
 }
 
 impl Pred {
+    /// Calls `f` with every term of the predicate, in the order of `terms`. It recurses over
+    /// the tree rather than keeping a stack on the heap, so a Kani harness can walk a tree of
+    /// symbolic leaves (`cone.rs`, `proofs`); `pred_reads` walks it this way.
+    pub fn each_term<'p>(&'p self, f: &mut impl FnMut(&'p Term)) {
+        match self {
+            Pred::True | Pred::False => {}
+            Pred::Cmp(a, _, b) => {
+                f(a);
+                f(b);
+            }
+            Pred::In(a, values) => {
+                f(a);
+                values.iter().for_each(&mut *f);
+            }
+            Pred::Not(body)
+            | Pred::Forall { body, .. }
+            | Pred::Exists { body, .. }
+            | Pred::Count { body, .. } => body.each_term(f),
+            Pred::And(parts) | Pred::Or(parts) => parts.iter().for_each(|p| p.each_term(f)),
+        }
+    }
+
     /// Every node of the predicate, itself first, then its parts left to right.
     pub fn nodes(&self) -> impl Iterator<Item = &Pred> {
         let mut stack = vec![self];

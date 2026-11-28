@@ -23,6 +23,11 @@ while IFS= read -r path; do
     crates/rdra-ish-core/src/lifecycle/explore/store.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/explore/table.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/explore/symmetry/mod.rs) relevant=true ;;
+    # The read-locality harnesses (`cone.rs`: `pred_reads` against `eval`), and the system
+    # they build (`mod.rs`: `TransitionSystem::empty` and its fields). `eval` is `expr.rs`,
+    # `Pred::each_term` `types.rs`, both listed here.
+    crates/rdra-ish-core/src/lifecycle/cone.rs) relevant=true ;;
+    crates/rdra-ish-core/src/lifecycle/mod.rs) relevant=true ;;
     # `one_of`'s harness, its evaluator of `smt.rs` terms, and the choices of `build/sets.rs`
     # (`guarded_set`) that it models.
     crates/rdra-ish-core/src/lifecycle/prove/encode.rs) relevant=true ;;

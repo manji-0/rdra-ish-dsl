@@ -28,7 +28,8 @@ What is simplified, against cones.md:
   ("Parameters") are inside the step relations, not modelled.
 - *Lemma 6 and (B1)–(B3) are hypotheses here.* `Lemma6.lean` derives Lemma 6 over the action
   model of `Restrict.lean`, from per-action hypotheses read from `restrict_to` and the folds;
-  (B1)–(B3) stay hypotheses, and nothing reads `quotient_blocks`.
+  (B1)–(B3) are hypotheses here, and `Sweep.lean` derives them from the run-time check
+  `partition/reference.rs::stable` over a model of it.
 -/
 
 namespace RdraIsh

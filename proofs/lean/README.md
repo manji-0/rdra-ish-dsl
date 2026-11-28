@@ -15,7 +15,9 @@ the cone by its actions
 ([Definition 3 and Lemma 5 over actions](#definition-3-and-lemma-5-over-actions),
 [Definition 4 and Lemma 6 over actions](#definition-4-and-lemma-6-over-actions)), and A18's
 commutation over a model of the cone by its slots
-([Theorem A18 over slots](#theorem-a18-over-slots)). N9 of
+([Theorem A18 over slots](#theorem-a18-over-slots)). The action model of Lemmas 5 and 6 is
+read off that slot model, and `Local`, a hypothesis of both lemmas, is derived from its syntax
+([One model of the actions](#one-model-of-the-actions)). N9 of
 [native.md](../../docs/theory/native.md#the-check), the liveness search by fair components,
 and the same search on the pairs of a run up to symmetry are stated over abstract
 transition systems too ([The liveness searches](#the-liveness-searches)). None of them reads
@@ -137,6 +139,8 @@ toolchain to Mathlib's releases. The group laws are fields of `Sym`, so
 | `FairPComp.cover_one`, `FairPComp.cover`, `run_of_parts`, `behaviour_of_oAccepts` | `SearchSym.lean` | A23, the search (⇐) | In an accepted component every thread has a walk to a covered node; one such walk per instance enabled at the end pair, each from where the previous ones left it, is a loop whose every round covers every thread. The stored path, the path of pairs and that loop round and round (or a stutter at a stop pair) are an annotated run that `a23_lift` carries to a fair violating behaviour of `M`. |
 | `oAccepts_of_lasso`, `oAccepts_of_behaviour` | `SearchSym.lean` | A23, the search (⇒) | A fair violating lasso of `M`, seen through frames kept on stutters, is a sequence of pairs that repeats; it ends at a stop pair or in a component with a cycle, and a piece with no covered node would hold a thread of the lasso that is always enabled and never taken. |
 | `oAccepts_iff`, `liveHolds_iff_not_oAccepts`, `oAccepts_iff_accepts`, `not_oAccepts_iff_lassos` | `SearchSym.lean` | A23, N9 | With `a23`'s hypotheses and a list of the fair instances enabled at each state, the orbit search accepts iff some binding has a fair violating behaviour of `M`, iff N9's search on `M` accepts for some binding; it does not accept iff no thread-fair violating annotated lasso of the canonical quotient exists, the quotient side of `a23`. |
+| `quotient_restrict_W`, `restrict_rEdge_iff`, `restrict_lists` | `SearchSym.lean` | A23, N9, the closed set `W` | With commutation on a closed set `W` (`SymOn`), the stored states of the canonical quotient of `M` restricted to `W` lie in `W`, where the restriction has `M`'s real edges; the lists of reachable states and enabled instances given on `M` serve the restriction. |
+| `liveHolds_iff_not_oAccepts_on`, `oAccepts_on_iff`, `oAccepts_on_iff_accepts`, `not_oAccepts_on_iff_lassos`, `LiveEqui.withStop`, `liveHolds_wfNext_iff_not_oAccepts_on` | `SearchSym.lean` | A23, N9 | The theorems above with `SymOn` in place of `Sym`: the orbit search on `M` restricted to `W` does not accept iff the property holds on `M` for every binding, iff N9's search on `M` accepts for no binding, iff no thread-fair violating annotated lasso of the restricted quotient exists. Under `WF_vars(Next)` the search's stop is `¬ Moves` of the restriction. |
 | `ExampleFair.search_ok`, `ExampleFair.eventually_flag_search`, `ExampleSymLive.orbit_ok`, `ExampleSymLive.plain_search_ok` | `SearchExample.lean` | none | On the A15 and A23 examples the searches do not accept, and `a15_search` gives `C`'s verdict from the search on `R`. |
 
 ## What the hypotheses are
@@ -178,7 +182,9 @@ The proofs assume the following hypotheses and do not derive them:
 - **Definition 4's shape of `X`** (`Extended`). A silent edge keeps the input bytes, and a
   rise keeps `S`. `Ext.extended` proves it of the `X` of `Restrict.lean`.
 - **(B1)–(B3)** (`Stable`), on the reachable states of `X`, with
-  `rep(B x) ∈ Reach(X) ∩ B x`.
+  `rep(B x) ∈ Reach(X) ∩ B x`. `Sweep.stable_of_cert` derives it from the run-time
+  certificate, `partition/reference.rs::stable`, on a complete run of a flat `X`
+  ([below](#the-partition-certificate-and-monotone-variables)).
 - **A18's commutation** (`Sym`). This covers:
   - every `g ∈ G_s` maps a step `s → t` to the step `g(s) → g(t)`, and `g ∈ G_t`;
   - `G_{g(s)} = G_s`;
@@ -212,6 +218,8 @@ The proofs assume the following hypotheses and do not derive them:
     flat `X` not run up to `H`, and the same check on the stored graph otherwise. When `obs = ∅` a release build
     does not explore `X`, so there `s_cycles` is checked only in tests, on a plain run of `X`
     under the test's own caps; a run past them is skipped (`partition.rs::unobserved_loops`).
+    When `s_cycles` is false, `Mono.no_silentCycle` derives `hloop` with no class marked
+    from the monotone cells of `S` ([below](#the-partition-certificate-and-monotone-variables)).
 - **The searches** (`Accepts`, `OAccepts`; [below](#the-liveness-searches)).
   - The searched graph is the system's step relation on its reachable states: a complete
     run (N1), so `En`, `Moves` and `Tk` are those of `M`.
@@ -236,12 +244,15 @@ The proofs assume the following hypotheses and do not derive them:
     a deep embedding of it.
   - (G1)–(G6) are stated over a slot-level model of the code's syntax
     ([below](#theorem-a18-over-slots)). That the model's `act`, hypotheses and effects are
-    `Group::apply`, `breaks::scan` and `each_successor` is read from the code, not derived.
-  - (B1)–(B3) are certified at run time on each partition (claim A8, R). That certificate
-    is the nearest link from the code to `Stable`, but it is not `Stable` itself. The code
-    checks that one sweep with every block as a splitter splits nothing, while `Stable.b2`
-    is the path form of (B2). cones.md argues the step between the two, and Lean does not
-    check it.
+    `Group::apply`, `breaks::scan` and `each_successor`, and that its read and write sets
+    are those of `action_reads` and `effect_writes`, is read from the code, not derived.
+  - (B1)–(B3) are certified at run time on each partition (claim A8, R).
+    `Sweep.stable_of_cert` proves that a partition that passes the certificate is `Stable`,
+    over a model of the check ([below](#the-partition-certificate-and-monotone-variables)).
+    That the run the check reads is `X`'s reachable graph (`Sweep.Complete`), that the
+    depth-first marking of `partition/reference.rs::stuttering_blocks` computes
+    `Sweep.Marked`, and that the fallback partition of `partition/reference.rs::quotient_blocks`, used without the check,
+    meets `Sweep.Cert` when the sweeps stop are read from the code.
 - **A8, the rest of the theorem.** The proofs leave out these parts:
   - The rises carry no `stands`. Consequences 2 to 4 read only the `T_a` labels of `C` and
     `R`, and `R`'s `T` move reads a rise only through the input bytes it ends at.
@@ -287,14 +298,21 @@ The proofs assume the following hypotheses and do not derive them:
   - The nested case. Definition 5's cases 2 (an inner class that can loop) and 3 (an orbit
     self-edge of `S` up to `H`), and the proof's (ii), need the inner reduction, which
     Reduction.lean does not model.
-  - Case 4 (`obs = ∅`, `s_cycles` over `monotone_vars`) enters only through the hypothesis
-    `hloop`. The proof's (iii), that a variable whose write graph is acyclic changes
-    finitely often, is not formalized.
+  - Case 4 (`obs = ∅`, `s_cycles` over `monotone_vars`). The proof's (iii) is proved:
+    `Mono.finite_changes_of_behaviour` (a cell whose steps follow an acyclic write graph
+    changes finitely often), and `Mono.no_silentCycle` and `Mono.a15_monotone` (when every
+    cell of `S` is monotone along the silent edges, `hloop` holds with no class marked).
+    `Mono.Sys.succ_covers` shows that the steps of `each_successor` follow the graph
+    `monotone_vars` builds, under the pre-state facts `Mono.Sys.Pre`, which the guards are
+    read to give ([below](#the-partition-certificate-and-monotone-variables)). The code's
+    unobserved `S` is one class for all input bytes, which is not (B1); `a15_monotone` holds
+    for any partition, and the reading of the code's `R` as the reduced cone of the
+    partition by input bytes, whose classes are a function of `T`, is not proved.
 - **A23, the rest of the theorem.**
   - The run's search is the abstract one of
-    [The liveness searches](#the-liveness-searches): `not_oAccepts_iff_lassos` makes its
-    verdict `a23`'s quotient side, and what that section leaves out of the code is left out
-    here.
+    [The liveness searches](#the-liveness-searches): `not_oAccepts_iff_lassos` and
+    `not_oAccepts_on_iff_lassos` make its verdict `a23`'s quotient side, and what that
+    section leaves out of the code is left out here.
   - The entity-cone findings up to symmetry (`state_model_findings`) and deadlocks are not
     stated.
 - **A18's BFS depth.** The claim that each class is reached at its least depth is not stated.
@@ -309,6 +327,14 @@ The sources hold no `sorry`, no `admit` and no `axiom`, and no statement is left
 binding. `SearchSym.lean` does the same for the search a run up to symmetry makes on pairs of
 a stored state and a binding, and relates it to N9's search on `M` and to `a23`. Each
 definition is the predicate the code computes; the table names where.
+
+The definitions take the system from the symmetry. With the commutation only on a closed set
+`W` (`SymOn`), the search is stated on `M` restricted to `W`, with `SymOn.toSym`. That is the
+graph the code stores for `M`: every stored state lies in `W` (`quotient_restrict_W`), and
+from a state of `W` the restriction has `M`'s real edges, enabled instances and taken
+instances (`restrict_rEdge_iff`, `restrict_enabled_iff`, `restrict_takes_iff`). The theorems
+whose names end in `_on` compare its verdict with `M`'s, and `SymActSearch.lean` composes
+them with A18 from (G1)–(G6).
 
 | Lean (`RdraIsh.`) | File | Code (`crates/rdra-ish-core/src/lifecycle/explore/`) |
 |---|---|---|
@@ -353,7 +379,9 @@ Not modelled:
 `Actions.lean`, `Split.lean` and `SplitExample.lean` go one level below the abstract systems
 above. They model the cone system by its actions and prove Lemma 5 from Definition 3. With
 them, the hypothesis `Split` of `a8_dbsb` (Lemma 5 (a)(b)) is a theorem, `split_computed`,
-whose one hypothesis is `Local` (below). Lemma 5 (c)–(e) need `FoldData` as well.
+whose one hypothesis is `Local` (below). Lemma 5 (c)–(e) need `FoldData` as well. For the
+model read off the slot syntax of A18, `Local` is a theorem too
+([One model of the actions](#one-model-of-the-actions)).
 
 The model (`Act.Model`):
 
@@ -404,7 +432,8 @@ keeps `T` small.
   The footprint is `rd ∪ wr` and not `rd` alone. The code does not count two things as reads:
   taking a `new` slot (`action_reads`), which looks at the existence the action writes, and
   the slots of a written variable that the binding leaves alone. This is the statement that
-  the locality of expression evaluation must give for each action.
+  the locality of expression evaluation must give for each action. `SymAct.Sys.local_`
+  proves it for the model read off the slot syntax.
 - **`FoldData`**, for the folds and `raw_reads`, given the split:
   - `raw_rd`: `raw_reads` lies inside `rd`;
   - `cover`: every `T_v` read of an `S_a` action is a raw read, an existence of a raw `T_v`
@@ -414,7 +443,10 @@ keeps `T` small.
     creates and deletes write an existence, from absent to present to deleted. With inputs
     off, `mono` is constant `false` and the condition is empty.
 - **`mono`** is a parameter. Lemma 5 (d) reads it only through `ex_mono` and the closure.
-  The write-edge acyclicity that `monotone_vars` computes is not modelled.
+  `Monotone.lean` models the write graph `monotone_vars` computes (`Mono.Sys.Monotone`),
+  separately from `Act.Model`. Over it, an existence that only creates and deletes write is
+  monotone (`Mono.Sys.existence_monotone`), which is the fact `ex_mono` asks of the code;
+  the two models are not joined, so `ex_mono` stays a hypothesis here.
 - **The labels.** `Act.cone` labels a step `.inl` when its action is in `T_a`, and `.inr`
   otherwise. So the `.inr` side holds the `S_a` actions and the actions that write nothing
   and are not kept, which neither set contains. Those stutter (`Local.idle`). Lemma 6 counts
@@ -511,10 +543,12 @@ No checker exists for these. The pattern carries over as follows.
 - **The cost.** The certificate grows with the states of `X`, not with its variables and
   actions. The largest quotient `verify` computes on the samples has about 2.2 million
   states, so a certificate takes megabytes, and the checker needs arrays rather than the
-  lists `check` uses. Proving (B2) sound needs reasoning about paths: a sweep that splits
-  nothing gives `SilentExit` for every state of a block, by induction on the path inside the
-  block. That is more work than the set lemmas of `check_sound`. (B1) and (B3) are about as
-  hard as Lemma 5.
+  lists `check` uses. The step from the check to `Stable` is proved
+  ([below](#the-partition-certificate-and-monotone-variables)): `Sweep.stable_of_cert` takes
+  the check over a numbered run, `Sweep.check_sound` proves a Boolean checker over lists sound
+  for it, and `Sweep.b2_of_marking` reduces (B2) for any marking a faster checker computes to
+  three facts: it lies inside `Sweep.Marked`, it is closed under the two rules, and it is all
+  or none on each block.
 
 ## Definition 4 and Lemma 6 over actions
 
@@ -644,6 +678,7 @@ from (G1)–(G6). The model (`SymAct.Sys`):
 | `SymAct.Sys.W_step`, `SymAct.Sys.W_act`, `SymAct.Sys.init_act` | `SymActions.lean` | A18, (G3) | `W` holds the initial states and is closed under steps and every `G_s`; (G3) closes the initial set under every `G_s`. |
 | `SymAct.Sys.symOn` | `SymActions.lean` | A18, A23 | These give the `SymOn` of `a23_on`, with `W` the base-absent states. |
 | `SymOn.quotient_reach_iff`, `SymAct.Sys.a18_holds_iff` | `SymActions.lean` | A18, A21 | The canonical quotient of a system reaches what the quotient of its restriction to `W` reaches; so an invariant that `G_s` preserves gets the plain run's verdict on the canonical quotient of the cone system. |
+| `SymAct.Sys.orbit_verdict`, `SymAct.Sys.orbit_accepts_iff`, `SymAct.Sys.orbit_verdict_wfNext` | `SymActSearch.lean` | A18, A23, N9 | Under `WF`, `Built` and `Hyp`, with the `SymOn` of `symOn`: the property holds on the cone system for every binding under `Fair_P` and a stop rule iff the orbit search does not accept, iff N9's search on the cone system accepts for no binding; under `WF_vars(Next)` too. No commutation outside `W` is assumed. |
 | `ExampleOffW.off_W_counterexample` | `SymActionsExample.lean` | none | Shops and orders, a creation that does not write the order's optional owner: every hypothesis of `step_comm` holds, and a step from a state outside `W`, with the absent order's owner on shop 0, has no image under the swap of the shops. |
 
 ### What these hypotheses are
@@ -667,7 +702,10 @@ from (G1)–(G6). The model (`SymAct.Sys`):
   its owners.
 - **Guards only.** Invariants, `after` assertions and properties are not in the model, so
   (G6) outside guards is not derived; `a18_holds_iff` takes the invariance of its invariant
-  under `G_s` as a hypothesis.
+  under `G_s` as a hypothesis. For the same reason `orbit_verdict` takes `LiveEqui`'s trigger
+  and goal parts, the fair instances and bindings with their actions (`SymLive`), the
+  canonical form (`Canon`), and lists of the reachable states, of each `G_s` and of the
+  enabled instances as hypotheses.
 
 Outside `W` the commutation can fail. Take an absent row whose optional owner names a row,
 created by a step that does not write that owner: the step from `g(s)` keeps the value and
@@ -681,12 +719,125 @@ The model differs from the code in these ways:
   are not in the syntax; the scan leaves their class out (`OwnerChoice`).
 - The domain sizes of data columns are not checked, and `null` data values are not
   modelled.
-- The roles carry no data. `Parent` and `Triggered` bind a present slot, and what else they
-  ask is in the guard.
+- The roles carry no data but `Earlier`'s step, which `roleOk` ignores. `Parent` and
+  `Triggered` bind a present slot, and what else they ask is in the guard.
 - The reduced cone (`G_T`) and the run of `S` up to `H` (A22) are not modelled.
 
-The slot model and the action model of `Actions.lean` are separate. `Act.Model` keeps guards
-and effects opaque behind read and write sets, and `SymAct.Sys` gives them a syntax. Its
-`Param` and `Role` restate `Act.Param` and `Act.Role` without `Role.earlier`'s step. A
-common model would read `Act.Model`'s guard and effect from `SymAct`'s syntax and share one
-`Role` with the semantics Lemma 6 gives it.
+### One model of the actions
+
+<!-- constrained-by #definition-3-and-lemma-5-over-actions -->
+
+`SymAct.Sys` uses the `Param`, `Role` and `Binding` of `Actions.lean`, and a role binds what
+`Rows.cand` says, the semantics Lemma 6 reads (`roleOk`, through `rows`). `SymActModel.lean`
+reads an `Act.Model` off a `SymAct.Sys` (`Sys.model`), given lists of its entities, columns,
+owners and actions:
+
+- **Variables** (`Var`): an existence per entity, a data column, an owner, the clock. A value
+  (`Val`) holds every slot of a variable. `enc` reads a state as a valuation, and `dec` reads
+  it back.
+- **`rd`**, after `action_reads` with `copy_reads`: the existences of the `Existing`,
+  `Parent` and `Triggered` parameters, what every guard predicate reads (`pred_reads`: a
+  term's variable, whether it reads at a parameter, in the successor or at a quantifier's
+  slot, and the existence of each quantified entity), a `Transition`'s variable and a
+  `Tick`'s clock.
+- **`wr`**, after `effect_writes`: a create writes the existence; a delete the existence and
+  every column and owner of its entity; a write or a choice its variable; a tick the clock.
+- **Guards**: the role conjuncts `roleConjs` with `rowsV`, then `og`: one slot bound per
+  parameter (`boundConjs`), the choices' picks, and each guard predicate evaluated against the
+  successor. A bound names only its own position, so a fold can hold the bounds of its free
+  parameters among its folded guards, as `Lemma6Hyp.other_names` needs.
+- **Effect**: a variable of `wr` takes its value in `post`, and every other keeps its own.
+
+| Lean (`RdraIsh.`) | File | Claim | Statement |
+|---|---|---|---|
+| `SymAct.Sys.model`, `SymAct.Sys.rd`, `SymAct.Sys.wr`, `SymAct.Sys.og`, `SymAct.Sys.eff` | `SymActModel.lean` | Definitions 3 and 4 | The action model of a slot system, with its read and write sets computed from the syntax. |
+| `SymAct.Sys.eval_congr`, `SymAct.Sys.post_pt` | `SymActModel.lean` | none | A predicate's value depends only on the variables `predRd` names, in the pre-state and in the successor; a variable's value after `post` depends only on its value before. |
+| `SymAct.Sys.post_frame`, `SymAct.Sys.eff_enc` | `SymActModel.lean` | none | A variable outside `wr` keeps its value, so on a state read as a valuation the model's effect is `post`. |
+| `SymAct.Sys.local_` | `SymActModel.lean` | Lemmas 5 and 6, `Local` | Under `Built`, the model meets `Local`. `Built` gives the one case the syntax alone does not: a `New` parameter's role conjunct reads its existence, which its create writes. |
+| `SymAct.Sys.guard_enc`, `SymAct.Sys.step_enc`, `SymAct.Sys.reach_enc` | `SymActModel.lean` | none | The model's guard on `enc s` is the step condition of `S.lts`, its steps from `enc s` are those of `S.lts` from `s`, and its reachable valuations are the reachable states read as valuations. |
+| `SymAct.Sys.split_computed`, `SymAct.Sys.shape`, `SymAct.Sys.new_writes` | `SymActModel.lean` | Lemma 5 (a)(b), Lemma 6 | The computed split of any anchor meets `Split` under `Built` alone; `Lemma6Hyp.shape` and `Lemma6Hyp.new_writes` hold of the model. |
+| `ExampleOffW.model_local` | `SymActionsExample.lean` | none | The system of `off_W_counterexample`, which meets every hypothesis of `step_comm`, meets `Local` as an action model. |
+
+So one model carries the hypotheses of A18 ((G1)–(G6), `WF`, `Built`) and the locality that
+Lemmas 5 and 6 assume. What stays outside:
+
+- A `Triggered` parameter's existence counts as read. The code counts it only when the
+  parameter's mark guard is found (`triggered_params`). A larger `rd` keeps `Local` and can
+  only grow `T`.
+- The fields of `Lemma6Hyp` besides `local_`, `shape` and `new_writes` concern the split, the
+  folds and `X` (`Ext`), which the slot model does not build. They stay hypotheses, and so do
+  `FoldData` and `mono` for Lemma 5 (c)–(e).
+- `Local` is proved for the slot model as it stands, with the differences from
+  `each_successor` that [Theorem A18 over slots](#theorem-a18-over-slots) lists.
+
+## The partition certificate and monotone variables
+
+<!-- constrained-by #what-is-not-covered -->
+
+`Sweep.lean` and `SweepExample.lean` model the check that `Classes::of_graph` runs on each
+partition before the reduction uses it, `partition/reference.rs::stable`, and prove that it
+gives `Stable`. `Monotone.lean` and `MonotoneExample.lean` model the write graph of
+`reduce/split.rs::TransitionSystem::monotone_vars` and prove what the reduction uses of it:
+the proof's (iii) in Theorem A15, and case 4 of Definition 5 with no class marked.
+
+The run (`Sweep.ExplRun`) is what the check reads: `n` states by number, the silent edges
+and the rises as pairs of numbers (`reduce/partition.rs::split_edges`), and each state's
+label (`Partition::initial`). `Sweep.Complete` says it is `X`'s reachable graph and that a
+label fixes `obs` and the input bytes. The check (`Sweep.Cert`) has three parts: a block lies
+in one label (B1); for every splitter, the states the sweep of `partition/reference.rs::stuttering_blocks` marks
+(`Sweep.Marked`: outside the splitter with a silent edge into it, or a silent predecessor
+in its own block of a marked state, self-loops dropped) are every state of a block or none
+(B2); every state enters by a rise the blocks its block's first state enters (B3).
+`Sweep.check` is a Boolean checker over the same lists, for a checker of a dumped partition.
+
+| Lean (`RdraIsh.`) | File | Claim | Statement |
+|---|---|---|---|
+| `Sweep.marked_iff` | `Sweep.lean` | A8, (B2) | On a complete run, a reachable state is marked for a splitter iff it leaves its block into the splitter by a silent path through its block and one more silent edge (`SilentExit`). |
+| `Sweep.stable_of_cert` | `Sweep.lean` | A8, (B1)–(B3) | On a complete run, a partition that passes the certificate is `Stable`, with each block's first state as its representative, the one `of_graph` takes. |
+| `Sweep.cert_of_stable` | `Sweep.lean` | A8, (B1)–(B3) | On a complete run whose labels are exactly the values of `obs` and the input bytes, a `Stable` partition passes the certificate. |
+| `Sweep.b2_of_marking` | `Sweep.lean` | A8, (B2) | Any marking per splitter that lies inside `Marked`, is closed under its two rules and is all or none on each block gives the certificate's (B2). A checker's own marking needs only those three facts. |
+| `Sweep.marked_of_marks`, `Sweep.check_sound`, `Sweep.stable_of_check` | `Sweep.lean` | A8, (B1)–(B3) | The marking by rounds lies inside `Marked`. A partition that `check` accepts passes the certificate, so on a complete run it is `Stable`. |
+| `ExampleSweep.accepts`, `accepted_cert`, `rejects`, `not_cert` | `SweepExample.lean` | none | On three states with one silent edge, `check` accepts the identity partition and rejects a block that one state leaves and the other does not, which fails the certificate too. |
+| `Mono.chain_of_change`, `Mono.finite_changes` | `Monotone.lean` | A15, (iii) | A sequence whose steps keep a value or follow an edge of a graph goes, across a change, from one value to another by a chain of edges. If the graph is acyclic and the values lie in a list, it changes value finitely often. |
+| `Mono.finite_changes_of_behaviour`, `Mono.settles` | `Monotone.lean` | A15, (iii) | A cell of a state whose steps from reachable states follow an acyclic graph changes finitely often along every behaviour; if finitely many such cells fix the state, every behaviour is constant from some index on. |
+| `Mono.no_silentCycle`, `Mono.a15_monotone` | `Monotone.lean` | A15, Definition 5 case 4 | If the cells of `S` fix it and each follows an acyclic graph along the silent edges, no block of any partition holds a silent cycle, so `a15` holds with `canLoop := fun _ => False`: `s_cycles` false. |
+| `Mono.Sys.succ_covers`, `Mono.Sys.monotone_finite_changes` | `Monotone.lean` | A10, A15 | A successor of `each_successor` from a pre-state that meets `Pre` keeps each cell of a variable that is not cyclic or moves it along an edge of the graph `monotone_vars` builds. So a variable it marks monotone changes finitely often, slot by slot, along every behaviour of the system. |
+| `Mono.Sys.existence_monotone` | `Monotone.lean` | Lemma 5 (d) | An existence that only creates and deletes write, and that is not cyclic, is monotone. |
+| `ExampleMono.no_cycle`, `ExampleMono.eventually_flag` | `MonotoneExample.lean` | none | A cone whose `S` variable only rises: every hypothesis of `a15_monotone` is discharged and `eventually flag` holds under `Fair_P ∧ WF_vars(Next)` from a run with no class marked. |
+| `ExampleMonoSys.level_monotone`, `ExampleMonoSys.ex_monotone`, `ExampleMonoSys.steps_covered` | `MonotoneExample.lean` | none | A system with a create and a transition `0 → 1 → 2`: its column and its existence are `Monotone`, and a create step and a raise step meet `Pre`, so `succ_covers` applies to them. |
+
+### What these hypotheses are
+
+- **`Sweep.Complete`**: the run is `X`'s reachable graph, numbered, with its silent edges
+  and rises exactly, and a label fixes `obs` and the input bytes. That is the flat case, a
+  run of `X` with no inner reduction and not up to `H`; otherwise the check reads the stored
+  graph.
+- **The marking.** `Sweep.Marked` is the least set closed under the sweep's two rules. That
+  the depth-first marking of `partition/reference.rs::stuttering_blocks` computes it, and that `partition/reference.rs::same_partition` of
+  the sweep's result holds iff the sweep split nothing (a split adds a block, and a sweep
+  that splits nothing never changes the blocks its splitters see), are read from the code.
+  `stable` renumbers the blocks by first appearance, which is injective.
+- **`Mono.Sys`, `Mono.Sys.Succ`**: the effects (`Effect`) and the edges `monotone_vars`
+  adds for each, and `each_successor`: the creates, assignments, single-arm transitions and
+  ticks in order, then the deletes, then the open choices, a choice of a deleted row dropped.
+  `Acyclic` is the graph with no cycle but self-loops; that the depth-first search of
+  `reduce/split.rs::acyclic` decides it is read from the code.
+- **`Mono.Sys.Pre`**, of the pre-state of every reachable step, from the guards and roles:
+  a created row is absent and every cell an assignment or a choice of the creating action
+  writes on it is at base (their `froms` are the base value only; the create's `New`
+  parameter binds only an absent slot, `ParamRole::binds_exists`, and `SymActions.lean`'s
+  `W`, the states whose absent rows hold base values, is the same invariant), a deleted row is
+  present (the delete's `Existing` parameter binds only a present slot), each cell an
+  assignment or a choice writes holds a value of its domain (`froms` elsewhere are the whole
+  domain), a slot an assignment names lies among its entity's slots, and the clock ticks
+  only below `int_max` (the `Tick` action's guard). With `Pre`, every case of
+  `monotone_vars` is sound for the steps; no case computes an edge set the proof cannot use.
+- **The cells of `S`** (`Mono.no_silentCycle`): `S` is fixed by the cells of the variables
+  of `X` that are not inputs, which is what `partition.rs::s_cycles` reads, through
+  `monotone_vars` of the extended system. On an explored `X`, `of_graph` leaves every class
+  unmarked when `s_cycles` is false, and `a15_monotone` applies as stated. For `obs = ∅`
+  the code's one class covers every input byte, which is not (B1).
+- **What `check` does not do.** It checks no part of `Extended`, takes each block's first
+  state as its representative rather than reading one, and runs over lists; a checker over
+  arrays would reuse `Sweep.b2_of_marking` for its own marking. That `check` accepts every
+  partition that passes `Cert` is not proved.
