@@ -210,6 +210,13 @@ As built: the check sits at the reduced exit of `reduce/lift.rs::lift`, so every
 goes through it. `vouch.rs::is_unreduced_initial` tests the state against the initial-state
 definition and enumerates nothing. A failure is `ReplayError::NotInitial`; in `lift_cycle`
 it makes the reduced lasso spurious, and the property is decided unreduced.
+Measured for 1a (release, `RDRA_JOBS=1`, `verify` at the default bounds, stdout, stderr
+and the TLA+ output byte-identical to main): patent-ops 45.13–45.17 → 45.05–45.09 G
+instructions retired, max RSS 187–193 MB on both; clinic-ops 141.37–141.46 → 141.19–141.26
+G instructions, max RSS 996–1002 MB → 1007–1013 MB. Neither sample has a counterexample,
+so the checks run only in `lift` and `exact_target_cone`. A build of the branch with both
+calls removed, so no new code runs on clinic-ops, gives 1011–1016 MB too: the 1% is the
+build, not the checks.
 
 **C11, TV.** Check the invariant Theorem A1 needs, not minimality:
 `cone_faults(system, cone)` checks two things on the restricted system that `restrict_to`
