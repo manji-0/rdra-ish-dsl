@@ -254,7 +254,8 @@ not a bound on what exists.
   from the code). That the guards give `Pre` at each step is read from the code, and the
   write-graph model of `monotone_vars` is not joined to the action model of Lemma 5.
 - **A11.** The fold equivalence is read from `fold_of` and `holds_fast`, not derived in Lean
-  (`Lemma6Hyp.exact`), and is tested on the models and bounds of the fold tests only; node
+  (`Lemma6Hyp.exact`); Kani proves it for one action at small bounds (`reduce/fold.rs::proofs`),
+  and it is tested on the models and bounds of the fold tests otherwise; node
   folds and bit groups are argued on paper, outside the Lean model; the nested case and the
   run up to `H` are sketched (A8).
 - **A13.** No test makes `reduced_with` reject a reduction past the TLA+ cell budget; that

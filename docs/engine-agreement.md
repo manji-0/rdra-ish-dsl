@@ -468,8 +468,9 @@ a release in its changelog entry, so that a fall shows.
 ## Kani harnesses
 
 Kani checks a few leaf functions of the checker on every input up to a bound, on the Rust code
-as written. Each harness is a `#[kani::proof]` in a `#[cfg(kani)] mod proofs` of the file it proves, so
-builds and tests never compile it.
+as written. Each harness is a `#[kani::proof]` in a `#[cfg(kani)]` module of the file it proves, so
+builds and tests never compile it. In `reduce/fold.rs` that module sits beside the unit tests that
+share its fixture, in a `proofs` module that tests also compile.
 
 | Harness | File under `lifecycle/` | Statement | Bound |
 |---|---|---|---|
@@ -496,6 +497,8 @@ builds and tests never compile it.
 | `an_atom_reads_only_its_read_set` | `cone.rs` | two states, and two successors, that agree on the vars `pred_reads` returns give a predicate the same value under `eval`, for any binding: `pred_reads`, from which `plain_reads`, `mark_reads`, `copy_reads` and `check_reads` take each predicate's reads, covers what `eval` reads | `True`, `False`, a comparison and a membership in no term or one, over any term (a slot of a param, of its successor row or of the binder, a literal, an integer, a slot index, the clock), every state, every binding, on a system of two entities of two slots and a clock (11 bytes), under one binder |
 | `a_connective_reads_only_its_read_set` | `cone.rs` | the same | `Not` of a comparison, `And` and `Or` of none or one |
 | `a_quantifier_reads_only_its_read_set` | `cone.rs` | the same | `Forall`, `Exists` and `Count` (any operator, any bound up to 2) of a comparison that reads its binder or the outer one |
+| `a_fold_keyed_by_its_s_row_holds_where_some_t_binding_does` | `reduce/fold.rs` | step (a) of Lemma 6 (theory/cones.md): `Fold::holds` of a `Param` fold keyed by the action's `S` row holds at a slot exactly when some binding of its two `T` parameters satisfies the folded guards, each parameter on a present row when its role needs one (`Existing`, `Parent`, `Triggered`) and on any row for `Earlier`; the spec reads the state's bytes and evaluates the guards itself. A test checks that `fold_of` gives the fold the harness takes. Under Kani the reference twin of `Fold::holds` is left out | an action `A(s, t1, t2)` on two `T` entities of 2 slots each, every pair of roles, the folded guards `t1.c in A`, `t2.c in B` (any sets of a 2-value column) and `t1.c <= t2.c`, every state whose columns hold values, every slot of the key |
+| `a_fold_keyed_by_a_linked_t_row_holds_where_some_t_binding_does` | `reduce/fold.rs` | the same for the fold the link `s.owner = t1` keys by `t1`: the key fixed at the slot, `t2` ranging | the same, on entities of 1 to 3 slots, with `t1.c op t2.c` at every operator |
 
 A result holds up to its bound, and for one thread. The symmetry harness stays at 2 slots per
 class, where its group commutes, so the exhaustive unit test and the `canonical` twin check the
@@ -503,6 +506,13 @@ canonical form. Under Kani a state packs one cell at a time (`Packing::by_words`
 `packing` harnesses prove the two paths alike. The domain harnesses prove the encoding and the
 count `admits` gates, not that the build calls them; `build/vars.rs::column_var` does, and
 the `DomainTooLarge` tests cited under claim N2 check that it refuses the columns past a byte.
+The fold harnesses build their `TransitionSystem` by hand, its layout written out; the unit test
+`fold_of_folds_the_harness_action` checks that `fold_of` gives the fold they take and that
+`layout` gives the layout, and `the_spec_is_the_bit` checks the spec against `Fold::holds` on
+sampled sets, operators and states. Their guards read the system's lists, so the workspace's
+`[workspace.metadata.kani]` passes CBMC `--max-field-sensitivity-array-size 1024` for every
+harness: below that CBMC does not resolve which variant an enum read from a list is, and the
+fold harnesses unwind `eval` through every kind of `Pred`.
 
 The `cone.rs` harnesses prove `pred_reads` one shape of predicate at a time, with symbolic
 leaves: CBMC unwinds to the bound every walk over a list whose length or kind it cannot fold
@@ -531,7 +541,8 @@ cargo kani -p rdra-ish-core --harness compare_negates_and_mirrors  # one harness
 `store_bytes_is_at_most_the_model_before`,
 `apply_of_a_composition_is_the_composition_of_applies` and `a_quantifier_reads_only_its_read_set`
 (4 to 5 minutes) take several minutes each; `an_atom_reads_only_its_read_set` and
-`a_connective_reads_only_its_read_set` about a minute each; the others under a minute.
+`a_connective_reads_only_its_read_set` about a minute each; the two fold harnesses under two
+minutes each and up to 9 GB; the others under a minute.
 
 ### In CI
 

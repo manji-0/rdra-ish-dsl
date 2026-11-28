@@ -1463,7 +1463,8 @@ leaves) and the random-graph test below, which also certifies every worklist par
   them, the starting values listed through the checked `narrow::id8`) are read from it.
 - **A11** (folds): a folded guard is a function of its bit, the fact `exact` of Lemma 6, which
   step (a) derives from a reading of `fold_of` and `Fold::holds`, and which the `Twin::FoldHolds`
-  twin checks against its reference. Lemma 6's proof uses it in steps 6 and 9, for a fold with
+  twin checks against its reference. Two Kani harnesses (`reduce/fold.rs::proofs`) prove it
+  for one action at small bounds. Lemma 6's proof uses it in steps 6 and 9, for a fold with
   a bit of its own; groups of folds sharing a bit and node folds are argued in the parts it does
   not model. So A8 holds with folds, under its hypotheses, flat and nested as there. A count that reads `T` is never
   node-folded (counting-rules.md): `reduce/fold.rs::as_node` makes a node only of an existential (or an
