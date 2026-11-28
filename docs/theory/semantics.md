@@ -8,7 +8,7 @@ gives the meaning of the model's rules and properties on that system, and of eve
 the tools print. The theme documents listed in the [index](./README.md) state their guarantees
 in this notation. The [claims inventory](./claims.md) refers to the definitions by number
 (D1, D2, …), and each definition has an anchor of its own (`semantics.md#d1` … `#d25`).
-The code it cites was read at commit `9857092a` (origin/main, 2026-11-28, the merge of #544).
+This document describes main at `91524792`.
 
 **What the definitions rest on.** D1 to D13 and D24 define `T_β(M)` from the model's text.
 Each clause names the surface construct it gives meaning to (an entity, a column and its
@@ -29,21 +29,18 @@ severity error. Examples are `IntLiteralOutOfBounds`, `DomainTooLarge`, `Conflic
 `UnboundCopySource`, and `AmbiguousOwnerLink`; the whole list is
 [state-derivation.md, "Diagnostics"](../state-derivation.md#diagnostics). Which models are
 well-formed is the language's static semantics. This document does not restate it, and
-there it still relies on the code's list (`lifecycle::diag::StateDiag`). For a pair `(M, β)`
+there it relies on the code's list (`lifecycle::diag::StateDiag`). For a pair `(M, β)`
 with an error, `T_β(M)` is undefined. The tools print the error and give no verdict.
 
 D14 to D23 define the meaning of rules, properties, and verdicts on a transition system
-`T`, and D25 that of the deadlock finding. They apply to `T_β(M)` and to every system derived from it (a cone, a reduced cone, a
-quotient), and they cite code where a verdict is printed.
+`T`, and D25 that of the deadlock finding. They apply to `T_β(M)` and to every system
+derived from it (a cone, a reduced cone, a quotient), and they cite code where a verdict is
+printed.
 
-This document was checked against commit `9857092a` (origin/main, 2026-11-28; first
-`b83b9544`, then `670eec79`, `fec53d6a`, `5f59fae2` and `5ae62f2c`, see [Errata](#errata)). Code is cited by Rust path (`lifecycle::types::Bounds`) or as
-`file.rs::symbol`, with file paths relative to `crates/rdra-ish-core/src/lifecycle/` unless
-they start with `cli/` (`crates/rdra-ish-cli/`), as in the [claims inventory](./claims.md).
-**Implemented by** notes are pointers, not statements, and carry no read status. A code
-citation in a statement was read at `9857092a` unless it carries `unread@pin`
-([claims inventory](./claims.md#how-to-read-a-row)). Revisions are listed in
-[Errata](#errata).
+Code is cited by Rust path (`lifecycle::types::Bounds`) or as `file.rs::symbol`, with file
+paths relative to `crates/rdra-ish-core/src/lifecycle/` unless they start with `cli/`
+(`crates/rdra-ish-cli/`), as in the [claims inventory](./claims.md). **Implemented by**
+notes are pointers, not statements.
 
 ---
 
@@ -78,7 +75,7 @@ slots per entity, and `m ∈ {1, …, 255}` is the top of the integer range `[m+
 Defaults are `n ≡ 1`, `m = 5` for `states` and `check`, and `n ≡ 2`, `m = 5` for `verify` and
 `export --kind tla`. A pair `(M, β)` is also ill-formed when some variable of D2 would have
 more than 256 values: a nullable Int-like column at `m = 255`, a nullable Enum of 256
-values, or an Enum of 257 (`DomainTooLarge`, since #470).
+values, or an Enum of 257 (`DomainTooLarge`).
 
 *Implemented by* `lifecycle::types::Bounds` (`instances`, `per_entity`, `int_max`,
 `Bounds::STATES`, `Bounds::VERIFY`). Every call that turns the flags into bounds goes
@@ -136,8 +133,8 @@ expression ([state-derivation.md, "Variables"](../state-derivation.md#variables)
 that such a column "exists when something names it". First, which columns are read as a
 number. Second, that an Int-like `@null` column not read as a number is `{⊥, present}`. One
 consequence: an `==` between two columns in a temporal property names them but does not
-read them as numbers. The reference interpreter of P26 shares this reading with the build,
-so claim I1 has no independent evidence for it.
+read them as numbers. The reference interpreter (`core/tests/reference/`) shares this
+reading with the build, so claim I1 has no independent evidence for it.
 
 *Implemented by* `lifecycle::types::VarKind`, `Domain`, `Domain::size`, and
 `build/vars.rs`. The byte layout of a state (`TransitionSystem::offsets`, `width`) is not
@@ -224,7 +221,7 @@ does not commute with the SQL reading of a comparison. The language reference
 ([Null](../language-reference.md#null)) gives the full table: every comparison operator with
 `⊥` on the left, the right, or both, and under `not`. The lint warning
 `negated-order-admits-null` flags `not` over an ordering with a nullable operand in a
-`@check` or a `property`, the only forms that take `not` (P62). A logical `@derived` column
+`@check` or a `property`, the only forms that take `not` (claim I2). A logical `@derived` column
 is not a predicate under this definition: it reads its comparison as SQL does and is `⊥`
 while an operand is `⊥`, under `not` too.
 
@@ -233,7 +230,7 @@ while an operand is `⊥`, under `not` too.
 `build/preds/atoms.rs::lists_whole_domain`; `lifecycle/tests/null_table.rs` computes the
 reference's table through them and compares it with the page; `build/preds/checks.rs::passes`
 is the `@derived` reading. `lists_whole_domain` folds a set that lists every value of a
-finite domain to `true` (#71, #73) and never folds an Int set (#425). The fold does not
+finite domain to `true` and never folds an Int set. The fold does not
 change a predicate's value under this definition.
 
 ## Actions
@@ -329,10 +326,10 @@ successors. `Post_a(s, p)` is the set of successors of `s` under `(a, p)`. It is
 a pre-state guard fails or every successor is filtered out. A use case leaves one value per
 column. Two unguarded values, a copy beside a value, or a `chooses` beside a `sets` of one
 column is an error (`ConflictingEffects`, `ChoosesAndSets`), and so is any step that writes
-one `(variable, parameter)` twice (#485).
+one `(variable, parameter)` twice.
 
 *Choice.* The notes do not say how a `.when` arm guard combines with a second write of the
-same column in one step. Since #485 such a step is an error, so the question does not arise.
+same column in one step. Such a step is an error, so the question does not arise.
 
 *Implemented by* `lifecycle::types::Effect` (`Create`, `Delete`, `Assign`, `Transition`,
 `Choose`), `GuardWhy::{ArmCondition, Copy, Link}`, `build/sets.rs`,
@@ -348,7 +345,7 @@ children or clears their key where `T_β(M)` keeps them. Generated Go, Rust, and
 code executes no action either: it lists an unchecked `OnDelete_*` obligation. The warning
 `DeleteLeavesChildren` (`cascade`) and the warning `DeleteLeavesChildKeys` (`set_null`,
 `set_default`) name each use case that deletes such a parent and neither deletes the child
-nor, for the latter two, moves its key (P63). An `E` with a `@soft_delete` column gets no
+nor, for the latter two, moves its key (claim I3). An `E` with a `@soft_delete` column gets no
 guard and neither warning.
 
 *Implemented by* `GuardWhy::Restrict`; the warnings by
@@ -437,7 +434,7 @@ keeps the use cases reachable from the named BUCs. `--without-usecase`, `--witho
 case removed, and `T_β(M) = T_β(M, ALL)`. `--entity` removes no action; it selects which
 checks run. Every verdict of a scoped run is a verdict of `T_β(M, σ)`, and the `OK:` line
 says `in the selected scope`. The definitions below are stated for `T_β(M)` and apply to
-`T_β(M, σ)` unchanged. Theme (b) cites D24 for what a proof under a scope covers (P4).
+`T_β(M, σ)` unchanged. Theme (b) cites D24 for what a proof under a scope covers (claim B2).
 
 *Implemented by* `select.rs::Scope`, passed to `TransitionSystem::build`.
 
@@ -494,8 +491,8 @@ present slots of `s'`. States between two steps of a run are not checked, and ne
 last step that changes nothing. The native run skips the check on a self-loop
 (`explore/bfs.rs`, `Probe::Loop`, in every build). TLC checks the `PROPERTY`
 `[][(\A p : UC(p) => post')]_vars`, which every stuttering step satisfies. This is the
-intended reading, as in TLA+ (P22, fixed in #494): the language reference says so, and D18
-reports an assert whose last step only ever stutters as vacuous.
+intended reading, as in TLA+: the language reference says so, and D18 reports an assert
+whose last step only ever stutters as vacuous.
 
 <a id="d18"></a>**D18 (Vacuity).** A rule *holds vacuously* when no reachable state meets one
 of its premises
@@ -543,7 +540,7 @@ and the slots `κ` its non-`New` parameters bind. `(a, κ)` is *enabled* at `s` 
 binding of `a` that extends `κ` has a successor `s' ≠ s`. It is *taken* by a step `s → s'`
 with `s' ≠ s` whose action is `a` and whose binding extends `κ`. A move that changes no
 variable neither enables nor takes an instance. This is how `⟨A⟩_vars` reads it in TLA+ and
-how `lasso.rs::TransitionSystem::unfair_loop` reads the moves (P56, fixed in #475). So a
+how `lasso.rs::TransitionSystem::unfair_loop` reads the moves. So a
 behavior that stays at one state forever through a self-loop of a fair instance does not take
 it. Two fairness conditions on a behavior `σ` are used:
 
@@ -567,11 +564,10 @@ behavior `σ` of `T` that satisfies `F`, every binding `b`, and every `i` with
 `□(trig ⇒ ◇x)` per binding, not `◇x`, and `goal` is read at `j = i` too. `goal_b(σ_j)` does
 not require `pres_b(σ_j)`. On a slot deleted between `i` and `j` it reads the base values D8
 leaves, so a delete meets a goal those values satisfy and no other goal. This is the defined
-semantics (open problem P6, decided as documented):
-language-reference.md, "Temporal path properties", states it, and the TLA+ formulas
+semantics: language-reference.md, "Temporal path properties", states it, and the TLA+ formulas
 `[](present => <>x)` and `(present /\ x) ~> y` read it the same way.
 
-With `.present()` (open problem P64), the goal asks for a present binding:
+With `.present()`, the goal asks for a present binding:
 
 | Form | `cause` | `goal` |
 |---|---|---|
@@ -605,8 +601,8 @@ run (`ComponentRun::decide_liveness`).
 ```
 
 That is CTL `AG (trig ⇒ E[pres U (pres ∧ g)])` per binding, decided on the explored graph by
-one backward pass per binding (`reach.rs::reach_failure`, which since #478 asserts a complete
-graph in every build). The trigger alone reads the link. No fairness applies, and an instance
+one backward pass per binding (`reach.rs::reach_failure`, which asserts a complete graph in
+every build). The trigger alone reads the link. No fairness applies, and an instance
 may also loop forever. *Implemented by* `lifecycle::types::Reach`.
 
 ## Verdicts
@@ -625,18 +621,18 @@ this table says only as far as the build returns `T_β(M, σ)` (claim
 |---|---|---|
 | `ok` | a cone or property line of `verify` (`cli/src/tlc_output.rs::Outcome::Ok`) | The checks of the line hold on `T_β(M)` (D16, D17, D19, D21 under the fairness of D20, D22). For a line of a cone the verdict is derived from the cone, and theme (a) owns the step from cone to model. |
 | `ok (checked in Cone_X)` | a covered safety cone (`cli/src/verify/bfs.rs`) | `ok`, decided by the run of a cone `Cone_X` that holds every variable, action, guard, and parameter of this one. |
-| `counterexample` | a line, or `result:` (`RunResult::Counterexample`) | A finite trace (safety) or a lasso (liveness) of the explored system that breaks a check. It is a behavior of `T_β(M)` except where theme (a) says otherwise. A cone that frees slots may need more instances of an entity it does not read; such a counterexample is re-decided on the whole model for properties, or printed with the instances it needs. A cone that leaves a raised mark out may reach states the event order forbids; since #477 such a counterexample of a state rule or `after` is decided again, and since #509 by a refinement loop (`targets.rs::TransitionSystem::recheck_on`): the cone grows by the raisers of the events the trace runs without (`free_triggers`) and by the entities it creates past the bound (`over_bound`) until its run vouches for the trace or finds none, with the exact cone (`exact_target_cone`) as the last step (P1, fixed). Every printed trace, safety or liveness, replays through the step relation of the system it is about before it prints; one that does not is a `tool_error` (P20, fixed in #518 and #522). Since #529 and #531 the lifts' own look-ups are faults too (`explore/orbit.rs::lift_path`, `reduce/lift.rs::lift`, the lasso lift `explore/orbit/liveness.rs::Product::lift`), and since #541 so is the search for a class move's S path (`reduce/partition.rs::Succ::shortest_path`, which panicked until then); the `expect`s and `panic!`s left are listed in the index's P20 row with the reason each holds or the assumption it rests on; the two that read a lifted path (`reduce/lift.rs::lift_stop`'s state list, `explore/orbit.rs::run_orbits_annotating`'s last step of an `after` violation) hold whatever path of the system's own states is lifted. |
+| `counterexample` | a line, or `result:` (`RunResult::Counterexample`) | A finite trace (safety) or a lasso (liveness) of the explored system that breaks a check. It is a behavior of `T_β(M)` except where theme (a) says otherwise. A cone that frees slots may need more instances of an entity it does not read; such a counterexample is re-decided on the whole model for properties, or printed with the instances it needs. A cone that leaves a raised mark out may reach states the event order forbids; such a counterexample of a state rule or `after` is decided again by a refinement loop (`targets.rs::TransitionSystem::recheck_on`): the cone grows by the raisers of the events the trace runs without (`free_triggers`) and by the entities it creates past the bound (`over_bound`) until its run vouches for the trace or finds none, with the exact cone (`exact_target_cone`) as the last step (claim A2). Every printed trace, safety or liveness, replays through the step relation of the system it is about before it prints; one that does not is a `tool_error` (claim N16). The lifts' own look-ups are faults too (`explore/orbit.rs::lift_path`, `reduce/lift.rs::lift`, the lasso lift `explore/orbit/liveness.rs::Product::lift`), and so is a class move with no S path behind it (`reduce/partition.rs::Succ::shortest_path` returns `None`). The `expect`s and `panic!`s left on a lift's way are listed in [native.md, "Counterexamples: what is checked before printing"](./native.md#counterexamples-what-is-checked-before-printing), and the claims inventory's list of panics left on a lift's way gives the reason each holds or the assumption it rests on; the two that read a lifted path (`reduce/lift.rs::lift_stop`'s state list, `explore/orbit.rs::run_orbits_annotating`'s last step of an `after` violation) hold whatever path of the system's own states is lifted. |
 | `violated` | `property P (BFS on its cone): violated`; `can_reach (BFS on N cones): k checked, m violated` (`cli/src/verify/bfs.rs`) | `counterexample`, in the lines of the forms only BFS decides (`stable`, `unchanged`, `precedes`, `can_reach`). |
 | `not decided` | a line (`cli/src/verify/native.rs::Answer::Stopped`, `RunResult::NotDecided`) | The run stopped before it found a counterexample. No claim is made either way. The line's note names the stop: `stopped at the state cap (--max-states) or the memory limit`, `stopped at the state cap of N states`, `stopped at the memory limit of L`, `stopped at the time budget of S s`, or, for a property its cone cannot decide, `needs the whole model's WF_vars(Next)` and `its counterexample may create instances past the bound`. |
-| `tool_error` | a line or `result:` | A tool fault, not a fact about the model: a counterexample or trace that does not certify itself (`LassoFault` for a property, `LiftFault` for a state rule or `after`, `TraceFault` for a deadlock, a `can_reach` failure, or a witness; P20), a disagreement between the native checker and TLC, or a TLC failure without a violation. |
-| `result: ok` | last lines | Every check of the run is `ok`, with no tool error, nothing undecided, and, under `--deny-unproved`, nothing unproved (`cli/src/verify/end.rs::End::result`). A trace that fails to replay counts as a tool error there since #522 and #524. |
+| `tool_error` | a line or `result:` | A tool fault, not a fact about the model: a counterexample or trace that does not certify itself (`LassoFault` for a property, `LiftFault` for a state rule or `after`, `TraceFault` for a deadlock, a `can_reach` failure, or a witness), a disagreement between the native checker and TLC, or a TLC failure without a violation. |
+| `result: ok` | last lines | Every check of the run is `ok`, with no tool error, nothing undecided, and, under `--deny-unproved`, nothing unproved (`cli/src/verify/end.rs::End::result`). A trace that fails to replay counts as a tool error there. |
 | `result: not decided` | last lines | No failure and no tool error, but some finding a cap or budget left open, or an unproved rule under `--deny-unproved`. The exit status is 0 unless `--deny-undecided` (or `--deny-unproved`) is given. The `OK:` line then holds only for what was decided. |
 | `MemoryCapReached_*`, `StateCapReached_*`, `PatternCapReached_*` | `check`, `states` | An error: the cone stopped, so its rules are not checked. `check` does not report it as a pass. |
-| `proved: R` | `verify --prove` (`prove/mod.rs::Verdict::Proved`) | `R` belongs to a set of formulas that is inductive for the z3 encoding of the built system. That encoding widens D13: any absent row for `New`, and Int terms and `now` over all non-negative integers. Hence, if z3 is sound and the hypotheses of [z3.md, Theorem 1](./z3.md#the-soundness-theorem) hold, `T_{β'}(M, σ) ⊨ R` for every `β'` in the proof's scope `Sc(M, β)` ([z3.md, Definition 3](./z3.md#the-soundness-theorem)). That scope contains `β` whenever the run builds. Since #481 it is every bound at which the model builds (P43, fixed); its conditions are owned by z3.md (claim B2). Since #514 the `proved:` line, like every line that claims a proof, prints that scope: `for any number of rows and every --int-range-max from L to M`, where `L` and `M` are the least and the greatest `m'` at which the build reports no error (`cli/src/prove.rs::Claim::of`). Under a scope `σ` (D24) the encoded system is the scoped one, and since #483 and #514 the same claim ends `in the selected scope: <flags>` (P4); otherwise it ends `in the whole model`. |
-| `unproved: R: not inductive; …` / `unproved: R: z3 gave up on A` / `unproved: R: an initial state violates it` | `verify --prove` (`Verdict::Unproved`, printed by `cli/src/prove.rs`) | Not proved. `NotInductive`: a counterexample to induction exists from a state where `R` and every kept candidate hold, not necessarily reachable (since #525 the printed line says so: "it, every proved rule, and every kept lemma hold", P5). `Unknown`: z3 answered `unknown` or ran out of its resource limit on the step of action `A` (this is the verdict the task list calls "unknown"). `Initial`: an initial state of the encoding, possibly with more rows or larger Int values than `β`, breaks `R`. None of these says anything about the bounded verdict. |
+| `proved: R` | `verify --prove` (`prove/mod.rs::Verdict::Proved`) | `R` belongs to a set of formulas that is inductive for the z3 encoding of the built system. That encoding widens D13: any absent row for `New`, and Int terms and `now` over all non-negative integers. Hence, if z3 is sound and the hypotheses of [z3.md, Theorem 1](./z3.md#the-soundness-theorem) hold, `T_{β'}(M, σ) ⊨ R` for every `β'` in the proof's scope `Sc(M, β)` ([z3.md, Definition 3](./z3.md#the-soundness-theorem)). That scope contains `β` whenever the run builds, and it is every bound at which the model builds; its conditions are owned by z3.md (claim B2). The `proved:` line, like every line that claims a proof, prints that scope: `for any number of rows and every --int-range-max from L to M`, where `L` and `M` are the least and the greatest `m'` at which the build reports no error (`cli/src/prove.rs::Claim::of`). Under a scope `σ` (D24) the encoded system is the scoped one, and the claim ends `in the selected scope: <flags>`; otherwise it ends `in the whole model`. |
+| `unproved: R: not inductive; …` / `unproved: R: z3 gave up on A` / `unproved: R: an initial state violates it` | `verify --prove` (`Verdict::Unproved`, printed by `cli/src/prove.rs`) | Not proved. `NotInductive`: a counterexample to induction exists from a state where `R` and every kept candidate hold, not necessarily reachable; the printed line says so ("it, every proved rule, and every kept lemma hold"). `Unknown`: z3 answered `unknown` or ran out of its resource limit on the step of action `A` (this is the verdict the task list calls "unknown"). `Initial`: an initial state of the encoding, possibly with more rows or larger Int values than `β`, breaks `R`. None of these says anything about the bounded verdict. |
 | `out of scope: R: why` | `verify --prove` (`Verdict::OutOfScope`) | The encoding cannot state `R`. No claim. |
-| `refuted: R (BFS counterexample at k instances)` | `verify --prove` (`Verdict::Refuted`) | A safety cone of the same run reached a state that breaks `R`, so the prover did not try it (`cli/src/verify/refuted.rs`). The violation is BFS's error, not an unproved rule. Since #477 only a violation the cone vouches for, or one a rerun found again (`recheck_cones`, the refinement loop of the `counterexample` row, #509), refutes a rule (P1, fixed). `k` is the count of every entity of the cone when they share it; since #532, when the counts differ (under `--instances E=k`, or because the trace creates more rows of an entity the cone does not count than the bound), each is printed, as `Order=1 Payment=2 instances` (`cli/src/state_findings.rs::Instances`, P11). |
-| `escalated: R: ok at k instances` / `counterexample at k instances` / `not decided at k instances` | `verify --prove` (`cli/src/verify/escalate.rs`) | For a rule BFS passed and the prover left unproved, BFS on its cone at one and two more instances per entity. `counterexample` there fails the run. It is a violation of `T_{β'}(M)` for some larger `β'` under the conditions of `counterexample` above. Since #477 a counterexample the cone cannot vouch for, one that runs a use case without its event or creates more instances than the cone counts, is decided again (`recheck_on`, refined since #509) and its instances are printed (P11, fixed): `k` is one number when every entity of the cone that decided has it, else each entity's own, as `ok at Loan=3 Member=2 instances` (#532). |
+| `refuted: R (BFS counterexample at k instances)` | `verify --prove` (`Verdict::Refuted`) | A safety cone of the same run reached a state that breaks `R`, so the prover did not try it (`cli/src/verify/refuted.rs`). The violation is BFS's error, not an unproved rule. Only a violation the cone vouches for, or one a rerun found again (`recheck_cones`, the refinement loop of the `counterexample` row), refutes a rule. `k` is the count of every entity of the cone when they share it; when the counts differ (under `--instances E=k`, or because the trace creates more rows of an entity the cone does not count than the bound), each is printed, as `Order=1 Payment=2 instances` (`cli/src/state_findings.rs::Instances`). |
+| `escalated: R: ok at k instances` / `counterexample at k instances` / `not decided at k instances` | `verify --prove` (`cli/src/verify/escalate.rs`) | For a rule BFS passed and the prover left unproved, BFS on its cone at one and two more instances per entity. `counterexample` there fails the run. It is a violation of `T_{β'}(M)` for some larger `β'` under the conditions of `counterexample` above. A counterexample the cone cannot vouch for, one that runs a use case without its event or creates more instances than the cone counts, is decided again (`recheck_on`) and its instances are printed: `k` is one number when every entity of the cone that decided has it, else each entity's own, as `ok at Loan=3 Member=2 instances` (claim A25). |
 | `decided` | prose, design notes | Not printed as a verdict. A check is decided when its verdict is `ok` or `counterexample`. |
 
 `stopped at the memory limit` and `stopped at the state cap` describe why a run is
@@ -658,38 +654,38 @@ paths, not single steps: a state whose only paths run forever through steps that
 and row `k` alone, a silent cycle, is stuck exactly as a state with no step left is. This is
 on purpose. It is the reading the cone reduction keeps, since a divergence-blind stuttering
 bisimulation keeps whether a path reaches an edge that changes `T_v` ([cones.md, A8,
-consequence 3](./cones.md)) and does not keep whether a state has a successor (P34). TLC's
+consequence 3](./cones.md#the-reduction-by-an-independent-sub-lifecycle)) and does not keep
+whether a state has a successor. TLC's
 deadlock is the other reading: a state with no successor at all. The two differ on a silent
 cycle, and the engine corpus records the cases (`cone_reduced_loop_unreached`).
 
 ---
 
-## Prose that the code contradicts
+## Prose that differs from the definitions
 
-Each row is a place where the modeler-facing prose says something that D1 to D25 and the
-code do not. In each case the definition chose the code's behaviour. A departure of the code
-from the definitions is a different matter: claim [I1](./claims.md#0-the-build) and the open
-problems it names cover those. None of these rows is a soundness problem by itself. The
-soundness questions are in the index's [Open problems](./README.md#open-problems).
+Each row is a place where modeler-facing prose or a code comment could be read against D1 to
+D25, with how the two relate. In each case the definition follows the code. A departure of
+the code from the definitions is a different matter: claim [I1](./claims.md#0-the-build)
+covers it. None of these rows is a soundness problem by itself.
 
-| # | Prose | Definition and code | Note |
+| # | Prose | Definition and code | Status |
 |---|---|---|---|
-| S1 | `language-reference.md`, "Temporal path properties": `eventually(expr)` is `<>expr`. | D21: `□(present ∧ link ⇒ ◇x)` per binding (`lasso.rs::fails_at`, `explore/liveness.rs::liveness_search`). | `formal-verification.md`, "Mapping", states the code's form. Resolved with P6: the language reference now gives `[](present => <>expr)` and `(present /\ p) ~> q`. The doc comments of `crates/rdra-ish-core/src/model/constraints.rs::TemporalFormula::Eventually` and `::LeadsTo` still give `<>expr` and `p ~> q` at the pin. |
-| S2 | `language-reference.md`, "Temporal path properties" and "Recoverability": `can_reach` is `AG (present => EF expr)`. | D22: `AG (trig ⇒ E[pres U (pres ∧ goal)])`; the path must keep the instance present (`reach.rs::reach_failure`). | `formal-verification.md`, "Recoverability on a cone", and `types.rs::Reach` state the code's form. The two differ when the goal holds on a deleted slot's base values. Resolved with P6: the language reference now gives the code's form. The doc comments of `crates/rdra-ish-core/src/model/constraints.rs::TemporalFormula::CanReach` and `crates/rdra-ish-syntax/src/ast.rs::AstTemporalFormula::CanReach`, and the comment the TLA+ module prints (`crates/rdra-ish-emit/src/tla/module.rs::checks`), give the code's form too since #498. |
-| S6 | `language-reference.md`, "Entity state constraints": `after(UC).assert(…)` "checks the state each run of the use case leaves" and "must hold after every arm". | D17: a step with `s' = s` is not checked. The native run skips the `after` check on a self-loop (`explore/bfs.rs`, `Probe::Loop`, in every build), and the TLA+ `PROPERTY` `[][(\A p : UC(p) => post')]_vars` admits a stuttering step. | Resolved (P22, #494): the reference now says a last step that changes nothing is not checked, as in TLA+, and `Vacuous_AfterAssert_*` warns when the last step only ever runs that way. |
+| S1 | `language-reference.md`, "Temporal path properties", gives `eventually(expr)` as `[](present => <>expr)` and `leads_to(p, q)` as `(present /\ p) ~> q`. | D21: `□(present ∧ link ⇒ ◇x)` per binding (`lasso.rs::fails_at`, `explore/liveness.rs::liveness_search`). | The reference and `formal-verification.md`, "Mapping", state the code's form. The doc comments of `crates/rdra-ish-core/src/model/constraints.rs::TemporalFormula::Eventually` and `::LeadsTo` still give `<>expr` and `p ~> q`. |
+| S2 | `language-reference.md`, "Temporal path properties" and "Recoverability": `can_reach`. | D22: `AG (trig ⇒ E[pres U (pres ∧ goal)])`; the path must keep the instance present (`reach.rs::reach_failure`). | Agree: the reference gives the code's form, and so do `formal-verification.md`, "Recoverability on a cone", `types.rs::Reach`, the doc comments of `crates/rdra-ish-core/src/model/constraints.rs::TemporalFormula::CanReach` and `crates/rdra-ish-syntax/src/ast.rs::AstTemporalFormula::CanReach`, and the comment the TLA+ module prints (`crates/rdra-ish-emit/src/tla/module.rs::checks`). The form differs from `AG (present => EF expr)` when the goal holds on a deleted slot's base values. |
+| S6 | `language-reference.md`, "Entity state constraints": `after(UC).assert(…)` checks the state each run of the use case leaves, and a last step that changes nothing is not checked. | D17: a step with `s' = s` is not checked. The native run skips the `after` check on a self-loop (`explore/bfs.rs`, `Probe::Loop`, in every build), and the TLA+ `PROPERTY` `[][(\A p : UC(p) => post')]_vars` admits a stuttering step. | Agree, as in TLA+. `Vacuous_AfterAssert_*` warns when the last step only ever runs that way (D18). |
 | S3 | `formal-verification.md`, "Mapping": `always` is `[](present => x)`. | D19: the trigger is `present ∧ link`; without `.along` the link is `true`. | Consistent once `.along` is read into `present`, as the "Scope" table of `language-reference.md` does. |
 | S4 | `state-derivation.md`, "Variables": Int columns range over `0..5`. | D2: `[m+1]`, with `m` from `--int-range-max`; 5 is only the default. | The language reference and state-derivation.md, "Bounds", mention `--int-range-max`. Listed so that theme writers quote `m`, not 5. |
-| S5 | `prove/mod.rs::Verdict::Proved` doc comment, until #514: "Holds for any number of rows, at the stated value bounds"; `cli/src/prove.rs::ProofTally::clause`, until #514: "any Int value". | D23 and z3.md, Definition 3: the bounds `Sc(M, β)`. Inside the encoding (`prove/encode.rs`, `Enc::in_domain`), Int terms and `now` range over every non-negative integer with no top. | Resolved (P2, #514; P43, #481): `Verdict::Proved`'s doc now cites Theorem 1 over `Sc(M, β)`, and `clause` ends with the `Claim::of` text, `for any number of rows and every --int-range-max from L to M` and the scope. The `--prove` help text (`cli/src/cli.rs`) said "any Int value" until #525. |
+| S5 | The doc comment of `prove/mod.rs::Verdict::Proved`, the text of `cli/src/prove.rs::ProofTally::clause`, and the `--prove` help text (`cli/src/cli.rs`). | D23 and z3.md, Definition 3: the bounds `Sc(M, β)`. Inside the encoding (`prove/encode.rs`, `Enc::in_domain`), Int terms and `now` range over every non-negative integer with no top. | Agree. `Verdict::Proved`'s doc cites Theorem 1 over `Sc(M, β)`, and `clause` ends with the `Claim::of` text, `for any number of rows and every --int-range-max from L to M`, and the scope. |
 
 ## Remarks on the definitions
 
 - **Operands on absent rows.** D21 reads `goal` on a slot whatever its existence (D22 does
-  not: its path, goal state included, keeps the row present), and D8 resets a deleted slot's columns to base. So `eventually(Order.status == draft)`, with
-  `draft` the base value, is met by deleting the order. TLC reads the TLA+ formula the same
-  way (`[](present => <>x)`), so the engines agree. Open problem P6 decided this as
-  documented: language-reference.md, "Temporal path properties", now says so, with an
-  example each way and how to state a goal a delete does not meet. `.present()` (D21, P64)
-  states such a goal per property.
+  not: its path, goal state included, keeps the row present), and D8 resets a deleted slot's
+  columns to base. So `eventually(Order.status == draft)`, with `draft` the base value, is met
+  by deleting the order. TLC reads the TLA+ formula the same way (`[](present => <>x)`), so
+  the engines agree. language-reference.md, "Temporal path properties", says so, with an
+  example each way and how to state a goal a delete does not meet. `.present()` (D21) states
+  such a goal per property.
 - **Initial states are not assumed to satisfy anything.** D4 makes the initial set a product.
   That includes N:1 owners of pre-existing children under a created parent that is still
   absent (`PreExistingChildOfCreatedParent`).
@@ -703,96 +699,3 @@ soundness questions are in the index's [Open problems](./README.md#open-problems
 - **The definitions are parametric in `β`.** `n` enters D2 (key domains), D4 (Identity
   starts), and D7 (slots). `m` enters D2 (Int domains), D8 (`present` on a number), and D12
   (`Tick`). Nothing else depends on `β`. Theme (b)'s Lemma U uses this.
-
-## Errata
-
-- **2026-11-28, re-pin to `9857092a`** (the merge of #544). The crates change after
-  `5ae62f2c` only by #544 (`prove/encode.rs::Enc::one_of` and its call, P66, and tests). The
-  one citation of `encode.rs` here, `Enc::in_domain` in S5, is unchanged; every reading at
-  `5ae62f2c` carries over.
-- **2026-11-28, fourth audit; re-pin to `5ae62f2c`** (the merge of #542). The crates change
-  after `5f59fae2` only by #539 (a test) and #541 (`reduce/lift.rs::lift`,
-  `reduce/partition.rs::Succ::shortest_path`), which were read. D23's `counterexample` row
-  credited the fault of the S-path search to #529 and #531 under the old pin, where
-  `shortest_path` still panicked; it now credits #541.
-- **2026-11-28, second audit at `5f59fae2`.** The remark "Operands on absent rows" said D22 reads `goal`
-  whatever the row's existence; D22's path keeps the row present, goal state included, as
-  `reach.rs::reach_failure` does. S2 cited an `Ltl` in `model/constraints.rs`, which has
-  none (`Ltl` is `types.rs::Ltl`), and paths outside `lifecycle/` without their crate; it now cites `TemporalFormula::CanReach` and the
-  other two in full. S1 records that the `Eventually` and `LeadsTo` doc comments of
-  `TemporalFormula` still give the superseded forms. D23's `counterexample` row no longer
-  says none of the panics left is on the path being lifted.
-- **2026-11-28, re-pin to `5f59fae2`** (the merge of #537). Every `file.rs::symbol` a statement
-  cites was checked against `git diff fec53d6a 5f59fae2`, and each cited item a hunk touches
-  was read again: `cli/src/verify/refuted.rs`, `cli/src/verify/escalate.rs` and
-  `cli/src/state_findings.rs::Instances` (#532), `explore/orbit.rs::lift_path` and
-  `reduce/lift.rs::lift` (#529), and `explore/orbit/liveness.rs` (#531). Changes: the
-  `refuted` and `escalated` rows give the per-entity form of `k`; the `counterexample` row no
-  longer says the lifts rest on `expect`s, which #529 and #531 made faults; D25's citation
-  of `can_leave` follows this document's path convention (`findings.rs`), where it read
-  `core/src/lifecycle/findings.rs`.
-- **2026-11-28, final audit.** **Pin** moved from `670eec79` to `fec53d6a`. Every
-  `file.rs::symbol` a statement cites was checked against `git diff 670eec79 fec53d6a`, and
-  each cited item a hunk touches was read again: `cli/src/verify/end.rs::End::result` (the
-  `unread@pin` mark on the `result: ok` row is gone), `targets.rs::TransitionSystem::recheck_on`
-  and `unmet_of_assert`, `cli/src/verify/refuted.rs`, `cli/src/verify/escalate.rs` (the #477
-  parts of D23, no longer `unread@pin`), `reduce/lift.rs::lift`, `cli/src/prove.rs::Claim`
-  and `ProofTally::clause`, `prove/mod.rs::Verdict`,
-  `build/preds/entity_rules.rs::cascade_deletes` (D9, as #501 left it), and
-  `build/preds/temporal.rs::Builder::goal` (D21); `explore/liveness.rs`, `explore/moves.rs`
-  and `reach.rs` changed only in integer casts. No other cited item changed, so its earlier
-  read carries over. D25's citations are those of #520 and #525. Changes:
-  - **D23**, `counterexample`, `refuted`, `escalated`: a counterexample the cone cannot
-    vouch for is decided by a refinement loop since #509, not on the exact cone at once
-    (P1). The `counterexample` row names the `expect`s the lift still rests on.
-  - **D23**, `proved`: Definition 3 no longer restricts `m'` (P43, #481), and the line
-    prints its scope (P2, P4; #514).
-  - **D23**, `ok`: "the fairness of D21" was a slip for D20.
-  - **D20** called P56 open; it was fixed in #475.
-  - **S5** is resolved (#514, #481, #525).
-- **2026-11-28, D25 (P34).** D25, the deadlock finding, was added in #520 without an
-  erratum, and the lists of definitions still said "D1 to D24". They now say D1 to D25.
-  #525 gave D25 the condition `findings.rs::deadlocks` reads: only an *open* value (one no
-  `@end` names, with an arm to another value, `has_way_on`) can deadlock. As first written,
-  D25 reported any reachable stuck state whose value was not an end state, which named as
-  deadlocks the values whose only exit is a delete or a self-loop; the code never did.
-- **2026-11-28, `.present()` (P64).** D21 gained the goal `pres_b ∧ goal` of
-  `eventually(x).present()` and `leads_to(x, y).present()`, the owner's decision on P6: the
-  reading that a delete meets a goal its base values satisfy stays the default, and the
-  modifier opts out of it per property. No other definition changed.
-
-- **2026-11-28, after the owner's review (P62, P63).** **D5** stated the two readings of
-  null but gave no table, and said nothing of `@derived`; it now points to the reference's
-  table, which a test checks against the evaluator, to the lint warning
-  `negated-order-admits-null`, and to the three-valued `@derived` reading. **D9** said the
-  info `DeleteLeavesChildren` reports a key the lifecycle does not execute; that was only
-  `cascade`, and `set_null` and `set_default` had no diagnostic. D9 now says that the SQL
-  export does execute the three actions, that `DeleteLeavesChildren` is a warning and
-  `DeleteLeavesChildKeys` covers the other two, and that neither fires for a `@soft_delete`
-  parent.
-- **2026-11-28, after the owner's review (P60).** The first version said "the source of
-  truth is the code". It defined `I_β(M)` as what `TransitionSystem::initial_states`
-  computes (D4), `T_β(M)` as what `TransitionSystem::build` constructs (D13), and the
-  variables and effects as the values of `VarKind`, `Domain`, and `Effect` (D2, D8). Under
-  that reading a fault in the builder was part of the specification. "`T` is not
-  `T_β(M)`" (P54 in native.md) was then false by definition, and Lemma U in z3.md compared
-  two outputs of the build. D1 to D13 now define `T_β(M)` from the model's text, with code
-  only in **Implemented by** notes. That the build implements them is claim I1. Changes
-  made at the same time:
-  - **D1** said `m ∈ {0, …, 255}`. `cli/src/export.rs::checked_bounds` rejects
-    `--int-range-max 0`, and every CLI path goes through it, so `m ∈ {1, …, 255}`. D1 also
-    records `DomainTooLarge` (#470), which makes a pair with a domain of more than 256
-    values ill-formed.
-  - **D13** held the scope `σ` as an unnumbered paragraph. It is now D24, so that theme (b)
-    can cite it.
-  - **D11** said "nothing resets the latch" without saying whether that was meant. It now
-    states the design decision of event-order.md and its reasons, and points to
-    `.counted(k)`.
-  - **D23**, `proved`: the row said "for every `n ≥ 1` and every `m` at which the model
-    builds". That was wider than z3.md's Definition 3, which leaves out some bounds (P43),
-    and at `b83b9544` also `m' = 255` with a nullable Int (P40, now a build error). The row
-    now cites `Sc(M, β)`. The `counterexample`, `refuted`, and `escalated` rows described
-    P1 and P11 as open; both were fixed in #477.
-  - **Pin** moved from `b83b9544` to `670eec79`. In between, #477, #478, #485, and #470
-    changed code that D8, D22, and D23 cite. The changes were read for D8 (#485: one write
-    per slot), D1 (#470), and D22 (#478). The #477 parts of D23 are marked unread@pin.
