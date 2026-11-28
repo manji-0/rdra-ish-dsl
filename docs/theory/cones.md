@@ -1178,11 +1178,12 @@ the tests count one cone's cells and keep a cone below the budget, and none make
   is an `S` step of the extended sub-lifecycle whose action has no counterpart in the cone; an
   inner lift that returns the wrong number of groups is `Length`. A class move with no silent
   path behind it is `NoMove` too: `reduce/partition.rs::Succ::shortest_path` returns `None` (test
-  `::a_class_move_with_no_s_path_is_a_replay_error`, which forges a move back to the class just
-  left). The lifted start state is built from the run's initial state and an initial `S` state of
-  its class, and is not itself checked against the unreduced cone's initial states. What still
-  panics on the lift's way, `lift_stop`'s `expect`s among it, is listed with the reason each
-  holds in the [claims inventory](./claims.md#panics-left-on-a-lifts-way).
+  `core/tests/reduce.rs::a_class_move_with_no_s_path_is_a_replay_error`, which forges a move
+  back to the class just left). The lifted start state is built from the run's initial state
+  and an initial `S` state of its class, and is not itself checked against the unreduced cone's
+  initial states. What still panics on the lift's way, `lift_stop`'s `expect`s among it, is
+  listed with the reason each holds in the
+  [claims inventory](./claims.md#panics-left-on-a-lifts-way).
 - **A17** (the cache): the cached quotient is keyed by the extended system, the caps, and the group;
   `Twin::CacheHit` recomputes every hit in a `shadow` build. M.
 

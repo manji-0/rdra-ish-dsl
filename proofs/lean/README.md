@@ -33,6 +33,18 @@ takes about 2 seconds.
 CI's `lean` job runs the script on every pull request that touches this directory, the
 script or `ci.yml`, and on every run on main. The job caches `~/.elan`.
 
+`scripts/check-lean-refs.py` runs in CI's `check` job on every pull request, prose-only
+ones included, and takes under a second. It checks three things:
+
+- every Rust name this README, the Lean doc comments and the Lean-citing lines of
+  claims.md and cones.md cite (`split_at`, `Reduction::stages`, `partition.rs::divergence`)
+  names a definition in `crates/`;
+- every name in the first column of a table below is declared in the file of its `File`
+  column;
+- every such name is listed in CheckAxioms.lean.
+
+Its docstring gives the exact rule.
+
 The toolchain is pinned in [lean-toolchain](./lean-toolchain) (`leanprover/lean4:v4.36.0`).
 elan installs it on the first build. Without elan, run `nix shell nixpkgs#elan` and then
 the script.
@@ -172,9 +184,9 @@ The proofs assume the following hypotheses and do not derive them:
   - `hloop`: every block whose silent edges between different states contain a cycle from
     a reachable state can loop (`SilentCycle`, Definition 5, case 1). Every build certifies
     it on each explored run of `X` (`reduce/hypotheses.rs::loop_faults`), whether
-    `divergence` set the marks or `s_cycles` left every class unmarked. The check peels the
-    silent edges inside the unmarked classes. It is `hloop` literally on a flat `X` not run up
-    to `H`, and the same check on the stored graph otherwise. When `obs = ∅` a release build
+    `partition.rs::divergence` set the marks or `s_cycles` left every class unmarked. The
+    check peels the silent edges inside the unmarked classes. It is `hloop` literally on a
+    flat `X` not run up to `H`, and the same check on the stored graph otherwise. When `obs = ∅` a release build
     does not explore `X`, so there `s_cycles` is checked only in tests, on a plain run of `X`
     under the test's own caps; a run past them is skipped (`partition.rs::unobserved_loops`).
 - **The fairness model** (`Behaviour.lean`). A fair instance is a set of `T_a` labels (fair

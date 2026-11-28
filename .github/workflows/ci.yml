@@ -196,6 +196,12 @@ jobs:
         # The places that read the Int bound against the list under Lemma U in
         # docs/theory/z3.md. Text only, so it runs on prose and code changes alike.
         run: python3 -I scripts/check-int-bound-sites.py
+      - name: Lean proofs' references
+        # The Rust and Lean names that proofs/lean/README.md, the Lean doc comments and the
+        # Lean-citing lines of docs/theory/claims.md and cones.md cite, against crates/ and
+        # proofs/lean (and CheckAxioms.lean). Text only, so it runs on prose and code alike:
+        # a rename in crates/ breaks it as surely as an edit to the README.
+        run: python3 -I scripts/check-lean-refs.py
       - name: nix package
         # The package `nix profile install github:manji-0/rdra-ish-dsl` installs. A release
         # build from scratch (about 4.5 minutes), so only when `nix` says a change can break it
