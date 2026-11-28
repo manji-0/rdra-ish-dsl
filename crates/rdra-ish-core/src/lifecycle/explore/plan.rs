@@ -23,16 +23,21 @@ pub(crate) struct Plan {
     #[cfg(feature = "perf")]
     pub pre_kinds: Box<[super::perf::Kind]>,
     /// The state bytes a step of the action may change, those of the vars of
-    /// `action_writes`, as a mask over the state read 8 bytes to a word: in word `i`, the
-    /// byte for state byte `8i + j` is `0x00` when a var of `action_writes` holds that byte
-    /// and `0xFF` when none does, and the bytes past the state's end are `0x00`. Every step
-    /// is held to it (`TransitionSystem::check_writes`).
-    pub writes: Box<[u64]>,
-    /// The mask of the state's last 8 bytes, in the same form, when the state is at least
-    /// 8 bytes wide and its width is no multiple of 8: those bytes are read as one word, so a
-    /// step's partial last word is checked without a copy.
-    last: u64,
+    /// `action_writes`, as a mask over the state read `LANE` bytes to a word: in word `i`,
+    /// the byte for state byte `LANE * i + j` is `0x00` when a var of `action_writes` holds
+    /// that byte and `0xFF` when none does, and the bytes past the state's end are `0x00`.
+    /// Every step is held to it (`TransitionSystem::check_writes`).
+    pub writes: Box<[Word]>,
+    /// The mask of the state's last `LANE` bytes, in the same form, when the state is at least
+    /// `LANE` bytes wide and its width is no multiple of `LANE`: those bytes are read as one
+    /// word, so a step's partial last word is checked without a copy.
+    last: Word,
 }
+
+/// The word `Plan::writes` reads the state in.
+pub(crate) type Word = u128;
+/// The bytes of a `Word`.
+const LANE: usize = std::mem::size_of::<Word>();
 
 /// A conjunct that reads one var of one param's row: it holds on a slot exactly when the
 /// byte the var holds there is in `values`.
@@ -79,32 +84,35 @@ impl std::fmt::Debug for Plans {
     }
 }
 
-/// Bytes `8i..8i + 8` of a state, or of the zero-padded tail, as `Plan::writes` reads them.
-fn word(bytes: &[u8]) -> u64 {
-    let mut w = [0u8; 8];
+/// Bytes `LANE * i..LANE * (i + 1)` of a state, or of its zero-padded tail, as
+/// `Plan::writes` reads them.
+fn word(bytes: &[u8]) -> Word {
+    let mut w = [0u8; LANE];
     w[..bytes.len()].copy_from_slice(bytes);
-    u64::from_ne_bytes(w)
+    Word::from_ne_bytes(w)
 }
 
 impl Plan {
     /// Whether a step of the action may change state byte `cell`: a var of `action_writes`
     /// holds it.
     pub fn writes(&self, cell: usize) -> bool {
-        self.writes[cell / 8].to_ne_bytes()[cell % 8] == 0
+        self.writes[cell / LANE].to_ne_bytes()[cell % LANE] == 0
     }
 
     /// Whether a step from `s` to `next` changes a byte no var of `action_writes` holds.
     #[inline]
     pub fn changes_unwritten(&self, s: &StateSlice, next: &StateSlice) -> bool {
-        let (a, a_tail) = s.0.as_chunks::<8>();
-        let (b, b_tail) = next.0.as_chunks::<8>();
-        let mut changed = 0u64;
+        let (a, a_tail) = s.0.as_chunks::<LANE>();
+        let (b, b_tail) = next.0.as_chunks::<LANE>();
+        let mut changed: Word = 0;
         for ((x, y), keep) in a.iter().zip(b).zip(self.writes.iter()) {
-            changed |= (u64::from_ne_bytes(*x) ^ u64::from_ne_bytes(*y)) & keep;
+            changed |= (Word::from_ne_bytes(*x) ^ Word::from_ne_bytes(*y)) & keep;
         }
         if !a_tail.is_empty() {
-            changed |= match (s.0.last_chunk::<8>(), next.0.last_chunk::<8>()) {
-                (Some(x), Some(y)) => (u64::from_ne_bytes(*x) ^ u64::from_ne_bytes(*y)) & self.last,
+            changed |= match (s.0.last_chunk::<LANE>(), next.0.last_chunk::<LANE>()) {
+                (Some(x), Some(y)) => {
+                    (Word::from_ne_bytes(*x) ^ Word::from_ne_bytes(*y)) & self.last
+                }
                 _ => (word(a_tail) ^ word(b_tail)) & self.writes[0],
             };
         }
@@ -171,10 +179,8 @@ impl TransitionSystem {
             pre_kinds: pre.iter().map(super::perf::Kind::of).collect(),
             pre: pre.into(),
             post: post.into(),
-            writes: written.chunks(8).map(word).collect(),
-            last: written
-                .last_chunk::<8>()
-                .map_or(0, |w| u64::from_ne_bytes(*w)),
+            writes: written.chunks(LANE).map(word).collect(),
+            last: (written.last_chunk::<LANE>()).map_or(0, |w| Word::from_ne_bytes(*w)),
         }
     }
 
