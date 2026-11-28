@@ -34,12 +34,33 @@ impl TransitionSystem {
         self.restrict_to_mapped(vars, keep, true).0
     }
 
+    /// Whether `restrict_to(vars, ..)` keeps entity `e`: its existence is in `vars`, or an
+    /// owner var in `vars` names it as its parent, which keeps it as a stub.
+    pub(crate) fn keeps_entity(&self, vars: &VarSet, e: EntId) -> bool {
+        vars.contains(&self.entity(e).exists)
+            || vars.iter().any(|v| {
+                matches!(self.vars[v.index()].kind, VarKind::Owner { parent, .. } if parent == e)
+            })
+    }
+
+    /// Whether `restrict_to_mapped(vars, .., false)` keeps an action's param `param`: a `New`
+    /// param when its entity's existence is in `vars`, any other when the restriction keeps
+    /// its entity (`keeps_entity`).
+    pub(crate) fn keeps_param(&self, vars: &VarSet, param: &Param) -> bool {
+        match param.role {
+            ParamRole::New => vars.contains(&self.entity(param.entity).exists),
+            _ => self.keeps_entity(vars, param.entity),
+        }
+    }
+
     /// `restrict_to`, with the map from this system's items to the restricted system's. With
     /// `havoc` off, a `Triggered` param whose mark is outside `vars` is treated like any
     /// other param (the extended sub-lifecycle of `reduced` reads the mark as an input, or
-    /// folds it into a bit). A param on an entity the system neither keeps nor stubs goes
-    /// with the guards that name it either way: a rise of that sub-lifecycle binds rows of T
-    /// it does not hold.
+    /// folds it into a bit), and a `New` param on an entity whose existence is outside `vars`
+    /// goes with the guards that name it: a rise of that sub-lifecycle may create a row of T
+    /// whose index a key join of a condition names alone. A param on an entity the system
+    /// neither keeps nor stubs goes with the guards that name it either way: a rise of that
+    /// sub-lifecycle binds rows of T it does not hold.
     pub(crate) fn restrict_to_mapped(
         &self,
         vars: &VarSet,
@@ -67,6 +88,11 @@ impl TransitionSystem {
                 }
             }
         }
+        debug_assert!(
+            (0..self.entities.len())
+                .all(|i| map.ent[i].is_some() == self.keeps_entity(vars, EntId::at(i))),
+            "keeps_entity names the entities restrict_to keeps"
+        );
         let mut out = TransitionSystem::empty(self.bounds.clone());
         out.api_ids = self.api_ids.clone();
         for &v in vars {
@@ -135,13 +161,17 @@ impl TransitionSystem {
                 .filter(|(_, mark)| havoc && !vars.contains(mark))
                 .map(|(p, _)| p)
                 .collect();
+            // A param the restriction drops goes with the guards that name it. With `havoc`
+            // off a `New` one does too: a rise of the extended sub-lifecycle can name a created
+            // row by its index alone (a key join of a condition on the row the step creates)
+            // in a guard that reads only vars of `vars`.
             havoced.extend(
                 action
                     .params
                     .iter()
                     .enumerate()
                     .filter(|(_, p)| {
-                        p.role != ParamRole::New && map.ent[p.entity.index()].is_none()
+                        !self.keeps_param(vars, p) && (p.role != ParamRole::New || !havoc)
                     })
                     .map(|(i, _)| id8(i)),
             );
@@ -154,8 +184,7 @@ impl TransitionSystem {
                 reads.is_subset(vars) && !named_params(&g.pred).iter().any(|p| havoced.contains(p))
             });
             let (action, params) = drop_params(action, |p, param| {
-                (param.role == ParamRole::New && !vars.contains(&self.entity(param.entity).exists))
-                    || havoced.contains(&p)
+                !self.keeps_param(vars, param) || havoced.contains(&p)
             });
             map.act[i] = Some(ActId::at(out.actions.len()));
             map.params[i] = params;
@@ -191,6 +220,16 @@ impl TransitionSystem {
                     let i = step.act.index();
                     let mut post = step.post.clone();
                     if let Some(index) = &map.params[i] {
+                        // In the extended sub-lifecycle (`havoc` off), which runs with
+                        // `Checks::none()`, a post that names a dropped param by its index alone reads
+                        // inside `vars` but has no param to read it at: the assert is dropped.
+                        if !havoc
+                            && named_params(&post)
+                                .iter()
+                                .any(|p| index[usize::from(*p)].is_none())
+                        {
+                            return None;
+                        }
                         renumber_pred(&mut post, &renumber_by(index));
                     }
                     Some(AfterStep {

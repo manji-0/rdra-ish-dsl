@@ -1,0 +1,46 @@
+// trap: a fold whose key the extended sub-lifecycle drops (claim A8, Lemma 6 of cones.md).
+// The rule's cone has T = Order and Desk, and S = Voucher and Ticket. `OpenDesk` reads
+// `Order.hold`, which goes both ways, so it is in T. The cone drops `GrantNoted`'s owner
+// assignment and its `memo` effect, so no guard links its Desk row and no effect names it:
+// a fold of `GrantNoted` would be keyed by its acting row, the `Existing` Desk param. No var
+// of S or the inputs names Desk, so `restrict_to` drops that param, and such a fold has no
+// key to read its bit at. `GrantNoted` stays unfolded, Desk's existence is an input, and the
+// reduced cone finds the cone's violation in 9 steps: Draft, Issue, Place, Pay, Hold,
+// OpenDesk, GrantNoted, Use, Ship.
+// expect Forbidden_Order_0: native=counterexample tlc=counterexample z3=refuted
+entity Order "注文" { id: Int @pk  status: Enum(new, paid, shipped) @default(new)  hold: Bool @default(false) }
+entity Desk "窓口" { id: Int @pk  memo: Bool @default(false) }
+entity Voucher "券" { id: Int @pk  status: Enum(open, used) @default(open) }
+entity Ticket "札" { id: Int @pk  status: Enum(draft, issued) @default(draft) }
+relate(Voucher, Desk, N:1)
+usecase Place "注文"
+usecase Pay "支払"
+usecase Ship "出荷"
+usecase Hold "保留"
+usecase Release "解除"
+usecase OpenDesk "開設"
+usecase GrantNoted "注記して発券"
+usecase Use "使用"
+usecase Draft "起票"
+usecase Issue "発行"
+creates(Place, Order)
+transitions(Pay, Order.status, new -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+condition HasUsedVoucher "使用済の券"
+holds(HasUsedVoucher, Voucher.status == used)
+applies_to(HasUsedVoucher, Ship)
+sets(Hold, Order.hold == true)
+sets(Release, Order.hold == false)
+condition Held "保留中"
+holds(Held, Order.hold == true)
+creates(OpenDesk, Desk)
+applies_to(Held, OpenDesk)
+creates(GrantNoted, Voucher)
+sets(GrantNoted, Desk.memo == true)
+transitions(Use, Voucher.status, open -> used)
+condition TicketIssued "発行済の札"
+holds(TicketIssued, Ticket.status == issued)
+applies_to(TicketIssued, Use)
+creates(Draft, Ticket)
+transitions(Issue, Ticket.status, draft -> issued)
+forbidden(Order, status == shipped)

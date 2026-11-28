@@ -427,7 +427,7 @@ invariants of `print_state_models`, which are one-sided by design (T6).
 | Step of T1 | Paper argument | Test | Assumed |
 |---|---|---|---|
 | 1, 2, 3 (states, init, steps) on unreduced systems | above; step 3 for multi-target transitions under the builder's effect-order invariant, which the build enforces (`ConflictingEffects`), and for every effect under the assumption, not checked, that no two params of one action that can bind one slot write one variable | graph equality on every sample cone under 300,000 states, at 1 and 2 instances, edges with their params; the 36 `bfs_and_tlc_*` tests of `engine_equivalence.rs` | TLC's `-dump dot` lists every edge, self-loops included |
-| 3 on reduced systems | none (not argued here) | graph equality on reduced sample cones, class moves by action alone; the reduced cone's violated set against the unreduced one's; on the 17 reduced corpus cones, every step of the unreduced cone a step of the reduced module or a stutter ([The reduction, step by step](#the-reduction-step-by-step)) | the quotient tables (common-mode) outside the corpus |
+| 3 on reduced systems | none (not argued here) | graph equality on reduced sample cones, class moves by action alone; the reduced cone's violated set against the unreduced one's; on the 21 reduced corpus cones, every step of the unreduced cone a step of the reduced module or a stutter ([The reduction, step by step](#the-reduction-step-by-step)) | the quotient tables (common-mode) outside the corpus |
 | 4, state rules and `after` | above, with D17's stuttering exemption | verdict and violated-set comparison on every compared cone; each TLC trace replayed through the native step relation | TLC |
 | 4, temporal properties and fairness | above | verdicts only: 23 `TEMPORAL_CASES` at 2 instances (under `-lncheck final`, [Batch JVMs](#batch-jvms)) and the corpus at each case's flags | TLC's liveness checking under quantified weak fairness |
 | 5, latch | above | verdicts only: `explored_along` (a `TEMPORAL_CASES` fixture) and the corpus case `safety_precedes_latch`. The graph comparison prints `PrintMode::Safety` modules, which declare no latch (`mod.rs::checked_properties` checks no property in that mode), so it never sees one | |
@@ -516,7 +516,7 @@ compares; what the test shows when it passes is [test].
 
 `cli/tests/engine_corpus.rs` over `cli/tests/engine_corpus/*.rdra` (T7).
 
-- **Inputs.** 89 cases with 215 `expect` lines; families `cap` 2, `cone` 14, `fair` 9,
+- **Inputs.** 91 cases with 218 `expect` lines; families `cap` 2, `cone` 16, `fair` 9,
   `presence` 9, `safety` 25, `sym` 10, `width` 2, `z3` 18. One case (`cap_memory_limit`)
   skips TLC. 38 cases carry a `bfs=` list.
 - **Bounds.** TLC runs at the case's flags: 2 instances and Int `0..5` by default; 1 instance
@@ -676,7 +676,7 @@ not only by verdict. [read] for the description; what a pass shows is [test].
   inner reduction's own table, so the key a cone state has is listed. Two corpus cones are
   nested. A sub-lifecycle explored up to `H` (#212 phase 2) is refused
   (`NoClassTable::UpToH`): its run stores one form per orbit, which is not a key of `C`.
-  A table past 200,000 states (`CLASS_TABLE_CAP`) is refused too. The test pins 17 cones
+  A table past 200,000 states (`CLASS_TABLE_CAP`) is refused too. The test pins 21 cones
   checked and none refused.
 - **Planted faults.**
   `::tlc_refinement_catches_class_moves_left_out_that_tlc_on_the_reduced_cone_misses` empties
@@ -810,7 +810,7 @@ included, so they are lower bounds on that fraction.
 | Temporal cone comparison | liveness and ladder verdicts | same | same | no | 23 cases, 2 instances |
 | `verify --with-tlc` in CI | verdicts | verdicts | verdicts | no | 5 domain roots and flagged header lines, header bounds |
 | Random models with TLC | verdicts | verdicts | verdicts | no | 45 fixed seeds, main only |
-| Refinement of reduced cones | the reduced step and its tables, step by step | the reduced module's tables | where TLC on the two modules differs | the extended sub-lifecycle, on the corpus traps | 17 reduced corpus cones, header bounds, safety steps only |
+| Refinement of reduced cones | the reduced step and its tables, step by step | the reduced module's tables | where TLC on the two modules differs | the extended sub-lifecycle, on the corpus traps | 21 reduced corpus cones, header bounds, safety steps only |
 | Mutation run, liveness | cone ladder and liveness only, through headers | no | no | ladder only | corpus, by hand, rates in [Mutation run](#mutation-run) |
 | Mutation run, TLC side | no | printer, comparison, TLC readers | no | no | corpus and CLI tests with TLC, by hand, no completed run |
 

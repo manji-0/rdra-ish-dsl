@@ -235,6 +235,26 @@ fn the_stub_cases_step_as_their_cones_step() {
     }
 }
 
+/// The two restriction shapes of claim A8: a fold whose key `restrict_to(S ∪ inputs)` would
+/// drop, whose action stays unfolded, and a rise whose guard names a created row the
+/// restriction drops, which goes with that guard. Both reduce, and step as their cones step.
+#[test]
+fn the_dropped_key_cases_step_as_their_cones_step() {
+    let key = check_case("cone_fold_key_dropped");
+    assert!(key.reductions > 0 && key.s_steps > 0, "{key:?}");
+    let row = check_case("cone_rise_names_a_dropped_new_row");
+    assert!(row.reductions > 0 && row.rises > 0, "{row:?}");
+    for seen in [&key, &row] {
+        assert!(
+            seen.classes == seen.reductions
+                && seen.classes_skipped == 0
+                && seen.stopped == 0
+                && seen.nested == 0,
+            "the class level runs on every reduction: {seen:?}"
+        );
+    }
+}
+
 /// A class move removed from a flat reduction's tables is caught at the class level: the
 /// reduced cone, run with the planted tables, lacks an edge the cone has.
 #[test]

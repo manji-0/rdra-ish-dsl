@@ -1418,6 +1418,7 @@ const TLC_NO_ERROR: &str = "Model checking completed. No error has been found.";
 
 /// TLC's line for a violated invariant of the refinement check, which a planted fault must
 /// produce by name: a parse error or a crash of TLC is no catch.
+#[cfg(feature = "shadow")]
 fn tlc_invariant_violated(name: &str) -> String {
     format!("Error: Invariant {name} is violated.")
 }
@@ -1467,7 +1468,7 @@ fn leave_out_moves(tla: &str, table: &str, n: usize) -> (String, usize) {
 }
 
 /// The reduced cones of the corpus the refinement check runs on, and those it refuses.
-const CHECKED: usize = 17;
+const CHECKED: usize = 21;
 const REFUSED: usize = 0;
 
 /// Every reduced cone of the corpus refines its reduction under TLC: each reached state of

@@ -204,22 +204,36 @@ impl TransitionSystem {
         for (seed, _) in seeds {
             obs.extend(seed.intersection(&s).copied());
         }
-        let folds: Vec<Fold> = s_actions
+        let mut folds: Vec<Fold> = s_actions
             .iter()
             .filter_map(|id| self.fold_of(*id, &t))
             .filter(|f| self.fold_initial(f).is_some())
             .collect();
-        let mut inputs = VarSet::new();
-        for id in &s_actions {
-            let fold = folds.iter().find(|f| f.act == *id);
-            inputs.extend(self.raw_reads(*id, fold).intersection(&t).copied());
-        }
-        for v in inputs.clone() {
-            inputs.extend(self.existences(v));
+        let inputs_of = |folds: &[Fold]| {
+            let mut inputs = VarSet::new();
+            for id in &s_actions {
+                let fold = folds.iter().find(|f| f.act == *id);
+                inputs.extend(self.raw_reads(*id, fold).intersection(&t).copied());
+            }
+            for v in inputs.clone() {
+                inputs.extend(self.existences(v));
+            }
+            inputs.retain(|v| t.contains(v));
+            inputs
+        };
+        let mut inputs = inputs_of(&folds);
+        // A fold whose key `restrict_to(S ∪ inputs)` drops (a T param on an entity no var of
+        // S or the inputs names) has no slot in the extended sub-lifecycle to read its bit
+        // at, so its action stays unfolded and reads T raw (docs/theory/cones.md, Lemma 6,
+        // "Parameters"). Unfolding adds inputs only, and a larger set keeps every entity a
+        // smaller one keeps, so every fold left keeps its key in the new inputs too.
+        let all: VarSet = s.union(&inputs).copied().collect();
+        if !dropped("unfold_dropped_keys") && !folds.iter().all(|f| f.key_kept(self, &all)) {
+            folds.retain(|f| f.key_kept(self, &all));
+            inputs = inputs_of(&folds);
         }
         // Every input is monotone (Lemma 5d): `reduced_with` checks it with the rest of the
         // lemma (`split_faults`).
-        inputs.retain(|v| t.contains(v));
         Split {
             t,
             s,
