@@ -58,38 +58,6 @@ open LTS
 
 variable {V E A Val K : Type}
 
-/-- The roles whose binding needs a present row (`binds_exists() == PRESENT`). -/
-def Role.needsPresent : Role → Bool
-  | .existing | .parent | .triggered => true
-  | _ => false
-
-/-- The roles whose binding reads the entity's existence (all but `earlier`). -/
-def Role.readsRow : Role → Bool
-  | .earlier _ => false
-  | _ => true
-
-theorem Role.readsRow_of_needsPresent {r : Role} (h : r.needsPresent = true) :
-    r.readsRow = true := by
-  cases r <;> simp_all [Role.needsPresent, Role.readsRow]
-
-/-- How an existence value holds its rows: which slots are present, and which slot is the
-lowest absent one. -/
-structure Rows (Val : Type) where
-  present : Val → Nat → Prop
-  lowestAbsent : Val → Nat → Prop
-
-/-- `candidate_slots`: the slots a parameter of a role may bind, given its entity's existence. -/
-def Rows.cand (R : Rows Val) : Role → Val → Nat → Prop
-  | .existing, v, c => R.present v c
-  | .parent, v, c => R.present v c
-  | .triggered, v, c => R.present v c
-  | .new, v, c => R.lowestAbsent v c
-  | .earlier _, _, _ => True
-
-theorem Rows.cand_present (R : Rows Val) {r : Role} (h : r.needsPresent = true) (v : Val)
-    (c : Nat) : R.cand r v c ↔ R.present v c := by
-  cases r <;> simp_all [Role.needsPresent, Rows.cand]
-
 /-- The guard conjunct of a parameter's role, at position `j`. -/
 def roleConj (R : Rows Val) (ex : E → V) (j : Nat) (p : Param E) : Conj V Val where
   rd := if p.role.readsRow then [ex p.entity] else []

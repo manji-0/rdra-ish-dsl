@@ -232,7 +232,7 @@ theorem hyp : Lemma6Hyp (D true) obs where
     constructor
     · intro h
       simp only [bitOf, decide_eq_true_eq] at h
-      refine ⟨⟨fun _ => c, fun _ => 0⟩, rfl, (foldConds_iff true _ _).mpr ?_⟩
+      refine ⟨⟨fun _ => c, fun _ => none⟩, rfl, (foldConds_iff true _ _).mpr ?_⟩
       simp only [join, D, tv]
       exact h
     · rintro ⟨b, _, hb⟩
@@ -265,7 +265,7 @@ def t1 : TV tv (Val := Nat) := fun v => if v.1 = .sh ∨ v.1 = .ds then 1 else 0
 /-- After `setf`: the flag is set too. -/
 def t2 : TV tv (Val := Nat) := fun v => if v.1 = .st then 0 else 1
 
-def bind0 : Binding := ⟨fun _ => 0, fun _ => 0⟩
+def bind0 : Binding := ⟨fun _ => 0, fun _ => none⟩
 
 theorem init0 : (coneW M tv ta).Reach (t0, s0) :=
   Reach.init (show M.init (join tv (t0, s0)) by simp [M, join, tv, t0, s0])
@@ -294,7 +294,7 @@ theorem rise_from_init :
   simp [Ext.inp, D, t0, t1] at this
 
 /-- `note`'s binding: the desk at slot `0`, the shop at slot `5`. -/
-def bnote : Binding := ⟨fun j => if j = 1 then 5 else 0, fun _ => 0⟩
+def bnote : Binding := ⟨fun j => if j = 1 then 5 else 0, fun _ => none⟩
 
 def lnote : SaL ta := ⟨(.note, bnote), rfl⟩
 

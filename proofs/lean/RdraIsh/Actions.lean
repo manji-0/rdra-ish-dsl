@@ -19,9 +19,11 @@ transition systems of `Reduction.lean`:
   under `b`.
 
 `rd a` is the code's read set of `split_with`: `action_reads` (the plain reads and the mark
-reads) together with `copy_reads`. `wr a` is `action_writes`. Nothing here computes them from
-the syntax of an action; that they bound what the guard and the effect look at is the
-hypothesis `Local` below, which this file states and does not derive.
+reads) together with `copy_reads`. `wr a` is `action_writes`. This file does not compute them
+from a syntax; that they bound what the guard and the effect look at is the hypothesis `Local`
+below. `SymActModel.lean` reads a model off the slot syntax of `SymActions.lean`, with `rd`
+and `wr` computed from the guards and effects as the code computes them, and proves `Local`
+of it (`SymAct.Sys.local_`).
 
 The parameters and roles are carried for Lemma 6 (`restrict_to` drops a parameter with its
 guards; `bind_stub_params` re-binds one on a stub). Lemma 5 does not look at them.
@@ -42,16 +44,56 @@ inductive Role where
   | earlier (step : Nat)
   deriving DecidableEq
 
+/-- The roles whose binding needs a present row (`binds_exists() == PRESENT`). -/
+def Role.needsPresent : Role → Bool
+  | .existing | .parent | .triggered => true
+  | _ => false
+
+/-- The roles whose binding reads the entity's existence (all but `earlier`). -/
+def Role.readsRow : Role → Bool
+  | .earlier _ => false
+  | _ => true
+
+theorem Role.readsRow_of_needsPresent {r : Role} (h : r.needsPresent = true) :
+    r.readsRow = true := by
+  cases r <;> simp_all [Role.needsPresent, Role.readsRow]
+
+section Rows
+
+variable {Val : Type}
+
+/-- How an existence value holds its rows: which slots are present, and which slot is the
+lowest absent one. The semantics of `Role` is `Rows.cand`: Lemma 6's model reads it through
+an `Rows` of its valuations, and the slot model of `SymActions.lean` through `SymAct.rows`. -/
+structure Rows (Val : Type) where
+  present : Val → Nat → Prop
+  lowestAbsent : Val → Nat → Prop
+
+/-- `candidate_slots`: the slots a parameter of a role may bind, given its entity's existence. -/
+def Rows.cand (R : Rows Val) : Role → Val → Nat → Prop
+  | .existing, v, c => R.present v c
+  | .parent, v, c => R.present v c
+  | .triggered, v, c => R.present v c
+  | .new, v, c => R.lowestAbsent v c
+  | .earlier _, _, _ => True
+
+theorem Rows.cand_present (R : Rows Val) {r : Role} (h : r.needsPresent = true) (v : Val)
+    (c : Nat) : R.cand r v c ↔ R.present v c := by
+  cases r <;> simp_all [Role.needsPresent, Rows.cand]
+
+end Rows
+
 /-- A parameter: its entity and its role. -/
 structure Param (E : Type) where
   entity : E
   role : Role
 
 /-- A binding of a step: the slot of each parameter, by position, and the value each choice
-effect picks, by position. Which bindings a step may take is part of the guard. -/
+effect picks, by position (`none` is `null`, which an owner choice may pick). Which bindings a
+step may take is part of the guard. -/
 structure Binding where
   slot : Nat → Nat
-  choice : Nat → Nat
+  choice : Nat → Option Nat
 
 /-- A guard conjunct: the variables it reads and the condition. -/
 structure Conj (V Val : Type) where

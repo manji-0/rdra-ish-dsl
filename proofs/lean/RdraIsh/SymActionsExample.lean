@@ -1,4 +1,4 @@
-import RdraIsh.SymActions
+import RdraIsh.SymActModel
 
 /-!
 # Commutation fails outside `W` (cones.md, Theorem A18)
@@ -62,7 +62,7 @@ def s : St Bool Empty Unit where
   now := 0
 
 /-- The binding of order 0. -/
-def b : Bnd := ⟨fun _ => 0, fun _ => none⟩
+def b : Act.Binding := ⟨fun _ => 0, fun _ => none⟩
 
 theorem wf : S.WF where
   guards _ φ h := by simp [S] at h
@@ -78,7 +78,7 @@ theorem built : S.Built where
       | zero => rfl
       | succ p => simp [S] at hq
     subst this; simp [S]
-  earlier_mark a p q hq hr := by
+  earlier_mark a p q _ hq hr := by
     cases p with
     | zero =>
       simp only [S, List.getElem?_cons_zero, Option.some.injEq] at hq
@@ -139,5 +139,13 @@ theorem off_W_counterexample :
   have := congrArg (fun st => st.own () 0) h.2.2.2
   revert this
   decide
+
+/-- The same system as an action model: `Local` holds of it, so it meets the locality Lemmas 5
+and 6 assume as well as every hypothesis of `step_comm`. -/
+theorem model_local :
+    Act.Local (S.model [false, true] [] [()] [()] (fun e => by cases e <;> simp)
+      (fun c => nomatch c) (fun _ => List.mem_singleton_self _)
+      (fun _ => List.mem_singleton_self _)) :=
+  Sys.local_ built
 
 end RdraIsh.ExampleOffW

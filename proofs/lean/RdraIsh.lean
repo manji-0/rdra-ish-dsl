@@ -25,5 +25,7 @@ import RdraIsh.SymActionsExample
 import RdraIsh.Search
 import RdraIsh.SearchSym
 import RdraIsh.SearchExample
+import RdraIsh.SymActSearch
+import RdraIsh.SymActModel
 import RdraIsh.Lemma5Cert
 import RdraIsh.Lemma5Check
