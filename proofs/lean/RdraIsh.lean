@@ -6,3 +6,5 @@ import RdraIsh.Symmetry
 import RdraIsh.Behaviour
 import RdraIsh.Fairness
 import RdraIsh.FairnessExample
+import RdraIsh.SymmetryLiveness
+import RdraIsh.SymmetryLivenessExample
