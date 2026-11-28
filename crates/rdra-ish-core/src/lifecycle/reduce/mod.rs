@@ -671,7 +671,7 @@ impl TransitionSystem {
         // a test planted the fault (`dropped`).
         if let Some(fault) = &ext.stubs.fault {
             crate::shadow_assert!(
-                dropped("bind_stub_params"),
+                dropped("bind_stub_params") || dropped("unfold_dropped_keys"),
                 "shadow: Extended::build: {fault}"
             );
             eprintln!(

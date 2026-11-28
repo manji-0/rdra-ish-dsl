@@ -77,6 +77,26 @@ impl Fold {
         }
     }
 
+    /// Whether `restrict_to(vars)` keeps every item of the cone the extended sub-lifecycle
+    /// reads the bit through: for a `Param` key, the key param (`keeps_param`); for a linked
+    /// fold, the folded node's entity, its link var, and the S param the link names.
+    pub(super) fn key_kept(&self, ts: &TransitionSystem, vars: &VarSet) -> bool {
+        let params = &ts.actions[self.act.index()].params;
+        match &self.key {
+            FoldKey::Param(key) => ts.keeps_param(vars, &params[usize::from(*key)]),
+            FoldKey::Linked {
+                entity,
+                link_var,
+                s_param,
+                ..
+            } => {
+                ts.keeps_entity(vars, *entity)
+                    && vars.contains(link_var)
+                    && ts.keeps_param(vars, &params[usize::from(*s_param)])
+            }
+        }
+    }
+
     /// The vars `holds` reads: a step that writes none of them leaves the bit as it was.
     pub(super) fn reads(&self, ts: &TransitionSystem) -> VarSet {
         let a = &ts.actions[self.act.index()];
@@ -293,11 +313,7 @@ impl TransitionSystem {
         let key = match (linked.first(), s_keys.first()) {
             (Some(p), _) => *p,
             (None, Some(k)) => *k,
-            (None, None) => id8(a
-                .params
-                .iter()
-                .position(|p| p.role.is_written())
-                .expect("an S action writes a row")),
+            (None, None) => id8(a.params.iter().position(|p| p.role.is_written())?),
         };
         // A row the step creates has no slot before the step, so no bit can be keyed by it.
         if a.params[usize::from(key)].role == ParamRole::New {

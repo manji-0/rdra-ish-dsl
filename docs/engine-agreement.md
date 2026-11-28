@@ -206,7 +206,7 @@ reads no nextest filter, so they run it on every pull request that can change a 
 
 ## Cases by trap
 
-The corpus has 89 cases with 215 `expect` lines. Each row gives the case, its trap, its `flags`, and every `expect` line of its header. A verdict
+The corpus has 91 cases with 218 `expect` lines. Each row gives the case, its trap, its `flags`, and every `expect` line of its header. A verdict
 stands for both the native checker and TLC unless it names TLC apart. `cex` is
 `counterexample` and `nd` is `not_decided`; `BFS a/b/c[/d]` is the `bfs=` list. `cap_memory_limit`
 skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
@@ -218,6 +218,7 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `cone_always_frees_slots` | `always` on a cone that frees slots |  | `NeverD` ok |
 | `cone_copy_from_parent` | A fair use case copies its parent's column into the cone |  | `IssueEventually`, `IssueEventuallyPlain` ok |
 | `cone_entity_mark_left_out` | An entity cone that leaves a raised mark out, and its state-model findings |  | `Deadlock_Order_status_placed`, `Deadlock_Payment_status_unpaid`, `Witness_Order_status_shipped`, `Witness_Payment_status_paid`, `Witness_Notice_status_received`, `Witness_Notice_status_read` cex |
+| `cone_fold_key_dropped` | A fold whose key, the acting row on an entity no var of the sub-lifecycle names, the extended sub-lifecycle drops, so the action stays unfolded |  | `Forbidden_Order_0` cex, z3 refuted |
 | `cone_handler_mark_left_out` | A handler whose raised mark the cone leaves out |  | `ShipsUnfair`, `ShipsFair`, `Deadlock_Order_status_paid` cex |
 | `cone_independent_loop` | An independent loop outside the cone keeps the whole model's `WF_vars(Next)` met |  | `PaidShipsUnfair` cex; `PaidShips` ok |
 | `cone_outside_monotone` | A var outside the cone that is monotone only because nothing deletes it |  | `PaidShipsStamp`, `PaidShipsNotes` ok |
@@ -227,6 +228,7 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `cone_reduced_loop_fair_enabled` | A reduced class loops, but the fair step is enabled there, so it is no place to stop | `--instance-count 1` | `JobStarts` ok |
 | `cone_reduced_loop_unreached` | A reduced class can loop, but not from the states the cone reaches it in | `--instance-count 1` | `SeenFinishes` ok; `Deadlock_Gate_phase_pa`, `Deadlock_Job_status_waiting` cex |
 | `cone_reduced_no_loop_capped` | A reduced sub-lifecycle with no loop, and an unreduced cone past the cap | `--max-states 300` | `JobStarts` ok |
+| `cone_rise_names_a_dropped_new_row` | A rise whose guard names, by index alone, a created row the extended sub-lifecycle drops, which goes with that guard |  | `Forbidden_Order_0` cex, z3 refuted; `Deadlock_Order_status_paid` cex |
 | `cone_rise_param_on_a_stub` | A rise with a `Parent` param on an entity the reduction stubs, which must bind there for the T step to have its rise |  | `Forbidden_Order_0` cex, z3 refuted; `Deadlock_Order_status_paid` cex, TLC none |
 | `cone_triggered_param_on_a_stub` | A folded handler with a `Triggered` param beside its key, on an entity the reduction stubs, which must bind there for the reduced cone to find the violation the cone has |  | `Forbidden_Order_0` cex, z3 refuted; `Deadlock_Order_status_paid` cex |
 | `fair_counted_exposes_lost_run` | The latch hides a missing raise that counting exposes |  | `OrderComplete`, `Deadlock_Order_delivered_partial`, `Witness_Order_delivered_complete` cex; `ParcelComplete` ok; `EventOverflow_Order_EvDispatched_Deliver` ok, z3 proved, BFS ok/ok/ok |
