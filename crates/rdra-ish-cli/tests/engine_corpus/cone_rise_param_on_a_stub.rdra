@@ -1,0 +1,48 @@
+// trap: a rise whose `Parent` param is on an entity the reduction stubs (P67).
+// The rule's cone has T = Order and Sheet, and S = Voucher and Ticket. `Note` reads
+// `Order.hold`, which goes both ways, so it is in T; it creates a sheet under an order, and
+// Sheet's existence is an input of `Use`. Voucher's owner keeps Order in the extended
+// sub-lifecycle as a stub, absent there forever. Before the fix `Note`'s rise kept its
+// `Parent` role, bound no stub row and never ran, and the reduction panicked looking it up
+// for the cone's `Note` step.
+// expect Forbidden_Order_0: native=counterexample tlc=counterexample z3=refuted
+// expect Deadlock_Order_status_paid: native=counterexample tlc=none
+entity Order "注文" { id: Int @pk  status: Enum(new, paid, shipped) @default(new)  hold: Bool @default(false) }
+entity Voucher "券" { id: Int @pk  status: Enum(open, used) @default(open) }
+entity Sheet "票" { id: Int @pk  status: Enum(made) @default(made) }
+entity Ticket "札" { id: Int @pk  status: Enum(draft, issued) @default(draft) }
+relate(Voucher, Order, N:1)
+relate(Sheet, Order, N:1)
+usecase Place "注文"
+usecase Pay "支払"
+usecase Ship "出荷"
+usecase Grant "発券"
+usecase Use "使用"
+usecase Hold "保留"
+usecase Release "解除"
+usecase Note "記票"
+usecase Draft "起票"
+usecase Issue "発行"
+creates(Place, Order)
+transitions(Pay, Order.status, new -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+sets(Hold, Order.hold == true)
+sets(Release, Order.hold == false)
+condition Held "保留中"
+holds(Held, Order.hold == true)
+creates(Note, Sheet)
+applies_to(Held, Note)
+condition HasUsedVoucher "使用済の券"
+holds(HasUsedVoucher, Voucher.status == used)
+applies_to(HasUsedVoucher, Ship)
+creates(Grant, Voucher)
+transitions(Use, Voucher.status, open -> used)
+condition SheetMade "票がある"
+holds(SheetMade, Sheet.status == made)
+applies_to(SheetMade, Use)
+creates(Draft, Ticket)
+transitions(Issue, Ticket.status, draft -> issued)
+condition TicketIssued "発行済の札"
+holds(TicketIssued, Ticket.status == issued)
+applies_to(TicketIssued, Use)
+forbidden(Order, status == shipped)

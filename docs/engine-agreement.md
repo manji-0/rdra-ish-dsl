@@ -223,6 +223,8 @@ skips TLC, since `verify` refuses `--with-tlc` under `64MiB`.
 | `cone_reduced_loop_fair_enabled` | A reduced class loops, but the fair step is enabled there, so it is no place to stop | `--instance-count 1` | `JobStarts` ok |
 | `cone_reduced_loop_unreached` | A reduced class can loop, but not from the states the cone reaches it in | `--instance-count 1` | `SeenFinishes` ok; `Deadlock_Gate_phase_pa`, `Deadlock_Job_status_waiting` cex |
 | `cone_reduced_no_loop_capped` | A reduced sub-lifecycle with no loop, and an unreduced cone past the cap | `--max-states 300` | `JobStarts` ok |
+| `cone_rise_param_on_a_stub` | A rise with a `Parent` param on an entity the reduction stubs, which must bind there for the T step to have its rise (P67) |  | `Forbidden_Order_0` cex, z3 refuted; `Deadlock_Order_status_paid` cex, TLC none |
+| `cone_triggered_param_on_a_stub` | A folded handler with a `Triggered` param beside its key, on an entity the reduction stubs, which must bind there for the reduced cone to find the violation the cone has (P67) |  | `Forbidden_Order_0` cex, z3 refuted; `Deadlock_Order_status_paid` cex |
 | `fair_counted_exposes_lost_run` | The latch hides a missing raise that counting exposes |  | `OrderComplete`, `Deadlock_Order_delivered_partial`, `Witness_Order_delivered_complete` cex; `ParcelComplete` ok; `EventOverflow_Order_EvDispatched_Deliver` ok, z3 proved, BFS ok/ok/ok |
 | `fair_creating_use_case` | A fair use case that creates (a `New` parameter) and runs out of slots |  | `PendingPays` cex; `BillPays` ok |
 | `fair_enabled_by_leaving_step` | A fair instance whose only step leaves the goal-false region is still enabled |  | `PaidShips` ok |

@@ -67,8 +67,9 @@ impl Extended {
 
     /// `restrict_to(S ∪ inputs)` with one bit var per group of folded S actions, each such
     /// action reading its bit in place of its guards on T (which the restriction dropped
-    /// with their T params) and with its key's T param bound to any slot, the variants of
-    /// one group merged into one action, and per bit a rise and a fall that flip it freely.
+    /// with their T params) and with its key's T param bound to any slot, every param on a
+    /// stub bound to any slot too (`bind_stub_params`), the variants of one group merged into
+    /// one action, and per bit a rise and a fall that flip it freely.
     pub(super) fn build(
         cone: &TransitionSystem,
         s: &VarSet,
@@ -86,6 +87,7 @@ impl Extended {
                 acts[to.index()] = Some(ActId::at(from));
             }
         }
+        bind_stub_params(&mut system, &map, &acts, all.len(), s_actions, folds);
         let t: VarSet = cone.var_ids().filter(|v| !s.contains(v)).collect();
         let mut groups = BitGroups::default();
         let mut drop: Vec<bool> = vec![false; system.actions.len()];
@@ -378,6 +380,62 @@ impl BitGroups {
             site: Site::bare(ModelRef::Synthesized),
         });
         self.variants.insert(fold.act, vec![fold.act]);
+    }
+}
+
+/// Binds every param on a stub to any slot (P67). A stub is an entity of T whose existence
+/// `system` does not hold: `restrict_to` keeps it for an owner var of S, and no action writes
+/// it, so a param whose role needs a present row of it (`Existing`, `Parent`, `Triggered`)
+/// would never bind, and its action would never run, although it runs in the cone. Two kinds
+/// of action keep such a param:
+///
+/// - a folded S action, whose T params the bit stands for: the bit holds at the key when some
+///   binding of them is on rows that are present where they must be and makes every folded
+///   guard hold, and no effect names a T param but the key (`fold_of`), so the step's
+///   successor is the same at every binding and binding them freely adds no step and drops
+///   none;
+/// - a rise, which keeps only its guards on S and the inputs, and so may already run where
+///   the cone's T step cannot; binding freely keeps every T step's rise.
+///
+/// An unfolded S action keeps none: its raw reads hold the existence of each entity it binds
+/// (`raw_reads`, and for a `Triggered` param that of its mark, through `existences`), so that
+/// entity is no stub. A `shadow` build checks it.
+fn bind_stub_params(
+    system: &mut TransitionSystem,
+    map: &Remap,
+    acts: &[Option<ActId>],
+    width: usize,
+    s_actions: &BTreeSet<ActId>,
+    folds: &[Fold],
+) {
+    for (k, act) in acts.iter().enumerate() {
+        let Some(act) = *act else { continue };
+        let fold = folds.iter().find(|f| f.act == act);
+        let local = |q: u8| match &map.params[act.index()] {
+            Some(m) => m[usize::from(q)],
+            None => Some(q),
+        };
+        let folded = |p: usize| {
+            fold.is_some_and(|f| {
+                f.t_params
+                    .iter()
+                    .any(|(q, _)| local(*q).map(usize::from) == Some(p))
+            })
+        };
+        for p in 0..system.actions[k].params.len() {
+            let param = &system.actions[k].params[p];
+            let on_stub = system.entities[param.entity.index()].exists.index() >= width;
+            if !on_stub || param.role.binds_exists() != Some(Value::PRESENT) {
+                continue;
+            }
+            crate::shadow_assert!(
+                !s_actions.contains(&act) || folded(p),
+                "shadow: bind_stub_params: S action {} binds a stub by param {p}, which no \
+                 fold stands for",
+                system.actions[k].name
+            );
+            system.actions[k].params[p].role = ParamRole::Earlier { step: 0 };
+        }
     }
 }
 

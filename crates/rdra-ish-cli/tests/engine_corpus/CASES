@@ -14,6 +14,8 @@ cone_reduced_inner_class_loops
 cone_reduced_loop_fair_enabled
 cone_reduced_loop_unreached
 cone_reduced_no_loop_capped
+cone_rise_param_on_a_stub
+cone_triggered_param_on_a_stub
 fair_counted_exposes_lost_run
 fair_creating_use_case
 fair_enabled_by_leaving_step
