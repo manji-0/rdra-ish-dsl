@@ -650,7 +650,6 @@ mod proofs {
     const T2_COL: VarId = VarId(3);
     const S_OWNER: VarId = VarId(5);
 
-    #[cfg(test)]
     const OPS: [CmpOp; 6] = [
         CmpOp::Eq,
         CmpOp::Ne,
@@ -910,11 +909,24 @@ mod proofs {
             xs[k]
         }
 
-        /// Any pick with up to `most` slots per T entity.
-        fn any_pick(most: u8) -> Pick {
-            let n1: u8 = kani::any();
-            let n2: u8 = kani::any();
-            kani::assume((1..=most).contains(&n1) && (1..=most).contains(&n2));
+        /// What a harness lets vary: the slots of each T entity (any count up to `most`, or
+        /// `most` itself), and the third guard's operator (any, or `<=`).
+        #[derive(Clone, Copy)]
+        struct Vary {
+            most: u8,
+            any_slots: bool,
+            any_op: bool,
+        }
+
+        fn any_pick(b: Vary) -> Pick {
+            let (n1, n2) = match b.any_slots {
+                true => {
+                    let (n1, n2): (u8, u8) = (kani::any(), kani::any());
+                    kani::assume((1..=b.most).contains(&n1) && (1..=b.most).contains(&n2));
+                    (n1, n2)
+                }
+                false => (b.most, b.most),
+            };
             let sets: [[u8; VALUES as usize]; 2] = kani::any();
             for set in &sets {
                 kani::assume(set.iter().all(|v| *v <= VALUES));
@@ -925,8 +937,10 @@ mod proofs {
                 n2,
                 roles: [any_of(&roles), any_of(&roles)],
                 sets,
-                // `expr.rs`'s harnesses prove `compare` for every operator.
-                op: CmpOp::Le,
+                op: match b.any_op {
+                    true => any_of(&OPS),
+                    false => CmpOp::Le,
+                },
             }
         }
 
@@ -935,8 +949,8 @@ mod proofs {
         ///
         /// The bound is one past the most bindings `holds` walks. The state's bytes come from
         /// one `u128` (`WIDTH` is 16), with no loop.
-        fn check(linked: bool, most: u8) {
-            let pick = any_pick(most);
+        fn check(linked: bool, vary: Vary) {
+            let pick = any_pick(vary);
             let ts = system(&pick, linked);
             let fold = fold(&pick, linked);
             let bytes: [u8; WIDTH] = kani::any::<u128>().to_le_bytes();
@@ -967,21 +981,32 @@ mod proofs {
             std::mem::forget(ts);
         }
 
-        /// The key is the acting S row, and both T params range over entities of up to 2
-        /// slots: up to 4 bindings. At 3 slots CBMC's symbolic execution alone passes ten
-        /// minutes.
+        /// The key is the acting S row, and both T params range over entities of 2 slots: 4
+        /// bindings, where a wrong radix shows. The bounds keep the run near 9 GB: with 1 or 2
+        /// slots per entity it takes 14 GB, and at 3 CBMC's symbolic execution alone passes ten
+        /// minutes; the linked harness takes the other slot counts and every operator.
         #[kani::proof]
         #[kani::unwind(5)]
         fn a_fold_keyed_by_its_s_row_holds_where_some_t_binding_does() {
-            check(false, 2);
+            let vary = Vary {
+                most: 2,
+                any_slots: false,
+                any_op: false,
+            };
+            check(false, vary);
         }
 
         /// The key is the linked T param, fixed at `c`, and the other T param ranges: up to 3
-        /// bindings.
+        /// bindings, at every operator of the third guard.
         #[kani::proof]
         #[kani::unwind(4)]
         fn a_fold_keyed_by_a_linked_t_row_holds_where_some_t_binding_does() {
-            check(true, T_SLOTS);
+            let vary = Vary {
+                most: T_SLOTS,
+                any_slots: true,
+                any_op: true,
+            };
+            check(true, vary);
         }
     }
 

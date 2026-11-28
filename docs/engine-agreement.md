@@ -494,8 +494,8 @@ share its fixture, in a `proofs` module that tests also compile.
 | `an_owner_value_names_its_slot` | `types.rs` | `Domain::slot` reads back the slot `Domain::of_slot` made an owner value from, and an optional owner's null names no slot | every slot below 255, optional or not |
 | `growth_keeps_room_for_one_more` | `explore/table.rs` | the shared table's growth rule is hashbrown's as `Seen::bytes_with` reads it: an insert keeps the capacity while there is room, else moves to a capacity of at least one more item whose buckets are a power of two | every length up to the capacity, buckets from 2^2 to 2^40 |
 | `one_of_admits_what_the_step_forks_on` | `prove/encode.rs` | the term `Enc::one_of` writes for a non-key `Effect::Choose` holds of a value exactly when `each_successor` forks on it within the domain, and, past the top, when the choice is of every number from `from` (`Numbers`) and the value is at least `from`; the choices are those `build/sets.rs` builds, numbers expanded from `from` beside listed values, and an evaluator of `smt.rs` terms (`cfg(kani)`) reads the term. Under Kani a term's nodes are leaked rather than shared through an `Arc` (`smt.rs::Shared`), since CBMC unwinds the drop of an `Arc` through every kind of node | a domain of 1 to 4 values, `from` up to 3, any non-empty set of listed values, every candidate byte |
-| `a_fold_keyed_by_its_s_row_holds_where_some_t_binding_does` | `reduce/fold.rs` | step (a) of Lemma 6 (theory/cones.md): `Fold::holds` of a `Param` fold keyed by the action's `S` row holds at a slot exactly when some binding of its two `T` parameters satisfies the folded guards, each parameter on a present row when its role needs one (`Existing`, `Parent`, `Triggered`) and on any row for `Earlier`; the spec reads the state's bytes and evaluates the guards itself. A test checks that `fold_of` gives the fold the harness takes. Under Kani the reference twin of `Fold::holds` is left out | an action `A(s, t1, t2)` on two `T` entities of 1 to 2 slots each, every pair of roles, the folded guards `t1.c in A`, `t2.c in B` (any sets of a 2-value column) and `t1.c <= t2.c`, every state whose columns hold values, every slot of the key |
-| `a_fold_keyed_by_a_linked_t_row_holds_where_some_t_binding_does` | `reduce/fold.rs` | the same for the fold the link `s.owner = t1` keys by `t1`: the key fixed at the slot, `t2` ranging | the same, on entities of 1 to 3 slots |
+| `a_fold_keyed_by_its_s_row_holds_where_some_t_binding_does` | `reduce/fold.rs` | step (a) of Lemma 6 (theory/cones.md): `Fold::holds` of a `Param` fold keyed by the action's `S` row holds at a slot exactly when some binding of its two `T` parameters satisfies the folded guards, each parameter on a present row when its role needs one (`Existing`, `Parent`, `Triggered`) and on any row for `Earlier`; the spec reads the state's bytes and evaluates the guards itself. A test checks that `fold_of` gives the fold the harness takes. Under Kani the reference twin of `Fold::holds` is left out | an action `A(s, t1, t2)` on two `T` entities of 2 slots each, every pair of roles, the folded guards `t1.c in A`, `t2.c in B` (any sets of a 2-value column) and `t1.c <= t2.c`, every state whose columns hold values, every slot of the key |
+| `a_fold_keyed_by_a_linked_t_row_holds_where_some_t_binding_does` | `reduce/fold.rs` | the same for the fold the link `s.owner = t1` keys by `t1`: the key fixed at the slot, `t2` ranging | the same, on entities of 1 to 3 slots, with `t1.c op t2.c` at every operator |
 
 A result holds up to its bound, and for one thread. The symmetry harness stays at 2 slots per
 class, where its group commutes, so the exhaustive unit test and the `canonical` twin check the
@@ -506,7 +506,7 @@ the `DomainTooLarge` tests cited under claim N2 check that it refuses the column
 The fold harnesses build their `TransitionSystem` by hand, its layout written out; the unit test
 `fold_of_folds_the_harness_action` checks that `fold_of` gives the fold they take and that
 `layout` gives the layout, and `the_spec_is_the_bit` checks the spec against `Fold::holds` on
-sampled operators of the third guard. Their guards read the system's lists, so the workspace's
+sampled sets, operators and states. Their guards read the system's lists, so the workspace's
 `[workspace.metadata.kani]` passes CBMC `--max-field-sensitivity-array-size 1024` for every
 harness: below that CBMC does not resolve which variant an enum read from a list is, and the
 fold harnesses unwind `eval` through every kind of `Pred`.
@@ -527,7 +527,7 @@ cargo kani -p rdra-ish-core --harness compare_negates_and_mirrors  # one harness
 
 `store_bytes_is_at_most_the_model_before` and
 `apply_of_a_composition_is_the_composition_of_applies` take several minutes each, the two fold
-harnesses about two minutes each and up to 12 GB, and the others under a minute.
+harnesses under two minutes each and up to 9 GB, and the others under a minute.
 
 ### In CI
 
