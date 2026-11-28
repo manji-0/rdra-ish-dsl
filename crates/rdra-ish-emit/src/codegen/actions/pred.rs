@@ -67,7 +67,7 @@ pub(in crate::codegen) fn expr(
         | Pred::Count { entity, body, .. } => {
             let Some(q) = quant.as_deref_mut() else {
                 return Err(
-                    "a condition over related rows, `.has`, `.none` or a count (phase 5)".into(),
+                    "a condition over related rows (`.has`, `.none` or a count) outside a use case's guards".into(),
                 );
             };
             let id = ts.entity(*entity).id.clone();
@@ -140,7 +140,7 @@ pub(super) fn atom(
     bind: Bind<'_, '_>,
     quant: &mut Option<&mut Quant<'_>>,
 ) -> Result<Expr, String> {
-    let unsupported = || "a condition atom this phase does not print".to_string();
+    let unsupported = || "a condition atom the generator does not print".to_string();
     // A key between two rows: the child's key names the parent.
     let key = match (lhs, op, rhs) {
         (Term::Slot { var, at }, TsCmp::Eq, Term::Index(parent))
@@ -227,7 +227,7 @@ pub(super) fn atom(
         };
     }
     let VarKind::Column { column, .. } = &ts.var(*var).kind else {
-        return Err("a condition on a comparison proposition (phase 5)".into());
+        return Err("a condition on a comparison proposition".into());
     };
     // A value the caller chooses for a written row: the condition reads the input.
     if let At::Next(_) = at {
@@ -347,7 +347,7 @@ fn input_atom(
     input: usize,
     decl: &FnInput,
 ) -> Result<Expr, String> {
-    let unsupported = || "a condition on a chosen value this phase does not print".to_string();
+    let unsupported = || "a condition on a chosen value the generator does not print".to_string();
     let e = match (domain, rhs) {
         (Domain::Enum(_) | Domain::NullableEnum(_), Term::Lit(v)) if domain.name(*v).is_some() => {
             let wire = domain.name(*v).ok_or_else(unsupported)?.to_string();

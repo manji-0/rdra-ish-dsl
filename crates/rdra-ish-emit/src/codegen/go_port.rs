@@ -133,7 +133,7 @@ fn print_contracts(domain: &DomainModel, port: &super::ir::PortDecl, out: &mut S
         }
         for e in &c.entries {
             out.push_str(&format!(
-                "\t// {} runs the action {} of {} whole, by the ids of its rows: the generator printed no\n\t// function for it (#335), so the service writes it and keeps the obligations.\n\t{0}({}) error\n",
+                "\t// {} runs the action {} of {} whole, by the ids of its rows: the generator prints no\n\t// function for it, so the service writes it and keeps the obligations.\n\t{0}({}) error\n",
                 entry_name(&e.name),
                 e.action,
                 c.usecase,

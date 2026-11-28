@@ -926,7 +926,7 @@ pub(crate) fn run(
             }
             match step(backend.as_ref(), &t) {
                 None => {
-                    eprintln!("note: --code={what} is not supported for [code.{name}] yet; checked up to the level before it");
+                    eprintln!("note: --code={what} is not supported for [code.{name}]; checked up to the level before it");
                     break;
                 }
                 Some(result) => {

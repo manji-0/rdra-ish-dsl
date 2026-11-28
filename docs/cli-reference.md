@@ -326,9 +326,10 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
   library and that test), TypeScript the files `tsconfig.rdra.json` reaches from the probe,
   Go the probe's package. An `OK` at `build` says nothing of a binary, a handler, or a file
   the probe does not reach.
-- Each trace runs on a fresh store: the harness calls `new` once per trace (181,095
-  times on the clinic-ops sample at the default `conformance_states`) and `seed` empties the store before it stores the
-  trace's rows. Make `new` cheap: share one database and let `seed` clear it, rather than
+- Each trace runs on a fresh store: the harness calls `new` once per trace, which
+  on the clinic-ops sample at the default `conformance_states` is more than a hundred
+  thousand times (the counts are in [Costs](./codegen.md#costs)), and `seed` empties the store before
+  it stores the trace's rows. Make `new` cheap: share one database and let `seed` clear it, rather than
   open or migrate one per call. Migrations, and data an earlier version of the service
   stored, are outside what the check runs.
 - The `OneTransaction` obligation's owner is a declaration, as every owner is. What the run
@@ -396,7 +397,8 @@ A passing run means bounded conformance: under H1 to H5, the safety rules the mo
 over tracked columns hold for runs driven through the port, with at most that many rows
 created per entity. It does not mean the service is equivalent to the model. When the BFS
 stopped at its cap, the `BFS` line says `stopped at its cap of <N> states`, the refused calls
-are `none tried`, and stderr gets `warning[CodeCoverageIncomplete]`: a service that runs a
+are only the `NotFound` calls on rows that do not exist (`<n> tried, each on a row that does
+not exist`, or `none tried` when there are none), and stderr gets `warning[CodeCoverageIncomplete]`: a service that runs a
 call the model refuses passes such a suite. The same warning names untried refusals and
 use cases never run. The exit status does not change unless `--deny-incomplete` is given.
 Raise `conformance_states` and run `codegen --code` again to complete a capped suite. The statement describes the traces, so it is the same when `run` in the table
@@ -2150,10 +2152,11 @@ writes (`into_writes`, `Writes()`, `<Type>.writes`), and `commit_writes` / `Comm
   literal, or the input a chosen value becomes (`caseScope === "free"`). A nullable Enum or
   Bool column compared with a value takes a present value (`== Some(..)`, `!= nil && *x ==
   ..`), so null satisfies no `==` and every `!=`.
-- **Not printed yet:** a use case that reads `now`, guards on a comparison proposition, joins
-  by a key over several columns, or raises or handles a counted event. It gets
-  no function; the header lists it with the reason, and the code that finishes the output
-  writes it.
+- **No function:** a use case outside the vocabulary above (one that reads `now`, guards on
+  or drives a comparison proposition, or raises or handles a counted event, among others)
+  gets no function; the header lists it with the reason, its contract gives it an entry
+  point, and the code that finishes the output writes it. The full list of reasons is in
+  [Transition functions, dispatchers and contracts](./codegen.md#transition-functions-dispatchers-and-contracts).
 
 **Rule checks.** Each record and state type gets `orderPaidRuleViolations(row)` /
 `rule_violations(&self)` / `RuleViolations()`: the names `check` reports (`Forbidden_Order_0`,
@@ -2174,7 +2177,12 @@ with an unexported `unique symbol` (an object literal is refused, TS2741; `as un
 still forges one); a Go interface with an unexported method only those capabilities implement,
 made valid only by `Issue<Actor>Capability()`. Go cannot forbid the zero value or a nil
 caller; `Valid()` and `CallerValid(by)` report them. Whether the code that calls `issue`
-authenticated the actor is not checked.
+authenticated the actor is not checked. The contracts name rows by their key, so they need
+every entity to have a one-column primary key that is not `Bool`. When the conformance port
+cannot be built for the model (chiefly for that key), the header says `No contracts: <why>`,
+the output has no contracts, entry points, callers, or conformance port (the functions, rule
+checks and dispatchers stay), `check --code` has no contract to check the service against,
+and `--conformance` fails with `codegen: no conformance harness for this model: <why>`.
 
 **Conformance harness** (`--conformance <FILE>`). The service implements `ConformancePort`:
 `seed` empties its store and stores an initial state; `snapshot` returns every row (the

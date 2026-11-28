@@ -90,8 +90,8 @@ optimistic write passes (`UPDATE .. WHERE id = ? AND status = ?`, no row matched
 ## What a pass does not show
 
 - `build` compiles the probe and what it imports, not the rest of the application.
-- Each trace starts from a fresh store: `new` runs once per trace (181,095 times on
-  clinic-ops at the default `conformance_states`), and `seed` empties the store. Share one
+- Each trace starts from a fresh store: `new` runs once per trace (more than a hundred
+  thousand times on clinic-ops at the default `conformance_states`), and `seed` empties the store. Share one
   database and keep `new` cheap. Migrations and data an earlier version stored are not run.
 - A raised event is never consumed: the raise stays recorded on its row (a delete does not
   clear it), and the use case it triggers may run there again. Keep it as long as the row's

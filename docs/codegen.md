@@ -194,12 +194,42 @@ actors. Split use cases get one function per step, linked by run marks. Events c
 of each row they mark. Choices, links, copies and `@derived` columns are in
 [`codegen`](./cli-reference.md#codegen).
 
-Some use cases get no function. The header lists each with the reason, and the contract
-gives it an entry point (`run_<action>`) that the service writes whole. The reasons include:
-a use case that reads `now`, guards on or drives a comparison proposition, joins by a key
-over several columns, raises or handles a counted event, chooses among some values of a
-column. A `@derived` column the function cannot compute (arithmetic, `now`, an input) does
-not stop the function: it becomes an input.
+Some use cases get no function. The header lists each under `Use cases with no function`,
+one `- <UseCase>: <reason>` line with the exact reason, and the contract gives it an entry
+point (`run_<action>`) that the service writes whole. A use case gets no function when one of
+its actions has:
+
+- **The clock or a proposition.** It reads `now`, guards on or drives a comparison
+  proposition.
+- **Events.** It raises or handles a counted event (`triggers(..).counted(k)`); two events
+  order one step; an event guard has another form than an equality on a row the step takes;
+  it raises an event without marking its row; or it raises an event or keeps a run mark on
+  an entity with no one-column key, or on a created row with no id input.
+- **Keys and links.** A key over several columns; a key between rows an earlier step wrote
+  (their marks carry ids, not keys); a link guard on a column that is not a key, on a created
+  row, or with no `links` line.
+- **Writes.** A choice among some, not all, values of a column (a choice among all of them is
+  an input), or of something that is not a column; an assignment or a literal the types
+  cannot hold; a transition on a column that is not an enum; a created row with no start
+  state; a second lifecycle column on a created row, or one that is nullable; a copy from a
+  row that is not an argument, between columns of different types, or from a column that
+  may be null into one that may not.
+- **Conditions.** A condition on what a later step of the use case writes, or on a second
+  lifecycle column or a created row's own key after the use case; an ordering comparison on
+  a column that is not a plain (non-null) `Int`; a condition atom or a guard of a form the
+  generator does not print.
+- **Size.** More than 16 combinations of its rows' source states, or more than 16 choices
+  among its arms.
+- **No reachable source.** The verified model never runs it from any combination of source
+  states.
+
+The rest name a part of the model the generated types do not hold (an entity with no
+generated type, a column with no field, a variable that is not a column); the header names
+which.
+
+A `@derived` column the function cannot compute (for example an arithmetic expression, one
+that reads `now`, an input, or another derived column) does not stop the function: it becomes an input, and the function's
+doc says why.
 
 ### Obligations
 
@@ -233,8 +263,10 @@ X NotEnabled Pay 1 2026-01-01T00:00:00Z
 ...
 ```
 
-`S`/`A` define a state and its rows, `T` starts a trace, `G` ends its seed, `C` is a call
-and the state it reaches, and `X` is a call that must be refused. Per trace, the harness
+`S`/`A` define a state and its rows, `T` starts a trace, `R` is a row its seed stores, `G`
+ends the seed, `C` is a call and the state it reaches, `X` is a call that must be refused, and
+`I <state> <call> | <call>` prepares the first call, makes the second (reaching `<state>`),
+then commits the first, which must be refused (an interleaved commit). Per trace, the harness
 makes a fresh port, seeds it, makes each call, and compares the store with the state, cut
 down to what the model tracks: an enum's value, null or present, an integer, a key's parent.
 
@@ -253,16 +285,8 @@ same words. See [The model adapter](./cli-reference.md#the-model-adapter).
 Verus release and Rust toolchain it was checked with (`0.2026.11.22.1ce6a59`, Rust
 `1.100.0`).
 
-| File | Edited by | Holds |
-|---|---|---|
-| `main.rs` | rdra-ish | the module list and the harness's entry |
-| `types.rs` | rdra-ish | the data types |
-| `prelude.rs` | rdra-ish | rows as a map, and the lemmas for quantifiers and counts |
-| `model.rs` | rdra-ish | the state, one step per action, the rules, the inductive set, the preservation lemmas |
-| `contract.rs` | rdra-ish | what each function must do, as a trait |
-| `core.rs` | the user | the functions, as the trait's methods |
-| `port.rs` | rdra-ish | the trusted store, and one verified port call per action |
-| `harness.rs` | rdra-ish | a differential test against BFS successors (not verified) |
+The crate's files, and which one the user edits (`core.rs`), are listed in
+[the Verus design note](./design/verus.md#the-crate).
 
 When Verus reports no error, the model keeps its rules for any number of rows, the core
 meets its contracts, and each port call moves the store as one step of the model or not at
@@ -278,7 +302,7 @@ writes the ordinary output, prints one line per reason, and exits 1. On the mode
   Order.paid_at: nullable columns are not covered
   Order.paid_at: only Enum, Bool and key columns are covered
   Pay: the input order_paid_at is not covered (only ids of created rows and related rows are)
-Error: --verus does not cover this model yet (3 reason(s) above); the ordinary output is unaffected
+Error: --verus does not cover this model (3 reason(s) above); the ordinary output is unaffected
 ```
 
 ### Per language
@@ -290,8 +314,9 @@ Error: --verus does not cover this model yet (3 reason(s) above); the ordinary o
 | Contracts | type of `readonly` members returning `Promise` | synchronous trait (`&mut self`) | interface |
 | Sealing a state | `--seal` (`seal = true`): a literal fails with TS2741 | always: private fields | always: unexported struct |
 | Serialization | `parse<Entity>Row` reads a row from `unknown` | `serde = true` derives serde on the data types | `json` tags on the rows |
-| `check --code=build` | `tsc --noEmit -p tsconfig.rdra.json` | `cargo check --test <probe>` | `go test -count=1 -run ^$ -gcflags=-e` |
-| `check --code=run` | `node <probe>` (Node 22.18 or later) | `cargo test --test <probe> -- rdra_conformance` | `go test -count=1 -run ^TestRdraConformance$` |
+
+The commands `check --code=build` and `--code=run` start per language are in
+[`check --code`](./cli-reference.md#check---code).
 
 ## What the output guarantees
 
@@ -403,8 +428,9 @@ Because a traces file can be this large, `codegen --check` and `check --code=fre
 it by hash, reading it once without holding it. The TypeScript harness reads the file as an
 `AsyncIterable` of lines, so a file past Node's longest string (about 512 MB) still runs.
 
-The harness calls `new` once per trace (181,111 times on clinic-ops) and `seed` empties the
-store each time. Make `new` cheap: share one database and let `seed` clear it.
+The harness calls `new` once per trace (181,111 times on clinic-ops: 181,095 traces that walk
+the moves and 16 seeded at a reached state) and `seed` empties the store each time. Make
+`new` cheap: share one database and let `seed` clear it.
 
 ## Known limitations
 
@@ -413,11 +439,13 @@ store each time. Make `new` cheap: share one database and let `seed` clear it.
 - The Verus crate covers no `Int` or nullable column, `now`, proposition, run mark, split use
   case, event, choice, entity no use case creates, optional key, deleted parent, nested
   quantifier, condition on a successor or created row, two rows of one entity in one action,
-  ordering comparison, or input other than a row's id. Verus may also reject a model in scope: a rule that holds but
+  ordering comparison, entity whose key is not one `Int` column, list argument, or input
+  other than a row's id. Verus may also reject a model in scope: a rule that holds but
   is not inductive with the key lemmas alone fails its preservation lemma.
 - The contracts and the conformance port need every entity to have a one-column primary
-  key that is not `Bool`. For another model the code has no contracts, and `--conformance`
-  fails with `no conformance harness for this model`.
+  key that is not `Bool`. For another model the code has no contracts, its header says
+  `No contracts: <why>`, and `--conformance` fails with `no conformance harness for this
+  model`.
 - Use cases outside the printed vocabulary get no function (see
   [Transition functions](#transition-functions-dispatchers-and-contracts)).
 - The Rust contracts are synchronous. An async service implements them on a small adapter
