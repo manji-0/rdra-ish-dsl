@@ -83,7 +83,40 @@ test that replays the model's traces against the service (`run`) ([cli-reference
 --code`](../cli-reference.md#check---code)). codegen is experimental, so the claim is scoped to
 what the tests show.
 
-T17-CASE-STUDY
+**Case study.** The repository's tests carry a complete chain on one model
+(`crates/rdra-ish-cli/tests/fixtures/codegen/conformance.rdra`, an order with payment, shipment and
+cancellation). `codegen --code` generates the Rust domain code and the trace file. A reference
+service crate implements the use cases. Each test then plants one kind of drift between the model
+and the code, and `check --code` must report it as a named diagnostic. We ran both test binaries
+with `RDRA_REQUIRE_CODEGEN_TOOLS=1`, so that a missing toolchain fails instead of skipping: 26 of 26
+pass (`cargo test -p rdra-ish-cli --test codegen_code_build --test codegen_code_check`, 57 s including
+the build).
+
+| Level | Planted drift | Reported as |
+|---|---|---|
+| `fresh` | the generated domain file edited by hand | edited file, by its text |
+| `fresh` | the trace file edited | edited traces, by their hash |
+| `fresh` | the model changed after generation | model changed |
+| `fresh` | other generator options in `rdra.toml` | generator changed |
+| `fresh` | a generated file deleted | missing file, with what writes it |
+| `build` | use case `Ship` not implemented | `CodeMissingUseCase_Ship`, mapped from rustc E0277 to the model line of `usecase Ship` |
+| `build` | `Ship`'s implementation empty | `CodeMissingUseCase_Ship` (E0046) |
+| `build` | `commit_cancel` missing | `CodeIncomplete_Cancel` (E0046) |
+| `build` | `Pay` takes a bare integer for `OrderId` | `CodeSignature_Pay` (E0053) |
+| `run` | the service skips the core of `Pay` | `CodeConformance`: the store differs from the model after `Pay` |
+| `run` | the service drops a row | `CodeConformance`: a `Shipment` row the model has and the service lacks |
+| `run` | the service accepts `Cancel` where the model's guard refuses it | `CodeConformance`: the model refuses `Cancel 101` here, and the service ran it |
+| `run` | the service's preparation step writes unconditionally | `CodeConformance`: prepared before `Place` changed a row it writes |
+| `run` | the service ignores the trace's ids | the self-check of the conformance run fails |
+
+**Scope of the claim.** Every planted drift of these kinds is detected on this one model. The
+conformance level replays traces generated from the model's own state space up to a cap
+(`conformance_states`), so it covers behaviours the traces reach, not all behaviours. A capped suite
+warns, and `--deny-incomplete` fails it. codegen and `check --code` are experimental. The case study
+ran first on Rust. The same planted omissions and faults for TypeScript
+(`codegen_code_build_ts`, 7 tests) and Go (`codegen_code_check_go`, 10 tests, including a probe
+compiled for every sample) also pass: 17 of 17 with `tsc` and `go` required, 175 s. Paper 1 and Paper 2 make no claim about
+the code chain. A paper on it would need models and services from outside the project (T9).
 
 ## T18: agent feedback study (protocol only)
 
