@@ -1,0 +1,50 @@
+// trap: a rise whose guard names a created row the extended sub-lifecycle drops (claim A8).
+// The rule's cone has T = Order and Sheet, and S = Voucher and Ticket. `Place` creates an
+// order and a sheet under it, guarded by `HasOpen`, which joins a voucher to the new order by
+// its index alone: the guard reads only Voucher, of S. Sheet's existence is an input of
+// `Use`, so `Place` is a rise; Order's existence is neither in S nor an input (Voucher's owner
+// keeps Order as a stub), so the restriction drops `Place`'s `New` Order param, and the guard
+// goes with it, as a guard that names any other dropped param does. A rise may run where the
+// cone's step cannot (here `Place` never runs: no voucher is linked to an order not yet
+// created), and the reduced cone decides what the cone decides. The rule breaks in 8 steps:
+// Draft, Issue, Open, Pay, Grant, Make, Use, Ship.
+// expect Forbidden_Order_0: native=counterexample tlc=counterexample z3=refuted
+// expect Deadlock_Order_status_paid: native=counterexample tlc=counterexample
+entity Order "注文" { id: Int @pk  status: Enum(new, paid, shipped) @default(new) }
+entity Voucher "券" { id: Int @pk  status: Enum(open, used) @default(open) }
+entity Sheet "票" { id: Int @pk  status: Enum(made, done) @default(made) }
+entity Ticket "札" { id: Int @pk  status: Enum(draft, issued) @default(draft) }
+relate(Voucher, Order, N:1)
+relate(Sheet, Order, N:1)
+usecase Open "受付"
+usecase Place "注文"
+usecase Make "作票"
+usecase Pay "支払"
+usecase Ship "出荷"
+usecase Grant "発券"
+usecase Use "使用"
+usecase Draft "起票"
+usecase Issue "発行"
+creates(Open, Order)
+creates(Place, Order)
+creates(Place, Sheet)
+condition HasOpen "未使用の券"
+holds(HasOpen, Voucher.status == open)
+applies_to(HasOpen, Place)
+creates(Make, Sheet)
+transitions(Pay, Order.status, new -> paid)
+transitions(Ship, Order.status, paid -> shipped)
+condition HasUsedVoucher "使用済の券"
+holds(HasUsedVoucher, Voucher.status == used)
+applies_to(HasUsedVoucher, Ship)
+creates(Grant, Voucher)
+transitions(Use, Voucher.status, open -> used)
+condition SheetMade "票あり"
+holds(SheetMade, Sheet.status == made)
+applies_to(SheetMade, Use)
+creates(Draft, Ticket)
+transitions(Issue, Ticket.status, draft -> issued)
+condition TicketIssued "発行済の札"
+holds(TicketIssued, Ticket.status == issued)
+applies_to(TicketIssued, Grant)
+forbidden(Order, status == shipped)

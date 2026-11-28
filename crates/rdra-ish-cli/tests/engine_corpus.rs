@@ -1467,7 +1467,7 @@ fn leave_out_moves(tla: &str, table: &str, n: usize) -> (String, usize) {
 }
 
 /// The reduced cones of the corpus the refinement check runs on, and those it refuses.
-const CHECKED: usize = 17;
+const CHECKED: usize = 21;
 const REFUSED: usize = 0;
 
 /// Every reduced cone of the corpus refines its reduction under TLC: each reached state of
