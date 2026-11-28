@@ -14,6 +14,8 @@ use crate::lifecycle::types::{ActId, Domain, EntId, VarId};
 use crate::lifecycle::{StateDiag, TransitionSystem};
 use crate::memory::Watched;
 
+#[cfg(test)]
+pub(crate) mod dump;
 pub(super) mod reference;
 #[cfg(any(test, feature = "shadow"))]
 mod up_to_h;
@@ -198,6 +200,8 @@ impl Quotient {
         cache: &QuotientCache,
     ) -> (Result<Self, NoQuotient>, bool) {
         if ext.obs_local.is_empty() {
+            #[cfg(test)]
+            dump::left_out("unobserved");
             let classes = Arc::new(Classes::unobserved(ext));
             #[cfg(test)]
             unobserved_loops(ext, classes.loops[0]);
@@ -311,6 +315,8 @@ impl Classes {
                 .run_checking(caps.without_views(), Checks::none())
         });
         if !run.complete {
+            #[cfg(test)]
+            dump::left_out("stopped");
             let ended = Ended::stopped(clean, seen, &run);
             let memory = run
                 .diags
@@ -451,6 +457,8 @@ impl Classes {
             && !sub.reduction().is_some_and(|r| r.shrinks())
             && blocks.iter().collect::<BTreeSet<_>>().len() == n
         {
+            #[cfg(test)]
+            dump::left_out("identity");
             return (Classified::Nothing, ended, Vec::new());
         }
         // Each block's class, numbered as the blocks first show in discovery order, so a
@@ -460,15 +468,30 @@ impl Classes {
         let mut reps: Vec<Box<[u8]>> = Vec::new();
         let mut class_of: HashMap<Box<[u8]>, u32> = HashMap::new();
         let mut class: Vec<u32> = Vec::with_capacity(n);
+        #[cfg(test)]
+        let mut rep_at: Vec<u32> = Vec::new();
         for (i, st) in run.states.iter().enumerate() {
             let c = &mut class_of_block[blocks[i] as usize];
             if *c == u32::MAX {
                 *c = id32(reps.len());
                 reps.push(st.0.into());
                 class_of.insert(st.0.into(), *c);
+                #[cfg(test)]
+                rep_at.push(id32(i));
             }
             class.push(*c);
         }
+        #[cfg(test)]
+        dump::record(
+            ext,
+            sub,
+            run,
+            orbits.is_some(),
+            &silent,
+            &rise_edges,
+            &class,
+            &rep_at,
+        );
         // Every cone this quotient would reduce prints a cell per class and observed var at
         // the least, so past the budget no cone takes it: its moves and divergence marks are
         // not worth building.

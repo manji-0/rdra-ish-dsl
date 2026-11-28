@@ -53,6 +53,8 @@ use extended::Extended;
 pub use fold::{Fold, FoldKey};
 #[cfg(test)]
 pub(crate) use hypotheses::tests::{Checked, CHECKED};
+#[cfg(test)]
+pub(crate) use partition::dump as partition_dump;
 pub use partition::Divergence;
 use partition::{NoQuotient, Quotient};
 use split::Split;
