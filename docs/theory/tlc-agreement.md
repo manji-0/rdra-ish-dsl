@@ -744,7 +744,8 @@ evidence that `formal-verify` ran the TLC roots with `--with-tlc`, which is five
 flagged header lines, not every root; the other roots are compared through
 `engine_equivalence` instead, and an erratum under that entry says so. Item 3 (seeds `0:2000`
 with TLC) was waived for v3.0.0. The `--with-tlc` step runs in `formal-verify`;
-`release.yml` runs no `verify`, and native-temporal-verification.md says so.
+`release.yml` runs no `verify`, and native-temporal-verification.md says so. Branch protection
+and the gate proposal wait on the owner's decision.
 
 ## Residual risk
 
@@ -760,9 +761,9 @@ the sections it cites, and carries the tag of the statements it rests on.
 1. **Common-mode faults outside the corpus traps [read].** A `T` from the builder that is not
    `T_β(M)` of D13 (a failure of claim I1), a wrong cone, a wrong ladder decision (the staging
    of a property cone's runs), a wrong quotient table, or a wrong name in `TlaNames`, which the
-   printer and the decoder both use, moves both engines. A value the build wraps past a byte,
-   or an entity cone that leaves a raised mark out ([cones.md](./cones.md#safety-cones)), is a
-   fault of this kind. The 215 hand-written `expect` lines see these on the 89 traps they name.
+   printer and the decoder both use, moves both engines. A value the build wrapped past a
+   byte, or a cone whose over-approximation reports a state the event order forbids as the
+   model's ([cones.md](./cones.md#safety-cones)), would be a fault of this kind. The 215 hand-written `expect` lines see these on the 89 traps they name.
 
    For the builder, the reference interpreter (`core/tests/reference/`) is a second check
    [test]. It reads a subset of the language from the `SemanticModel` without
