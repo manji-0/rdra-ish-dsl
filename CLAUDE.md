@@ -16,7 +16,9 @@ list. Run it only when an item says it is needed, and say which item that was.
    `engine_equivalence`, `proof_equivalence`, `engine_corpus`,
    the `shadow` run of the samples and the corpus, and the Kani harnesses (the last ones
    only when a change can reach them; see `scripts/verify-relevant.sh` and
-   `scripts/kani-relevant.sh`). A pull request whose files are all prose
+   `scripts/kani-relevant.sh`), and the Lean proofs under `proofs/lean/` (`lean` job,
+   `scripts/check-lean-proofs.sh`, when they, the script or `ci.yml` change, and on main).
+   A pull request whose files are all prose
    (`scripts/code-relevant.sh`) runs fmt, clippy, the tests that read Markdown, and the
    skill snippets in place of the whole suite and the sample artifacts. The test step
    (`scripts/diff-test.sh --all`) runs the tests under cargo-nextest's `pr` profile, which
