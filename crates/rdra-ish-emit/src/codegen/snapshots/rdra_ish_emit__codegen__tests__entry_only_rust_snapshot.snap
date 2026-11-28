@@ -16,7 +16,7 @@ expression: "generated_from(ENTRY_ONLY_SRC, \"entry_only.rdra\", Lang::Rust)"
 //
 // Obligations: none.
 //
-// Use cases with no function yet (the code that finishes this output writes them):
+// Use cases with no function (the code that finishes this output writes them):
 // - Ship: a counted event (triggers(..).counted(k))
 // - Place: a counted event (triggers(..).counted(k))
 
@@ -720,13 +720,13 @@ impl Order {
 /// The use case Ship: Ship.
 /// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait ShipUseCase {
-    /// Runs the action Ship of Ship whole, by the ids of its rows: the generator printed no function for it (#335), so the service writes it and keeps the obligations.
+    /// Runs the action Ship of Ship whole, by the ids of its rows: the generator prints no function for it, so the service writes it and keeps the obligations.
     fn run_ship(&mut self, order: OrderId) -> ::core::result::Result<(), ShipError>;
 }
 
 /// The use case Place: Place.
 /// Each action with functions is two calls: `prepare_*` loads its rows by id and calls the dispatcher or transition function, writing nothing; the matching `commit_*` stores the rows, marks, and events the result holds in one transaction, each row only where it still is what the result's `<row>_expected` names. Either returns the use case's error and changes nothing when the use case does not run.
 pub trait PlaceUseCase {
-    /// Runs the action Place of Place whole, by the ids of its rows: the generator printed no function for it (#335), so the service writes it and keeps the obligations.
+    /// Runs the action Place of Place whole, by the ids of its rows: the generator prints no function for it, so the service writes it and keeps the obligations.
     fn run_place(&mut self, order: OrderId) -> ::core::result::Result<(), PlaceError>;
 }

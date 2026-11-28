@@ -857,7 +857,7 @@ pub struct UseCaseDecl {
 pub enum UseCaseKind {
     /// Every action has functions.
     Functions,
-    /// Some action has no function yet (the vocabulary is not printed, #335).
+    /// Some action has no function (it uses vocabulary the generator does not print).
     Unprinted,
     /// It writes nothing: no action, no function, no entry point (decision 13 of
     /// docs/design/code-check.md).

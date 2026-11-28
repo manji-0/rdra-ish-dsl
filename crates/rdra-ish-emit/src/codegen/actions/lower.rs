@@ -235,7 +235,9 @@ impl ActionCx<'_> {
                 _,
             ) = &guard.pred
             else {
-                return Err(unsupported("an event guard this phase does not print"));
+                return Err(unsupported(
+                    "an event guard in a form the generator does not print",
+                ));
             };
             let id = self.model.events[event].id.clone();
             if event_in.as_ref().is_some_and(|e| e.event != id) {
@@ -368,8 +370,9 @@ impl ActionCx<'_> {
                     let p = usize::from(*param);
                     match (&ts.var(*var).kind, rhs) {
                         (VarKind::Column { column, .. }, Rhs::Lit(v)) => {
-                            let w = literal(&ts.var(*var).domain, *v)
-                                .ok_or_else(|| unsupported("a value this phase does not print"))?;
+                            let w = literal(&ts.var(*var).domain, *v).ok_or_else(|| {
+                                unsupported("a value the generator does not print")
+                            })?;
                             writes.insert((p, column.clone()), w);
                         }
                         (VarKind::Owner { fk, .. }, Rhs::Param(q)) => {
@@ -396,9 +399,9 @@ impl ActionCx<'_> {
                         }
                         (VarKind::Raised { .. }, _) => {}
                         (VarKind::Prop { .. }, _) => {
-                            return Err(unsupported("drives a comparison proposition (phase 5)"))
+                            return Err(unsupported("drives a comparison proposition"))
                         }
-                        _ => return Err(unsupported("an assignment this phase does not print")),
+                        _ => return Err(unsupported("an assignment the generator does not print")),
                     }
                 }
                 Effect::Choose {
@@ -420,11 +423,11 @@ impl ActionCx<'_> {
                         {
                             Write::InputOrNull
                         }
-                        _ => return Err(unsupported("a choice among some values (phase 5)")),
+                        _ => return Err(unsupported("a choice among some values of a column")),
                     };
                     writes.insert((usize::from(*param), column.clone()), w);
                 }
-                Effect::Tick => return Err(unsupported("reads `now` (phase 5)")),
+                Effect::Tick => return Err(unsupported("reads `now`")),
             }
         }
         // `sets(UC, E.column == F.source)`: the column takes the source row's value, in place
@@ -1372,7 +1375,7 @@ impl Frame<'_> {
                         ));
                     }
                 }
-                _ => return Err(unsupported("a guard this phase does not print")),
+                _ => return Err(unsupported("a guard the generator does not print")),
             }
         }
 
@@ -1406,7 +1409,7 @@ impl Frame<'_> {
             Term::Index(At::Param(q)),
         ) = &guard.pred
         else {
-            return Err(unsupported("a link guard this phase does not print"));
+            return Err(unsupported("a link guard the generator does not print"));
         };
         let VarKind::Owner { fk, .. } = &cx.ts.var(*var).kind else {
             return Err(unsupported("a link guard on a var that is not a key"));

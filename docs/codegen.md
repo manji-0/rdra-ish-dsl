@@ -194,12 +194,35 @@ actors. Split use cases get one function per step, linked by run marks. Events c
 of each row they mark. Choices, links, copies and `@derived` columns are in
 [`codegen`](./cli-reference.md#codegen).
 
-Some use cases get no function. The header lists each with the reason, and the contract
-gives it an entry point (`run_<action>`) that the service writes whole. The reasons include:
-a use case that reads `now`, guards on or drives a comparison proposition, joins by a key
-over several columns, raises or handles a counted event, chooses among some values of a
-column. A `@derived` column the function cannot compute (arithmetic, `now`, an input) does
-not stop the function: it becomes an input.
+Some use cases get no function. The header lists each under `Use cases with no function`,
+one `- <UseCase>: <reason>` line with the exact reason, and the contract gives it an entry
+point (`run_<action>`) that the service writes whole. A use case gets no function when one of
+its actions has:
+
+- **The clock or a proposition.** It reads `now`, guards on or drives a comparison
+  proposition.
+- **Events.** It raises or handles a counted event (`triggers(..).counted(k)`); two events
+  order one step; an event guard has another form than an equality on a row the step takes;
+  it raises an event without marking its row; or it raises an event or keeps a run mark on
+  an entity with no one-column key.
+- **Keys and links.** A key over several columns; a key between rows an earlier step wrote
+  (their marks carry ids, not keys); a link guard on a column that is not a key, on a created
+  row, or with no `links` line.
+- **Writes.** A choice among some, not all, values of a column (a choice among all of them is
+  an input), or of something that is not a column; an assignment or a literal the types
+  cannot hold; a transition on a column that is not an enum; a created row with no start
+  state; a second lifecycle column on a created row, or one that is nullable; a copy from a
+  row that is not an argument, between columns of different types, or from a column that
+  may be null into one that may not.
+- **Conditions.** A condition on what a later step of the use case writes, or on a second
+  lifecycle column or a created row's own key after the use case; a condition atom or a
+  guard of a form the generator does not print.
+- **Size.** More than 16 combinations of its rows' source states, or more than 16 choices
+  among its arms.
+
+A `@derived` column the function cannot compute (an arithmetic expression, `now`, an input,
+another derived column) does not stop the function: it becomes an input, and the function's
+doc says why.
 
 ### Obligations
 
@@ -278,7 +301,7 @@ writes the ordinary output, prints one line per reason, and exits 1. On the mode
   Order.paid_at: nullable columns are not covered
   Order.paid_at: only Enum, Bool and key columns are covered
   Pay: the input order_paid_at is not covered (only ids of created rows and related rows are)
-Error: --verus does not cover this model yet (3 reason(s) above); the ordinary output is unaffected
+Error: --verus does not cover this model (3 reason(s) above); the ordinary output is unaffected
 ```
 
 ### Per language
@@ -403,8 +426,9 @@ Because a traces file can be this large, `codegen --check` and `check --code=fre
 it by hash, reading it once without holding it. The TypeScript harness reads the file as an
 `AsyncIterable` of lines, so a file past Node's longest string (about 512 MB) still runs.
 
-The harness calls `new` once per trace (181,111 times on clinic-ops) and `seed` empties the
-store each time. Make `new` cheap: share one database and let `seed` clear it.
+The harness calls `new` once per trace (181,111 times on clinic-ops: 181,095 traces that walk
+the moves and 16 seeded at a reached state) and `seed` empties the store each time. Make
+`new` cheap: share one database and let `seed` clear it.
 
 ## Known limitations
 

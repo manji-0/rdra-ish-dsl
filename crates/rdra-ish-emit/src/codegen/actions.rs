@@ -3,8 +3,8 @@
 //! read, so they do what the verified model does.
 //!
 //! An action gets one function per combination of the source states of its rows, so every
-//! type in a function is concrete. An action that uses a part of the vocabulary this phase
-//! does not print yet is listed as skipped, with the reason, and gets no function: the output
+//! type in a function is concrete. An action that uses a part of the vocabulary the generator
+//! does not print is listed as skipped, with the reason, and gets no function: the output
 //! stays buildable and says what it leaves out.
 
 use std::collections::BTreeMap;
@@ -59,7 +59,7 @@ struct Source<'d> {
 
 /// Why an action or one of its combinations gets no function.
 enum Skip {
-    /// The whole action: the vocabulary is not printed yet.
+    /// The whole action: it uses vocabulary the generator does not print.
     Action(String),
     /// This combination: the verified model never runs the action from it.
     Combination,
@@ -241,7 +241,7 @@ pub(super) fn add_functions(
         }
     }
     // A use case with an action the generator printed no function for still has an entry
-    // point (#335), which returns its error.
+    // point, which returns its error.
     for s in &domain.skipped {
         if errors.iter().any(|e| e.usecase == s.usecase) {
             continue;
@@ -370,7 +370,7 @@ fn type_of<'a, 'd>(
         .ok_or_else(|| format!("entity {id} has no generated type"))
 }
 
-/// Why the action's guards cannot be printed yet, if they cannot.
+/// Why the action's guards cannot be printed, if they cannot.
 fn printable_guards(action: &Action) -> Result<(), String> {
     for guard in &action.guards {
         match guard.why {
@@ -378,7 +378,7 @@ fn printable_guards(action: &Action) -> Result<(), String> {
             // A read of what the step writes folds to the value it writes (`next_read`).
             GuardWhy::Condition { later: None, .. } => {}
             GuardWhy::Raised { .. } => {}
-            GuardWhy::Clock => return Err("reads `now` (phase 5)".into()),
+            GuardWhy::Clock => return Err("reads `now`".into()),
             GuardWhy::Copy => {}
             GuardWhy::ArmCondition { .. } => {}
             GuardWhy::Run { .. } | GuardWhy::Restrict { .. } => {}

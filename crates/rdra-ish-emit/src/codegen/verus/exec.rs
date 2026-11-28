@@ -1364,7 +1364,7 @@ fn port(ctx: &Ctx, atoms: &Atoms, core_trait: &str) -> Result<String, Vec<String
         ));
     }
     out.push_str(&format!(
-        "/// The store, as the port sees it. TRUSTED: Verus does not check that a store keeps what\n/// its functions ensure. The bodies are an in-memory store for the differential harness;\n/// a service puts its database behind the same functions and keeps the same promises\n/// (#439's H3 and H4: the store is the real one, and each call is one transaction).\n#[verifier::external_body]\npub struct Store {{\n{fields}}}\n\nimpl Store {{\n    /// The rows the store holds, as the model's state.\n    pub uninterp spec fn view(&self) -> MState;\n\n{loads}{store_fns}}}\n\n"
+        "/// The store, as the port sees it. TRUSTED: Verus does not check that a store keeps what\n/// its functions ensure. The bodies are an in-memory store for the differential harness;\n/// a service puts its database behind the same functions and keeps the same promises\n/// (the conformance check's H3 and H4: the store is the real one, and each call is one transaction).\n#[verifier::external_body]\npub struct Store {{\n{fields}}}\n\nimpl Store {{\n    /// The rows the store holds, as the model's state.\n    pub uninterp spec fn view(&self) -> MState;\n\n{loads}{store_fns}}}\n\n"
     ));
     // Port calls.
     for a in ctx.ts.actions() {

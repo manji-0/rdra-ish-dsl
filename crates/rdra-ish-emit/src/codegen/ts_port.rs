@@ -72,7 +72,7 @@ fn print_contracts(domain: &DomainModel, port: &PortDecl, out: &mut String) {
         }
         for e in &c.entries {
             out.push_str(&doc1_indent(&format!(
-                "Runs the action {} of {} whole, by the ids of its rows: the generator printed no function for it (#335), so the service writes it and keeps the obligations.",
+                "Runs the action {} of {} whole, by the ids of its rows: the generator prints no function for it, so the service writes it and keeps the obligations.",
                 e.action, c.usecase
             )));
             let mut ps: Vec<String> = e
