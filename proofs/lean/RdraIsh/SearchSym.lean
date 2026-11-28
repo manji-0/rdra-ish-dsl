@@ -10,7 +10,7 @@ to the concrete successor `t ≠ r`, stored as `can t = π(t)(t)`, takes `(r, b)
 `(can t, π(t)(b))` (`PStep`). On those pairs it computes the goal-free pairs, their edges
 (`PEdge`) and their strongly connected components (`SameP`), as N9's search does on states.
 
-Fairness of a component is read on its *threads*: a node `((u, x))` is a pair `u` of the
+Fairness of a component is read on its *threads*: a node `(u, x)` is a pair `u` of the
 component and a fair instance `x`, and a pair edge along `t` takes it to `(v, π(t)(x))`
 (`TEdge`). A *piece* is a connected component of that graph with the direction forgotten
 (`Conn`). The code (`Product::threads_covered`) accepts a component when it has a cycle

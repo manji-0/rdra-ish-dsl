@@ -183,6 +183,8 @@ The proofs assume the following hypotheses and do not derive them:
     finite and, at each state, the fair instances enabled there in a list (`hΦ`); the code
     keys a finite set of instances (`Product::keys`).
   - The canonical form is a `Canon`: `can s = π(s)(s)` with `π(s) ∈ G_s`.
+  - The orbit search takes the commutation on every state (`Sym`); no theorem states it over
+    `SymOn`, as `a23_on` does for `a23`.
 - **The fairness model** (`Behaviour.lean`). A fair instance is a set of `T_a` labels (fair
   actions are `T_a` actions, Lemma 5 (e), assumed by giving instances on `Ta` only). A step
   takes an instance only when it changes the state (assumption τ of native.md). Behaviours
@@ -283,6 +285,12 @@ Not modelled:
 - The choice of binding (the first triggered state in BFS order) and of start: the
   verdicts quantify over all.
 - The bit sets and sorted lists that hold `always`, `taken` and the enabled instances.
+- The permutation of an edge. `pn` and `tn` move a pair and an instance by `π(t)` of the
+  edge's concrete successor; the code reads the permutation it stored for the edge
+  (`perms.id(k)`), which the annotated run sets to `π(t)` (`RunOf`).
+- A real edge. `REdge` asks `t ≠ r`; `is_real` asks that the stored target differ from `r` or
+  that the edge be an orbit self-edge. The two agree when every stored state is its own
+  canonical form, which `Canon` does not assume.
 - The counterexample the code builds (`walk`, `fair_loop`, the lasso lift and its
   `MOST_COPIES`): the proofs build their own lasso, and the code's certifies itself at run
   time (N11).

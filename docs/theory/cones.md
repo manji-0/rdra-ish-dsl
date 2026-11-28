@@ -1460,8 +1460,9 @@ rule per piece on a single cycle is `threadFair_iff_pieces`.
   - `proofs/lean/RdraIsh/SearchSym.lean` proves the search above: it accepts iff some binding has
     a fair violating behaviour (`oAccepts_iff`), iff N9's search on the plain system accepts
     (`oAccepts_iff_accepts`), so its verdict is `a23`'s quotient side
-    (`not_oAccepts_iff_lassos`). It adds one hypothesis to `a23`'s: the fair instances enabled at
-    each state lie in a list. `TEdge.reverse` walks a thread edge back, and `threadsCovered_iff`
+    (`not_oAccepts_iff_lassos`). It takes the commutation on every state (`Sym`; there is no
+    form over `SymOn`) and adds one hypothesis to `a23`'s: the fair instances enabled at each
+    state lie in a list. `TEdge.reverse` walks a thread edge back, and `threadsCovered_iff`
     equates the code's union-find with the pieces. `SearchExample.lean` runs the search on
     `ExampleSymLive`.
   - The proof covers liveness and not the entity-cone findings, and does not read the code.

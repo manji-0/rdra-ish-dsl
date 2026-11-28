@@ -305,7 +305,7 @@ theorem FairComp.cycle (L : List σ) (hL : ∀ s, M.Reach s → s ∈ L) {e : σ
   have through : ∀ u v, M.SameComp goal e u → M.SameComp goal e v → E u v →
       ∃ w n, w 0 = e ∧ w n = e ∧ IsWalk E w n ∧ ∃ j, j < n ∧ w j = u ∧ w (j + 1) = v :=
     fun u v hu hv he => walk_through hu.1 he hv.2
-  obtain ⟨v₀, hv₀, he₀⟩ := hfc.out (Star.refl e |> fun r => ⟨r, r⟩)
+  obtain ⟨v₀, hv₀, he₀⟩ := hfc.out ⟨.refl e, .refl e⟩
   obtain ⟨w₀, n₀, h00, h0n, hw₀, j₀, hj₀, _, _⟩ :=
     through e v₀ ⟨.refl e, .refl e⟩ hv₀ he₀
   have main : ∀ T : List (σ × σ), ∃ w n, 0 < n ∧ w 0 = e ∧ w n = e ∧ IsWalk E w n ∧
