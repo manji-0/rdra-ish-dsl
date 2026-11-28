@@ -269,11 +269,31 @@ not a bound on what exists.
   cone's initial states. The panics left on a lift's way stop the run.
 - **A18.** No Kani harness proves the canonical form invariant under the group; it rests on an
   exhaustive unit test and the `Canonical` twin. The `g6.rs` test has no `always` or
-  `unchanged`.
+  `unchanged`. The scan does not check the builder's two facts, and the extended
+  sub-lifecycle's `Earlier { step: 0 }` parameters carry no run-mark conjunct. The Lean model
+  has action guards only, so (G6) outside guards is a paper step, and `a18_holds_iff` takes the
+  invariant's invariance as a hypothesis. The model reads effects in list order, where
+  `each_successor` applies the deletes and then the choices last; it has no owner
+  `Transition`, no data domain sizes and no `null` data values, and covers neither the reduced
+  cone nor the extended sub-lifecycle (A22). That the model is `Group::apply`, `breaks.rs::scan`
+  and `each_successor` is read from the code, and so is `WF`. The Lean model's `G6` forbids
+  every guard read of a `New` row's owner, where the scan forbids it only when the parent's
+  class moves; the remaining case is a paper step. The least BFS depth of each class is a paper
+  step only.
 - **A20.** Whether each symmetry rule is needed is open: eleven reasons have no
-  witness of their own: the seven of `Reduced` and four of the six of `Observed`.
-- **A23.** The entity-cone findings up to symmetry have no theorem. The orbit run's search is
-  proved by its acceptance criterion, not by its code.
+  witness of their own: the seven of `Reduced` and four of the six of `Observed`; the snapshot
+  shows only that dropping one changes which entities a cone's group leaves out. That `Hyp`
+  holds when a class is marked as not moving is read off its definition, with no Lean theorem.
+- **A21.** Deadlocks past the branch cap rest on the entity-cone findings of A23, which have no
+  theorem. That `Canon::canonical` returns a member of the orbit as a function of the state
+  past the cap is read from the code.
+- **A23.** The entity-cone findings up to symmetry have no theorem: that the deadlock criterion
+  reads the same on a (state, slot) pair and its image is not derived. The orbit run's search
+  is proved by its acceptance criterion, not by its code: Tarjan's components, N10's cut,
+  `is_real` as `t ≠ r`, the permutation stored per edge, the bit sets, the choice of binding
+  and start, and the lasso the code builds are read from the code. (LiveEqui), that the trigger
+  and goal read the same on a state and its image, is argued on paper only. The orbit search on
+  a reduced cone and A22's run up to `H` are not modelled.
 - **A24.** That a counterexample a cap-stopped safety cone finds is real has no test.
 - **A26.** The memory limit does not bound the process.
 - **A27.** Covered cones have no test of their own.
@@ -313,7 +333,9 @@ not a bound on what exists.
   evaluator, and does not cover entity cones up to symmetry. That the reported state is the
   first in BFS order rests on the proof alone.
 - **N9.** The Lean proof states the acceptance criterion, not `avoid`'s code: Tarjan's
-  components, the bit sets and N10's cut are read from the code.
+  components, the bit sets, the choice of binding and start, and N10's cut are read from the
+  code.
+- **N10.** No Lean theorem covers a stopped graph: the cut at `expanded` is read from the code.
 - **N11.** The lasso checks share code with the search they certify (`moves` and
   `Property::fair_instance`; `holds_bound` and `triggers`), so a fault there passes both.
 - **N13.** The second half of `a_path_that_does_not_replay_is_a_fault` never runs.
