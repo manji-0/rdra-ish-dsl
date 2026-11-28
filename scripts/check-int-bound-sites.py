@@ -26,8 +26,8 @@ dropped), `trait`, `fn`, `struct`, `enum`, `union`, `const`, `static`, joined by
 reformatting it, or reading the bound a second time in a listed item passes.
 
 Left out: comments, string and character literals, files in a `tests` directory or named
-`tests.rs`, items under `#[cfg(test)]` (or `#[cfg(all(test, ...))]`), and the files of a
-module declared as `#[cfg(test)] mod name;`.
+`tests.rs`, items under `#[cfg(test)]` or `#[cfg(kani)]` (or `#[cfg(all(test, ...))]`), and the files
+of a module declared as `#[cfg(test)] mod name;`.
 
 What it does not see: a read through a helper with another name (only `Domain::size` and
 `Domain::of_number` are followed, and `size` only inside `build/`), a derived read such as a
@@ -48,7 +48,7 @@ BUILD = "crates/rdra-ish-core/src/lifecycle/build/"
 
 ITEM = re.compile(r"\b(mod|trait|fn|struct|enum|union|const|static)\s+(?:mut\s+)?(?!fn\b)([A-Za-z_]\w*)")
 IMPL = re.compile(r"\bimpl\b(.*)$", re.S)
-TEST_CFG = re.compile(r"#\[\s*cfg\s*\(\s*(?:all\s*\(\s*)?test\b")
+TEST_CFG = re.compile(r"#\[\s*cfg\s*\(\s*(?:all\s*\(\s*)?(?:test|kani)\b")
 TEST_MOD = re.compile(
     TEST_CFG.pattern
     + r"[^\]]*\]\s*(?:#\[[^\]]*\]\s*)*(?:pub(?:\s*\([^)]*\))?\s+)?mod\s+([A-Za-z_]\w*)\s*;"

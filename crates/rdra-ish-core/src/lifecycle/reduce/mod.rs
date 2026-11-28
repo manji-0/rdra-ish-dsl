@@ -37,6 +37,8 @@ use super::TransitionSystem;
 mod cache;
 mod extended;
 mod fold;
+#[cfg(test)]
+pub(crate) mod lemma6;
 mod lift;
 mod partition;
 #[cfg(feature = "shadow")]
@@ -660,6 +662,7 @@ impl TransitionSystem {
             return Err(Unreduced::Nothing);
         }
         let ext = Extended::of(self, &split);
+        let stub_params = ext.stubs.shape;
         // Claim A8: a param on a stub that needs a present row never binds, so its action
         // never runs in the extended sub-lifecycle though it runs in the cone. No quotient is
         // run or cached for such a sub-lifecycle; a debug or `shadow` build stops here unless
@@ -760,6 +763,11 @@ impl TransitionSystem {
         };
         if reduction.tla_cells() > TLA_CELL_BUDGET {
             return Err(over_budget());
+        }
+        if std::env::var_os("RDRA_ISH_REDUCTION_SHAPE_STATS").is_some() {
+            let chain = std::iter::successors(Some(&reduction), |r| r.inner.as_deref());
+            let (depth, up_to_h) = chain.fold((0, false), |(d, h), r| (d + 1, h || r.up_to_h));
+            eprintln!("reduction-shape: depth={depth} up_to_h={up_to_h} {stub_params}");
         }
         let mut out = self.clone();
         out.reduction = Some(Arc::new(reduction));

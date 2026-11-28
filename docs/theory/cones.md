@@ -737,7 +737,34 @@ builds the top-level `X` of every target and property cone of the samples, the d
 and the corpus, with and without inputs, and the check passes on each.
 `reduce/extended.rs::tests::a_stub_param_no_fold_or_rise_stands_for_is_left_and_reported` counts
 `Note`'s rise among the `S_a` actions: `bind_stub_params` leaves its parameter's role, and the
-check reports it as unfolded. This is evidence on
+check reports it as unfolded.
+
+The whole lemma, rises included, is checked step by step by `reduce/lemma6.rs::check` on every
+reduced target and property cone whose unreduced cone completes under 200,000 states, nested
+reductions included (`core/tests/reduce_steps.rs`). It explores `X` plainly and maps each state
+of `C` to `x(t, s)` by `Reduction::key`. Every reachable state maps into `Reach X` (an initial one
+to an initial state of `X`). Every `S_a` step of `C` is a silent edge of `X` by an action that
+stands for it, or leaves `x` unchanged. Every `T_a` step leaves `S_v` alone, and one that changes
+the input bytes is a rise of `X` at each stage of `Reduction::stages`, ending at `x(t', s)`.
+Every silent edge of `X` from `x(t, s)` other than a self-loop is the image of an `S_a` step of
+`C` from `(t, s)`. It then checks Theorem A8's relation without the reduction's class tables: it
+computes the blocks of `Reach X` again with the sweeps of `partition/reference.rs` from the
+projection on `obs`, the raw inputs and the bits, labels each state of `C` and of `R` by its `T`
+part and the block of its `X` state, and requires the two runs to have the same labelled states,
+initial labels and labelled edges up to stuttering. `::reduced_cones_step_as_their_cones_step`
+runs it on every corpus case at its flags and on every sample root at the flags of its `// expect
+verify` lines: 53 reductions, 10 of them nested, all with the class level; 25 more reduced
+cones of the samples pass 200,000 states unreduced and are not checked.
+`::the_stub_cases_step_as_their_cones_step` runs it on `cone_triggered_param_on_a_stub` and
+`cone_rise_param_on_a_stub`, and again with `bind_stub_params` dropped in the `X` the check
+builds: the first then fails on an `Issue` step that has no silent edge in `X`, and the second on
+a `Note` step that has no rise. `::a_removed_class_move_fails_the_class_level` removes the class moves of one class the
+reduced run reaches, and the class level fails. `scripts/reduction-diff.py lemma6` runs the
+check on random models: CI runs it on the 522 PR seeds, of which 361 reduce a cone. The check
+shares `Reduction::key` (and so `Fold::holds`), `Extended::build` and the step relation with the
+code it checks.
+
+This is evidence on
 these models and bounds, not a proof of Lemma 6; cone-soundness.md, "Proof obligation", states
 the lemma in points 2, 3, and 5.
 

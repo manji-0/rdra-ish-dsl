@@ -2291,6 +2291,7 @@ For developers. These change only diagnostics or turn an optimisation off; the v
 |---|---|
 | `RDRA_ISH_SYMMETRY_STATS` | Per run up to symmetry, a stderr line of orbits, estimate, branch-cap cuts, and entities left out; see [Instance symmetry](#instance-symmetry). |
 | `RDRA_ISH_WF_REDUCED_STATS` | A stderr line per `WF_vars(Next)` run on a reduced cone. |
+| `RDRA_ISH_REDUCTION_SHAPE_STATS` | Test only: a `reduction-shape:` stderr line per reduction built, with its nesting depth, whether S ran up to `H`, and the params on a stub bound to any slot (`scripts/reduction-diff.py` reads it). |
 | `RDRA_ISH_TEST_QUOTIENT_HITS` | Test only: a `quotient-hits:` stderr line of how many cones took a shared quotient. |
 | `RDRA_ISH_NO_QUOTIENT_CACHE` | Do not share quotients between cones. |
 | `RDRA_ISH_NO_REDUCE` | Do not reduce cones to their quotient. |
