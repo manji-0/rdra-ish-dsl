@@ -802,8 +802,8 @@ the sections it cites, and carries the tag of the statements it rests on.
    on the corpus cases and formal-verification samples in the subset at three bounds, on 300
    random models of the subset in every pull request and 2,700 more on main. With z3 present
    (CI requires it) it also checks the rules z3 proves at `m`, with lemmas mined without a
-   twin, against the reference at `m + 1` and `m + 3`: one fixed model per pull request and
-   200 random models on main. The description of #492 records its failing output at
+   twin, against the reference at `m + 1` and `m + 3`: two fixed models per pull request (the
+   second, P66's, since #544) and 200 random models on main. The description of #492 records its failing output at
    `fc505d39`, a commit of its branch on main `8b3b6658`, before #470 and #481: `a_value_past_a_byte_is_not_wrapped`
    on the nullable Int at 255 (P40) and the nullable Enum of 256 (P54), and
    `a_rule_proved_at_one_int_range_holds_at_wider_ones` on P43's rule; no test repeats that
@@ -1007,11 +1007,12 @@ class move with no S path behind it is the `NoMove` of that step, with a test in
 rewritten for them; at `5f59fae2` item 2 should also have named `shortest_path`'s `panic!`.
 
 [read] From `5ae62f2c` to `9857092a` (the merge of #544) the cited paths change only in the
-corpus: #544 adds the case `z3_guarded_null_beside_present` (P66) and its `CASES` line. Its
-other changes (`prove/encode.rs::Enc::one_of`, tests in `cli/tests/prove_cli.rs` and
-`core/tests/reference/proofs.rs`, the symmetry snapshot) are outside what this document
-cites, and `.config/nextest.toml` does not change. The corpus counts were recounted at
-`9857092a`.
+corpus and the reference interpreter's tests: #544 adds the case
+`z3_guarded_null_beside_present` (P66) and its `CASES` line, and a fixed-model proof check,
+`core/tests/reference/proofs.rs::a_guarded_null_beside_a_guarded_present_is_no_proof`, which
+was read. Its other changes (`prove/encode.rs::Enc::one_of`, a test in
+`cli/tests/prove_cli.rs`, the symmetry snapshot) are outside what this document cites, and
+`.config/nextest.toml` does not change. The corpus counts were recounted at `9857092a`.
 
 ## Errata
 
@@ -1074,6 +1075,7 @@ Changes to statements of this document after it was first written, newest last.
   number, Fairness the `TRUE` of a scope that keeps no fair action, and the `WF_vars(Next)`
   sentence says it is of `print` only. The Status paragraph names `emit/tla/names.rs`.
 - **2026-11-28, P66; re-pin to `9857092a`** (the merge of #544). The Appendix says what #544
-  changed after `5ae62f2c`: one corpus case. The corpus counts follow it: 87 cases with 211
+  changed after `5ae62f2c`: one corpus case and one reference test. Residual risk item 1
+  counts two fixed models in the reference's proof check. The corpus counts follow it: 87 cases with 211
   `expect` lines, 18 in `z3`, seven cases at `--instance-count 1`, and `--int-range-max` in
   five (Known disagreements, The corpus, the summary table, residual risk item 1, External).

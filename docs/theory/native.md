@@ -38,7 +38,7 @@ test this document cites in what it compares) and #541 (`reduce/lift.rs::lift` a
 `reduce/partition.rs::Succ::shortest_path`: a class move with no S path behind it is a fault,
 with a test in `core/tests/reduce.rs`), which were read at `5ae62f2c`. From `5ae62f2c` to the pin, the crates change only by #544 (`prove/encode.rs::Enc::one_of`
 and its call, tests added to `cli/tests/prove_cli.rs` and `core/tests/reference/proofs.rs`, a
-`z3_` corpus case and its line in the symmetry snapshot), none of which this document cites:
+`z3_` corpus case and its line in the symmetry snapshot), which changes no statement here:
 the `prove_cli.rs` tests it names are unchanged. Code is cited as in
 [semantics.md](./semantics.md): paths are relative to `crates/rdra-ish-core/src/lifecycle/`
 unless they start with `cli/` (`crates/rdra-ish-cli/`) or name the crate root (`core-root/`,
@@ -1148,5 +1148,5 @@ Changes to statements of this document after it was first written, newest last.
   orbit self-edge's index has its own checked conversion beside `edge_number`. The #532 files
   include `cli/tests/prove_cli.rs`.
 - **2026-11-28, re-pin to `9857092a`** (the merge of #544), with the index. #544 (P66)
-  changes the prover's encoding and adds tests and a corpus case, none of which this
-  document cites; the first paragraph says so, and no statement changed.
+  changes the prover's encoding and adds tests and a corpus case, which change no statement
+  here; the first paragraph says so.

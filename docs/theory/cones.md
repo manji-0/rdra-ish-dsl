@@ -35,7 +35,7 @@ tests this document cites in what they compare, and #541
 `core/tests/reduce.rs`: a class move with no S path behind it is a fault), which was read at
 `5ae62f2c`; A16, Candidates and the Threats were rewritten for it. From `5ae62f2c` to the pin, the crates change only by #544 (`prove/encode.rs::Enc::one_of`
 and its call, tests added to `cli/tests/prove_cli.rs` and `core/tests/reference/proofs.rs`, a
-`z3_` corpus case and its line in the symmetry snapshot), none of which this document cites:
+`z3_` corpus case and its line in the symmetry snapshot), which changes no statement here:
 the `prove_cli.rs` tests it names are unchanged. How the document changed after it was first written is in
 [Errata](#errata). `unread@pin` marks a statement whose cited code was not read at the
 pinned commit ([claims inventory](./claims.md#how-to-read-a-row)). Paths are relative to
@@ -1437,5 +1437,5 @@ Changes to statements of this document after it was first written, newest last.
   `closed_cone` sentence says the same closure feeds verdicts through `exact_target_cone`. A6
   says its `always` arm runs only from tests.
 - **2026-11-28, re-pin to `9857092a`** (the merge of #544), with the index. #544 (P66)
-  changes the prover's encoding and adds tests and a corpus case, none of which this
-  document cites; the first paragraph says so, and no statement changed.
+  changes the prover's encoding and adds tests and a corpus case, which change no statement
+  here; the first paragraph says so.
