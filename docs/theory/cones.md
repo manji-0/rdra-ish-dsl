@@ -329,7 +329,9 @@ that its own mark guards read marks in `W` together with what they read. Let the
 the `Triggered` parameter and the mark guards of `a`, and Lemma 3's cases (i) and (ii) go
 through for that step. No step of `ρ` runs an action that reads a mark outside `W`. ∎ That `free_triggers` lists every step whose
 action reads a mark outside the cone (`trace.rs`) is the one fact the corollary takes from the
-code.
+code. Every build checks it on each counterexample (`vouch.rs::free_trigger_faults`): the
+marks each step's action reads are read again off its guards (`pred_reads`), without
+`mark_reads`, and a trace whose two lists differ lists both, so it stays a candidate.
 
 **Left-out marks: candidates and refinement.** A cone leaves `μ` out when some writer of `μ`
 is not taken; then `restrict_to` drops the handler's guard on `μ` and its `Triggered`
@@ -349,8 +351,11 @@ counts, as counterexample-guided refinement does (Clarke et al. 2000):
   mark is left out and, with `slots`, no slot is freed). A round without a counterexample
   decides the check: it holds when the run ended, and is undecided when a cap stopped it.
   The loop ends because each round keeps more actions or reads more variables, and the exact
-  cone bounds both. That the exact cone's counterexample is vouched for is a `debug_assert!`
-  only; it follows from `exact_target_cone`, whose own `debug_assert!`s state the same.
+  cone bounds both. That the exact cone's counterexample is vouched for follows from
+  `exact_target_cone`, and every build checks both: the exact cone reads every mark and,
+  with `slots`, counts every slot, or the whole system stands for it; and a counterexample of
+  the exact cone that is not vouched for is `Recheck::Fault`, a tool error for its check
+  (`vouch.rs::certified_exact`, `::unvouched_fault`).
 - `verify` (`cli/src/verify/bfs.rs::recheck_cones`, called before the prover reads the safety
   verdicts) and `check` (`targets.rs`, the verdict of an invariant or `after` target) recheck,
   without `slots`, each violation whose trace has a free trigger; only the vouched violations
@@ -1505,8 +1510,9 @@ the tests count one cone's cells and keep a cone below the budget, and none make
   path behind it is `NoMove` too: `reduce/partition.rs::Succ::shortest_path` returns `None` (test
   `core/tests/reduce.rs::a_class_move_with_no_s_path_is_a_replay_error`, which forges a move
   back to the class just left). The lifted start state is built from the run's initial state
-  and an initial `S` state of its class, and is not itself checked against the unreduced cone's
-  initial states. What still panics on the lift's way, `lift_stop`'s `expect`s among it, is
+  and an initial `S` state of its class, and `lift` checks it against the unreduced cone's
+  initial states in every build (`vouch.rs::lifted_start`); one that is not one is
+  `ReplayError::NotInitial`. What still panics on the lift's way, `lift_stop`'s `expect`s among it, is
   listed with the reason each holds in the
   [claims inventory](./claims.md#panics-left-on-a-lifts-way).
 - **A17** (the cache): the cached quotient is keyed by the extended system, the caps, and the group;
@@ -2443,9 +2449,9 @@ Evidence: none beyond the reading of `escalate` and the guide.
   module TLC reads independently of the reduction.
 - **Hypotheses checked per trace and per cone.** A check's cone may leave a mark out: its `ok`
   is sound by Theorem A2, and its counterexample counts only once vouched for (Corollary A28′),
-  after the refinement of `recheck_on` where needed. That `free_triggers` lists every step that
-  runs an action reading a mark outside the cone is a reading, not tested on its own, and that
-  the exact cone's counterexample is vouched for is a `debug_assert!` only. A finding a cone
+  after the refinement of `recheck_on` where needed. Every build checks that `free_triggers`
+  lists every step that runs an action reading a mark outside the cone, against the steps'
+  guards, and that the exact cone's counterexample is vouched for (`vouch.rs`). A finding a cone
   fails to report has no trace, so a per-trace check never sees it; entity cones are exact for
   marks per cone instead.
 - **Symmetry hypothesis (G6).** `Rule::AbsentOwner` enforces it for a guard's pre-state read

@@ -1157,6 +1157,13 @@ impl fmt::Display for StateDiag {
                 "{}after({anchor}).assert({requireds}) fails: {actual}",
                 label_prefix(label)
             ),
+            StateDiag::TraceFault {
+                name,
+                fault: crate::lifecycle::LassoFault::Unvouched(why),
+            } => write!(
+                f,
+                "tool error: the counterexample of {name} on its exact cone is not one the cone vouches for ({why}), so {name} is not decided (a tool bug, not a finding about the model)"
+            ),
             StateDiag::TraceFault { name, fault } => write!(
                 f,
                 "tool error: the trace of {name} fails to replay ({fault:?}), so {name} is not reported (a tool bug, not a finding about the model)"
