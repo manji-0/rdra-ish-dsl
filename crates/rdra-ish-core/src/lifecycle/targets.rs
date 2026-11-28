@@ -1009,7 +1009,7 @@ impl TransitionSystem {
             // system: the check's exact cone decides it.
             Some(d) if !d.diag.trace().is_none_or(|t| t.vouched(false)) => {
                 match self.recheck(target, false, caps) {
-                    Recheck::Violated(d) => out.push(*d),
+                    Recheck::Violated(d) | Recheck::Fault(d) => out.push(*d),
                     Recheck::Holds => {}
                     Recheck::Undecided(why) => out.extend(why.into_iter().map(|diag| Diag {
                         entities: entities.clone(),
@@ -1250,6 +1250,9 @@ pub enum Recheck {
     /// The exact cone stopped at a cap or the memory limit before a violation: the
     /// diagnostics of the stop.
     Undecided(Vec<StateDiag>),
+    /// The exact cone's counterexample is not one it vouches for (`Trace::vouched`): a tool
+    /// error for the check (a `TraceFault`), never a verdict on it.
+    Fault(Box<Diag>),
 }
 
 impl TransitionSystem {
@@ -1287,7 +1290,8 @@ impl TransitionSystem {
         );
         let target_seed = self.target_seed(target);
         let (mut seed, mut keep) = target_seed.clone();
-        let mut exact = false;
+        // A test plants an exact cone that is not, reached at once (`unvouched_fault`).
+        let mut exact = super::explore::symmetry::dropped("exact_target_cone_unchecked");
         // The reduction's run of the sub-lifecycle keeps its whole graph, so its caps stay
         // plain; the cone's run evaluates every check it holds and stops once each failed.
         let caps = caps.without_views();
@@ -1322,11 +1326,13 @@ impl TransitionSystem {
                 return (Recheck::Violated(Box::new(d)), cone);
             };
             self.annotate(&cone, trace);
-            if exact || trace.vouched(slots) {
-                debug_assert!(
-                    trace.vouched(slots),
-                    "an exact cone's counterexample is a run of the whole system"
-                );
+            // On the exact cone the trace must be vouched for, in every build: one that is
+            // not may be no run of the whole system (claim A2).
+            if exact && !trace.vouched(slots) {
+                let fault = self.unvouched_fault(target, &d, slots);
+                return (Recheck::Fault(Box::new(fault)), cone);
+            }
+            if trace.vouched(slots) {
                 return (Recheck::Violated(Box::new(d)), cone);
             }
             // When the trace names nothing left to add, the exact cone decides.

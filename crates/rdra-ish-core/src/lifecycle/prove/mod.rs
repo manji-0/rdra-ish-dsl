@@ -403,12 +403,26 @@ pub fn prove_offered<S: Solver + Send>(
     unreachable!("the rounds are bounded")
 }
 
+/// The env variable that turns on the check of the kept lemmas on explored states
+/// (`explored::lemma_faults`). It is off on users' runs, which it would cost a run of the
+/// miner's cones; the tests turn it on: every core test build, and `cli/tests/prove_cli.rs`
+/// for each run it makes.
+pub const CHECK_LEMMAS_ENV: &str = "RDRA_ISH_CHECK_LEMMAS";
+
+/// Whether the kept lemmas are checked on explored states: in a test build of this crate, or
+/// with `RDRA_ISH_CHECK_LEMMAS=1`.
+#[cfg(not(kani))]
+fn check_lemmas() -> bool {
+    cfg!(test) || std::env::var(CHECK_LEMMAS_ENV).is_ok_and(|v| v == "1")
+}
+
 /// The checks of a proof's own output, on every proof that proves a rule or keeps a lemma
-/// (claims B1 and B16 of docs/theory/claims.md): each comparison the encoding states agrees with the native one on
-/// every value at the run's bounds (`encode::compare_faults`), and each kept helper lemma holds
-/// on every state the miner's cones reach (`explored::lemma_faults`). A failure is a tool bug,
-/// so the proof proves nothing (`Proof::fault`); a debug or `shadow` build stops, unless a test
-/// planted the fault (`dropped`).
+/// (claims B1 and B16 of docs/theory/claims.md): each comparison the encoding states agrees
+/// with the native one on every value at the run's bounds (`encode::compare_faults`), and, when
+/// `check_lemmas` turns it on, each kept helper lemma holds on every state the miner's cones
+/// reach (`explored::lemma_faults`). A failure is a tool bug, so the proof proves nothing
+/// (`Proof::fault`); a debug or `shadow` build stops, unless a test planted the fault
+/// (`dropped`).
 #[cfg(not(kani))]
 fn certify(
     ts: &TransitionSystem,
@@ -478,7 +492,9 @@ fn certify(
             kept.push(("a planted false lemma".to_string(), planted));
         }
     }
-    faults.extend(explored::lemma_faults(ts, &kept, rules));
+    if check_lemmas() || dropped("prove_false_lemma") {
+        faults.extend(explored::lemma_faults(ts, &kept, rules));
+    }
     for fault in faults {
         crate::shadow_assert!(
             dropped("prove_compare") || dropped("prove_false_lemma"),

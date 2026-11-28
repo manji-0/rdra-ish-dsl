@@ -36,6 +36,9 @@ pub enum LassoFault {
     /// A loop of a run up to instance symmetry, repeated, did not come back to its first
     /// concrete state within the copies tried (`OrbitRun::decide_liveness`).
     Unclosed,
+    /// A check's exact cone found a counterexample it does not vouch for
+    /// (`Trace::vouched`): its free triggers, and its entities past the bound.
+    Unvouched(String),
 }
 
 const NONE: u32 = u32::MAX;

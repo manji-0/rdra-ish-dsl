@@ -230,9 +230,11 @@ not a bound on what exists.
 
 - **A1.** A release build does not check that a step changes only the variables `Wr(a)`
   names; debug and `shadow` builds do. No Kani harness proves it.
-- **A2.** That `Trace::free_triggers` lists every step that runs an action reading a mark
-  outside the cone is a reading of the code, with no test of its own; that the exact cone's
-  counterexample is vouched for is a `debug_assert!` only.
+- **A2.** The check of a counterexample's free triggers shares `pred_reads`, the look-up of
+  a step's action by name and the use case's name with the list it checks. That every caller
+  that reads `Trace::vouched` annotates the trace first is a reading of the code. No walked
+  sample or corpus model has a check whose cone counterexample runs a use case without its
+  event.
 - **A5.** Parts 1 and 3 rest on A8 and A15: on a nested reduction or one run up to `H` on
   their sketched part, and on a flat one on the facts of `Lemma6Hyp` read from the code (A8).
 - **A6.** Rests on A8: its nested case and the run up to `H` are sketched, and its flat case rests on the facts of
@@ -266,8 +268,9 @@ not a bound on what exists.
   unobserved class as the partition by input bytes are sketched.
 - **A16.** No test reaches most of the lift's look-up faults (a class with no initial S state,
   an S path up to `H` that starts elsewhere, a rise or a target with no block, an S action
-  that is not the cone's, `Length`). The lifted start is not checked against the unreduced
-  cone's initial states. The panics left on a lift's way stop the run.
+  that is not the cone's, `Length`). The test of the lifted start restates the initial-state
+  definition. A lasso whose lift fails it is spurious, and the property is decided on the
+  unreduced cone with no tool error in a release build. The panics left on a lift's way stop the run.
 - **A18.** No Kani harness proves the canonical form invariant under the group; it rests on an
   exhaustive unit test and the `Canonical` twin. The `g6.rs` test has no `always` or
   `unchanged`. The scan does not check the builder's two facts, and the extended
@@ -321,8 +324,8 @@ not a bound on what exists.
 - **B14.** Independence from the solver count is empirical.
 - **B16.** The checks z3 gives up on by itself are counted, not asserted. A wrong `proved`
   turns a cone stopped at the memory limit into a wrong `ok`, and no run-time check sees it
-  (residual risk 2): the check of the kept lemmas reads only the states the miner's cones
-  reach.
+  (residual risk 2). The check of the kept lemmas runs in tests only, not on users' runs, and
+  reads only the states the miner's cones reach.
 - **B18.** No test asserts that `proved` covers state rules only.
 
 **The native verifier**

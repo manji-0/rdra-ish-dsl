@@ -690,13 +690,13 @@ Three consequences.
   (`reduce/partition.rs::Succ::shortest_path`, which returns `None`, reported as the
   `ReplayError::NoMove` of that step; test
   `core/tests/reduce.rs::a_class_move_with_no_s_path_is_a_replay_error`) are faults when they
-  fail (test `core/tests/reduce.rs::a_lift_from_no_initial_state_is_a_replay_error`). A reduced
+  fail (test `core/tests/reduce.rs::a_lift_from_no_initial_state_is_a_replay_error`). The
+  lifted start, built from an initial S state of the start's class, is checked against the
+  unreduced cone's initial states (`vouch.rs::lifted_start`, `ReplayError::NotInitial`). A reduced
   liveness counterexample whose unreduced rerun stops becomes `not decided` rather than printing
   the lifted lasso.
 - *What is still unchecked or panics.* Deadlock and `can_reach` traces replay, but the
-  finding is not decided again on them. The lifted start of a reduced trace is built from an
-  initial S state of the start's class (a start with none is `ReplayError::NotInitial`) and is
-  not itself checked against the unreduced cone's initial states. Some code on a lift's way
+  finding is not decided again on them. Some code on a lift's way
   holds invariants of its own by release panics; the
   [claims inventory](./claims.md#panics-left-on-a-lifts-way) lists them, with the reason each
   holds or the assumption it rests on. A failure there stops the command; none can print a
