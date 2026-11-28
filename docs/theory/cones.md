@@ -661,8 +661,13 @@ value of `X`'s first initial state (`Reduction::key` appends that tail), so a st
 present row (`Existing`, `Parent`, `Triggered`) would never bind. `Extended::build` therefore
 binds every such parameter to any slot (`reduce/extended.rs::bind_stub_params`, which gives it
 the role `Earlier { step: 0 }` with no run guard). Only two kinds of action of `X` keep such a
-parameter: a folded `S_a` action, where it is one of the fold's `T` parameters, and a rise. A
-`shadow` build asserts that no unfolded `S_a` action has one (Lemma 6, "Parameters").
+parameter: a folded `S_a` action, where it is one of the fold's `T` parameters, and a rise.
+Every build checks the built `X` against this definition (`extended.rs::StubCheck`): no
+parameter of any action of `X` (folded and unfolded `S_a` actions, rises, and the bits' flips)
+on a stub needs a present row, and `bind_stub_params` binds no parameter of an unfolded `S_a`
+action, nor a folded one's outside its fold. On a fault `reduced_with` reduces nothing, so the
+cone is decided unreduced, with a warning; a debug or `shadow` build panics (Lemma 6,
+"Parameters").
 
 **Lemma 6 (the extended system covers the cone).** For every `(t, s) ∈ Reach(C)`: `x(t, s) ∈ X_n`
 (up to the inner reduction's canonical form); `(t, s) → (t, s')` is an `S_a` step of `C` iff
@@ -696,7 +701,8 @@ parameter belongs to one of two kinds of action:
 
 An unfolded `S_a` action has no parameter on a stub: its raw reads hold the existence of every
 entity it binds (`raw_reads`; for a `Triggered` parameter, the existence of its mark's entity
-through `existences`), so that entity is an input. A `shadow` build asserts it. Two steps
+through `existences`), so that entity is an input. The check of Definition 4 holds every build
+to it, and to the absence of any other parameter on a stub that needs a present row. Two steps
 are named and not derived here: that `Fold::holds` computes the folded guard exactly (the
 `Twin::FoldHolds` twin compares it with `reduce/fold/reference.rs`, an implementation of the same
 definition), and that a fold's key binding (`Extended::cone_params` binds a dropped `T` parameter to
@@ -724,7 +730,14 @@ the two halves: for a rise with a `Parent` parameter on a stub, at 1 and 2 insta
 checks through `assert_reduction_exact` that the reduced cone decides what the cone decides
 (the states on `T_v ∪ obs`, the views and the verdicts) and that its traces lift. Corpus cases
 `cone_triggered_param_on_a_stub` and `cone_rise_param_on_a_stub` hold BFS and TLC to the cone's
-counterexample on both. This is evidence on
+counterexample on both. `::a_param_left_on_a_stub_makes_the_cone_decide_unreduced` drops
+`bind_stub_params` on those two cases: the check names `Issue`'s and `Note`'s parameter, and the
+cone is decided unreduced, with the cone's verdicts. `::no_extended_sub_lifecycle_leaves_a_param_on_a_stub`
+builds the top-level `X` of every target and property cone of the samples, the domain samples
+and the corpus, with and without inputs, and the check passes on each.
+`reduce/extended.rs::tests::a_stub_param_no_fold_or_rise_stands_for_is_left_and_reported` counts
+`Note`'s rise among the `S_a` actions: `bind_stub_params` leaves its parameter's role, and the
+check reports it as unfolded. This is evidence on
 these models and bounds, not a proof of Lemma 6; cone-soundness.md, "Proof obligation", states
 the lemma in points 2, 3, and 5.
 

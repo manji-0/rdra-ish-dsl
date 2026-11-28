@@ -3,6 +3,9 @@
 //!
 //! A state is a map from `name[slot]` (or a bare `name` for a global) to the value text as
 //! TLC prints it. The TLA printer renders values the same way, so the two compare as strings.
+// A state or label number read from TLC narrows only through `try_from`: a number that wraps
+// would join two states of the dump.
+#![cfg_attr(not(test), deny(clippy::cast_possible_truncation))]
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -500,11 +503,15 @@ pub fn parse_dot<T>(
     let mut nodes: Vec<Option<DotNode<T>>> = Vec::new();
     let mut labels: Vec<String> = Vec::new();
     let mut edges = Vec::new();
-    let mut node = |id: &str, nodes: &mut Vec<Option<DotNode<T>>>| {
-        *ids.entry(id.to_string()).or_insert_with(|| {
-            nodes.push(None);
-            (nodes.len() - 1) as u32
-        })
+    let mut node = |id: &str, nodes: &mut Vec<Option<DotNode<T>>>| -> Result<u32, String> {
+        if let Some(&n) = ids.get(id) {
+            return Ok(n);
+        }
+        let n = u32::try_from(nodes.len())
+            .map_err(|_| format!("the dot dump has more than {} states", u32::MAX))?;
+        nodes.push(None);
+        ids.insert(id.to_string(), n);
+        Ok(n)
     };
     for line in dot.lines() {
         let line = line.map_err(|e| format!("reading the dot dump: {e}"))?;
@@ -520,8 +527,8 @@ pub fn parse_dot<T>(
         match head.split_once(" -> ") {
             Some((from, to)) => {
                 let label = action_name(&label).to_string();
-                let from = node(from.trim(), &mut nodes);
-                let to = node(to.trim(), &mut nodes);
+                let from = node(from.trim(), &mut nodes)?;
+                let to = node(to.trim(), &mut nodes)?;
                 let l = match labels.iter().position(|l| *l == label) {
                     Some(l) => l,
                     None => {
@@ -529,10 +536,12 @@ pub fn parse_dot<T>(
                         labels.len() - 1
                     }
                 };
-                edges.push((from, to, l as u32));
+                let l = u32::try_from(l)
+                    .map_err(|_| format!("the dot dump has more than {} labels", u32::MAX))?;
+                edges.push((from, to, l));
             }
             None => {
-                let at = node(head, &mut nodes) as usize;
+                let at = node(head, &mut nodes)? as usize;
                 let lines: Vec<&str> = label.lines().collect();
                 let (canon, _) = parse_block(&lines, 0);
                 let decoded =

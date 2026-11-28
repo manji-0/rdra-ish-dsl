@@ -27,7 +27,7 @@ mod snapshot;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
-mod witnesses;
+pub(crate) mod witnesses;
 
 pub(crate) use canon::{Canon, Canonical};
 
@@ -60,8 +60,10 @@ impl std::str::FromStr for Symmetry {
 
 /// Whether a `shadow` build drops the group rule `name` (`RDRA_ISH_DROP_RULE=<name>`): a
 /// scan rule by its variant (`OrderedId`), a reason `Reduction::fixed_why` gives as
-/// `Reduced:<reason>` (`Reduced:S var`), and a reason the extended sub-lifecycle fixes an
-/// entity for as `Observed:<reason>` (`Observed:obs`). A test-only switch that plants a bug
+/// `Reduced:<reason>` (`Reduced:S var`), a reason the extended sub-lifecycle fixes an
+/// entity for as `Observed:<reason>` (`Observed:obs`), and `bind_stub_params`, which leaves
+/// every param on a stub of the extended sub-lifecycle as it is, so that its check fails and
+/// the cone is decided unreduced (`reduce/extended.rs`). A test-only switch that plants a bug
 /// per rule, so that a witness can show the rule is needed (`witnesses`, and engine_corpus
 /// under `shadow`); a unit test sets it per thread. A release build drops nothing.
 #[cfg_attr(not(any(test, feature = "shadow")), allow(unused_variables))]
