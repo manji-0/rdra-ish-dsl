@@ -35,6 +35,7 @@ list. Run it only when an item says it is needed, and say which item that was.
    | Changed | Worth running locally |
    |---|---|
    | `docs/`, `skills/`, `README.md`, `CHANGELOG.md` | `scripts/check-skill-snippets.py`, `cargo test -p rdra-ish-cli --test export_gate` |
+   | `proofs/lean/`, `docs/theory/`, or a rename of a Rust item they cite | `python3 -I scripts/check-lean-refs.py` (under 1 s) |
    | `crates/rdra-ish-emit/src/tla/` | the emit tests; one TLC case through `RDRA_CORPUS_CASE=<name>` |
    | `crates/rdra-ish-core/src/lifecycle/prove/` | the prove tests; `proof_equivalence` only if the encoding changed |
    | `crates/rdra-ish-core/src/lifecycle/{explore,reduce}/`, `cone.rs` | the core tests; for a speed-up, see [A speed-up change](#a-speed-up-change) |
