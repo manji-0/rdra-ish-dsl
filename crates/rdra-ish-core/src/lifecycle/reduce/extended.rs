@@ -45,8 +45,9 @@ pub(super) struct Extended {
 /// What every build checks on the extended sub-lifecycle once it is built (claim A8 of
 /// docs/theory/claims.md, Lemma 6 of docs/theory/cones.md): no param of any action, a folded
 /// or unfolded S action, a rise, or a bit's flip, needs a present row (`Existing`, `Parent`,
-/// `Triggered`) of a stub, which is absent in every state and so would never bind. A fault
-/// makes `reduced_with` decide the cone unreduced.
+/// `Triggered`) of a stub, which is absent in every state and so would never bind; and the
+/// restriction keeps every fold's key. A fault makes `reduced_with` decide the cone
+/// unreduced.
 #[derive(Debug, Default)]
 pub(super) struct StubCheck {
     /// The params on a stub that `bind_stub_params` bound to any slot.
@@ -97,28 +98,43 @@ impl std::fmt::Display for StubParams {
     }
 }
 
-/// A param on a stub that needs a present row of it, or that `bind_stub_params` would bind
-/// freely though neither a fold nor a rise stands for it: the param `param` of action
-/// `action` of the extended sub-lifecycle.
+/// A param that breaks the check: the param `param` of action `action`, numbered in the
+/// extended sub-lifecycle, or in the cone for a `KeyDropped` fault.
 #[derive(Debug)]
 pub(super) struct StubParam {
     pub(super) action: String,
     pub(super) param: usize,
-    /// It is an unfolded S action's, or a T param of a folded one outside the fold.
-    pub(super) unfolded: bool,
+    pub(super) fault: Fault,
+}
+
+/// How a param breaks the check.
+#[derive(Debug, PartialEq, Eq)]
+pub(super) enum Fault {
+    /// It is on a stub and needs a present row of it, which never binds.
+    NeverBinds,
+    /// It is on a stub, and `bind_stub_params` would bind it freely though no fold stands for
+    /// it: an unfolded S action's, or a T param of a folded one outside the fold.
+    Unfolded,
+    /// It keys a fold (a `Param` key, or a linked fold's S param), and the restriction
+    /// dropped it or what the bit is read through, so the bit has no slot to be read at.
+    KeyDropped,
 }
 
 impl std::fmt::Display for StubParam {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let (action, param) = (&self.action, self.param);
-        match self.unfolded {
-            true => write!(
+        match self.fault {
+            Fault::Unfolded => write!(
                 f,
                 "param {param} of S action {action} is on a stub, and no fold stands for it"
             ),
-            false => write!(
+            Fault::NeverBinds => write!(
                 f,
                 "param {param} of {action} needs a present row of a stub, which never binds"
+            ),
+            Fault::KeyDropped => write!(
+                f,
+                "param {param} of S action {action} keys its fold, and the restriction dropped what its bit is read through"
             ),
         }
     }
@@ -180,15 +196,27 @@ impl Extended {
         let mut groups = BitGroups::default();
         let mut drop: Vec<bool> = vec![false; system.actions.len()];
         for fold in folds {
-            match &fold.key {
+            let folded = match &fold.key {
                 FoldKey::Param(key) => {
-                    if groups.fold_param(&mut system, &map, fold, *key) {
-                        drop[map.act[fold.act.index()]
-                            .expect("an S action is kept")
-                            .index()] = true;
-                    }
+                    groups
+                        .fold_param(&mut system, &map, fold, *key)
+                        .map(|merged| {
+                            if let Some(a) = merged {
+                                drop[a.index()] = true;
+                            }
+                        })
                 }
                 FoldKey::Linked { .. } => groups.fold_linked(cone, &mut system, &map, &t, fold),
+            };
+            if folded.is_none() {
+                stubs.fault.get_or_insert_with(|| StubParam {
+                    action: cone.actions[fold.act.index()].name.clone(),
+                    param: match &fold.key {
+                        FoldKey::Param(key) => usize::from(*key),
+                        FoldKey::Linked { s_param, .. } => usize::from(*s_param),
+                    },
+                    fault: Fault::KeyDropped,
+                });
             }
         }
         let kept: Vec<usize> = (0..system.actions.len()).filter(|i| !drop[*i]).collect();
@@ -360,17 +388,18 @@ impl BitGroups {
 
     /// Folds an S action keyed by one of its params: the action reads its bit at the key in
     /// place of its guards on T, and an action that matches an earlier group's first (in
-    /// params, guards, effects, and key) merges into it. Returns whether it merged, so its
-    /// own action is dropped.
+    /// params, guards, effects, and key) merges into it. Returns the action of `system` to
+    /// drop when it merged; `None`, with `system` unchanged, when the restriction dropped the
+    /// action or its key.
     fn fold_param(
         &mut self,
         system: &mut TransitionSystem,
         map: &Remap,
         fold: &Fold,
         key: u8,
-    ) -> bool {
-        let ext_id = map.act[fold.act.index()].expect("an S action is kept");
-        let local_key = renumber(map, fold, key);
+    ) -> Option<Option<ActId>> {
+        let ext_id = map.act[fold.act.index()]?;
+        let local_key = renumber(map, fold, key)?;
         let a = &mut system.actions[ext_id.index()];
         if fold.t_params.iter().any(|(p, _)| *p == key) {
             a.params[usize::from(local_key)].role = ParamRole::Earlier { step: 0 };
@@ -389,7 +418,7 @@ impl BitGroups {
                 .get_mut(&first)
                 .expect("the group's first")
                 .push(fold.act);
-            return true;
+            return Some(Some(ext_id));
         }
         let var = new_bit(system, entity, &name);
         system.actions[ext_id.index()]
@@ -397,12 +426,14 @@ impl BitGroups {
             .push(bit_is(var, local_key, Value::TRUE));
         self.open(signature, fold, var, entity);
         self.variants.insert(fold.act, vec![fold.act]);
-        false
+        Some(None)
     }
 
     /// Folds an S action keyed by a T row a quantifier in one of its guards binds: the
     /// action gains a param for the row, and the guard reads the row's bit, its link to the
-    /// S row, and the node's parts outside T in place of the node.
+    /// S row, and the node's parts outside T in place of the node. `None`, with `system`
+    /// unchanged, when the restriction dropped the action, the node's entity, the link var,
+    /// or the S param.
     fn fold_linked(
         &mut self,
         cone: &TransitionSystem,
@@ -410,7 +441,7 @@ impl BitGroups {
         map: &Remap,
         t: &VarSet,
         fold: &Fold,
-    ) {
+    ) -> Option<()> {
         let FoldKey::Linked {
             guard,
             entity,
@@ -421,7 +452,9 @@ impl BitGroups {
         else {
             unreachable!("a linked fold")
         };
-        let ext_id = map.act[fold.act.index()].expect("an S action is kept");
+        let ext_id = map.act[fold.act.index()]?;
+        let (ext_entity, ext_link) = (map.ent_of(*entity)?, map.var_of(*link_var)?);
+        let ext_s_param = renumber(map, fold, *s_param)?;
         let signature = Signature::Linked {
             entity: *entity,
             link_var: *link_var,
@@ -431,15 +464,15 @@ impl BitGroups {
             Some(g) => self.vars[g],
             None => {
                 let name = format!("{}_{guard}", system.actions[ext_id.index()].name);
-                let var = new_bit(system, map.e(*entity), &name);
-                self.open(signature, fold, var, map.e(*entity));
+                let var = new_bit(system, ext_entity, &name);
+                self.open(signature, fold, var, ext_entity);
                 var
             }
         };
         let a = &mut system.actions[ext_id.index()];
         let q = id8(a.params.len());
         a.params.push(Param {
-            entity: map.e(*entity),
+            entity: ext_entity,
             role: ParamRole::Earlier { step: 0 },
             via_api: None,
         });
@@ -457,8 +490,8 @@ impl BitGroups {
         let mut stand_in: Vec<Pred> = node.outside.iter().map(rest).collect();
         stand_in.push(Pred::Cmp(
             Term::Slot {
-                var: map.v(*link_var),
-                at: At::Param(renumber(map, fold, *s_param)),
+                var: ext_link,
+                at: At::Param(ext_s_param),
             },
             CmpOp::Eq,
             Term::Index(At::Param(q)),
@@ -472,6 +505,7 @@ impl BitGroups {
             site: Site::bare(ModelRef::Synthesized),
         });
         self.variants.insert(fold.act, vec![fold.act]);
+        Some(())
     }
 }
 
@@ -527,7 +561,7 @@ fn bind_stub_params(
                 out.fault.get_or_insert_with(|| StubParam {
                     action: system.actions[k].name.clone(),
                     param: p,
-                    unfolded: true,
+                    fault: Fault::Unfolded,
                 });
                 continue;
             }
@@ -554,16 +588,17 @@ fn stub_param(system: &TransitionSystem, width: usize) -> Option<StubParam> {
         Some(StubParam {
             action: a.name.clone(),
             param,
-            unfolded: false,
+            fault: Fault::NeverBinds,
         })
     })
 }
 
-/// Param `p` of a fold's cone action, in the extended sub-lifecycle's numbering.
-fn renumber(map: &Remap, fold: &Fold, p: u8) -> u8 {
+/// Param `p` of a fold's cone action, in the extended sub-lifecycle's numbering; `None` when
+/// the restriction dropped it.
+fn renumber(map: &Remap, fold: &Fold, p: u8) -> Option<u8> {
     match &map.params[fold.act.index()] {
-        Some(m) => m[usize::from(p)].expect("an S param is kept"),
-        None => p,
+        Some(m) => m[usize::from(p)],
+        None => Some(p),
     }
 }
 
@@ -673,7 +708,10 @@ mod tests {
             split.s_actions.insert(note);
             let ext = Extended::of(&sys, &split);
             let fault = ext.stubs.fault.as_ref().expect("the check fails");
-            assert!(fault.unfolded && fault.action == "Note", "{t:?}: {fault}");
+            assert!(
+                fault.fault == Fault::Unfolded && fault.action == "Note",
+                "{t:?}: {fault}"
+            );
             let param = &ext.system.actions[k].params[fault.param];
             assert_eq!(
                 param.role.binds_exists(),

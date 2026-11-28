@@ -516,7 +516,7 @@ compares; what the test shows when it passes is [test].
 
 `cli/tests/engine_corpus.rs` over `cli/tests/engine_corpus/*.rdra` (T7).
 
-- **Inputs.** 89 cases with 215 `expect` lines; families `cap` 2, `cone` 14, `fair` 9,
+- **Inputs.** 91 cases with 218 `expect` lines; families `cap` 2, `cone` 16, `fair` 9,
   `presence` 9, `safety` 25, `sym` 10, `width` 2, `z3` 18. One case (`cap_memory_limit`)
   skips TLC. 38 cases carry a `bfs=` list.
 - **Bounds.** TLC runs at the case's flags: 2 instances and Int `0..5` by default; 1 instance

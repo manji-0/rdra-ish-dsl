@@ -5,6 +5,7 @@ cap_temporal_budget_zero
 cone_always_frees_slots
 cone_copy_from_parent
 cone_entity_mark_left_out
+cone_fold_key_dropped
 cone_handler_mark_left_out
 cone_independent_loop
 cone_outside_monotone
@@ -14,6 +15,7 @@ cone_reduced_inner_class_loops
 cone_reduced_loop_fair_enabled
 cone_reduced_loop_unreached
 cone_reduced_no_loop_capped
+cone_rise_names_a_dropped_new_row
 cone_rise_param_on_a_stub
 cone_triggered_param_on_a_stub
 fair_counted_exposes_lost_run

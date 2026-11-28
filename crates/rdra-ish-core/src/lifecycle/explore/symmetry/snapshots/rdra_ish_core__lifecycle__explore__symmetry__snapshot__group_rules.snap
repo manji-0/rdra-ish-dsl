@@ -10,22 +10,22 @@ Entity lines that name each rule or reason:
   IdAgainstLiteral: 0: fires in no cone
   JointTooLarge: 0: fires in no cone
   MixedIds: 0: fires in no cone
-  Observed:input: 31
+  Observed:input: 36
   Observed:named by T: 28 (kept without a witness of its own)
   Observed:named by an input: 3 (kept without a witness of its own)
-  Observed:named by obs: 21 (kept without a witness of its own)
-  Observed:obs: 95
-  Observed:stub: 8 (kept without a witness of its own)
+  Observed:named by obs: 23 (kept without a witness of its own)
+  Observed:obs: 100
+  Observed:stub: 10 (kept without a witness of its own)
   OrderedId: 0: fires in no cone
   OwnerChoice: 0: fires in no cone
   OwnerLiteral: 0: fires in no cone
   PinnedStart: 0: fires in no cone
-  Reduced:S: 294
-  Reduced:S action param: 301 (kept without a witness of its own)
-  Reduced:S var: 294 (kept without a witness of its own)
-  Reduced:bit key: 23 (kept without a witness of its own)
-  Reduced:input: 13 (kept without a witness of its own)
-  Reduced:named by S: 91 (kept without a witness of its own)
+  Reduced:S: 303
+  Reduced:S action param: 313 (kept without a witness of its own)
+  Reduced:S var: 303 (kept without a witness of its own)
+  Reduced:bit key: 25 (kept without a witness of its own)
+  Reduced:input: 16 (kept without a witness of its own)
+  Reduced:named by S: 93 (kept without a witness of its own)
   Reduced:named by an input: 3 (kept without a witness of its own)
   UnlinkedCreate: 0: fires in no cone
 
@@ -1140,6 +1140,22 @@ Entity lines that name each rule or reason:
   [entity Payment] unreduced
     Notice[2] moves
     Payment[2] moves
+== engine_corpus/cone_fold_key_dropped.rdra
+  [entity Desk] unreduced
+    Desk[2] moves
+    Order[2] moves
+  [entity Order, Forbidden_Order_0] reduced, H at depth 1
+    Desk[2] stays G_T=input,S action param | H stays H=input
+    Order[2] moves
+    Ticket[2] stays G_T=S,S var,S action param | H moves
+    Voucher[2] stays G_T=S,S var,S action param | H stays H=obs
+  [entity Ticket] unreduced
+    Ticket[2] moves
+  [entity Voucher] reduced, H at depth 1
+    Desk[2] stays G_T=S,S var,S action param | H stays H=obs
+    Order[2] stays G_T=S,S var,S action param | H moves
+    Ticket[2] stays G_T=S,S var,S action param | H stays H=obs
+    Voucher[2] moves
 == engine_corpus/cone_handler_mark_left_out.rdra
   [entity Order, property ShipsFair] unreduced
     Order[2] moves
@@ -1203,6 +1219,24 @@ Entity lines that name each rule or reason:
   [entity Job, property JobStarts] reduced, H at depth 1
     Gate[2] stays G_T=S,S var,S action param | H stays H=obs,named by T
     Job[2] moves
+== engine_corpus/cone_rise_names_a_dropped_new_row.rdra
+  [entity Order, Forbidden_Order_0] reduced, H at depth 1
+    Order[2] stays G_T=named by S,bit key,S action param | H stays H=named by obs,input,stub
+    Sheet[2] stays G_T=input | H stays H=input
+    Ticket[2] stays G_T=S,S var,S action param | H moves
+    Voucher[2] stays G_T=S,S var,S action param | H stays H=obs
+  [entity Sheet] reduced, H at depth 1
+    Order[2] stays G_T=named by S,bit key,S action param | H stays H=named by obs,input,stub
+    Sheet[2] stays G_T=input | H stays H=input
+    Ticket[2] stays G_T=S,S var,S action param | H moves
+    Voucher[2] stays G_T=S,S var,S action param | H stays H=obs
+  [entity Ticket] unreduced
+    Ticket[2] moves
+  [entity Voucher] unreduced
+    Order[2] moves
+    Sheet[2] moves
+    Ticket[2] moves
+    Voucher[2] moves
 == engine_corpus/cone_rise_param_on_a_stub.rdra
   [entity Order, Forbidden_Order_0] reduced, H at depth 1
     Order[2] stays G_T=named by S,bit key,S action param | H stays H=named by obs,input,stub
