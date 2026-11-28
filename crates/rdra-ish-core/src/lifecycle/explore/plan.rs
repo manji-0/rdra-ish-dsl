@@ -5,7 +5,7 @@
 use std::sync::OnceLock;
 
 use crate::lifecycle::expr::{Env, StateSlice};
-use crate::lifecycle::types::{Action, At, Pred, Term, VarId};
+use crate::lifecycle::types::{ActId, Action, At, Pred, Term, VarId};
 use crate::lifecycle::TransitionSystem;
 
 /// Per action of a system, in action order.
@@ -22,11 +22,12 @@ pub(crate) struct Plan {
     /// Per `pre` item, what it reads (`perf::Kind`), for the evaluator counts of #300.
     #[cfg(feature = "perf")]
     pub pre_kinds: Box<[super::perf::Kind]>,
-    /// Per state byte, whether a var of `action_writes` holds it: the cells a step of the
-    /// action may change. A debug or `shadow` build checks every step against it
-    /// (`TransitionSystem::check_writes`).
-    #[cfg(any(debug_assertions, feature = "shadow"))]
-    pub writes: Box<[bool]>,
+    /// The state bytes a step of the action may change, those of the vars of
+    /// `action_writes`, as a mask over the state read 8 bytes to a word: in word `i`, the
+    /// byte for state byte `8i + j` is `0x00` when a var of `action_writes` holds that byte
+    /// and `0xFF` when none does, and the bytes past the state's end are `0x00`. Every step
+    /// is held to it (`TransitionSystem::check_writes`).
+    pub writes: Box<[u64]>,
 }
 
 /// A conjunct that reads one var of one param's row: it holds on a slot exactly when the
@@ -74,7 +75,36 @@ impl std::fmt::Debug for Plans {
     }
 }
 
+/// Bytes `8i..8i + 8` of a state, or of the zero-padded tail, as `Plan::writes` reads them.
+fn word(bytes: &[u8]) -> u64 {
+    let mut w = [0u8; 8];
+    w[..bytes.len()].copy_from_slice(bytes);
+    u64::from_ne_bytes(w)
+}
+
 impl Plan {
+    /// Whether a step of the action may change state byte `cell`: a var of `action_writes`
+    /// holds it.
+    pub fn writes(&self, cell: usize) -> bool {
+        self.writes[cell / 8].to_ne_bytes()[cell % 8] == 0
+    }
+
+    /// Whether a step from `s` to `next` changes a byte no var of `action_writes` holds.
+    #[inline]
+    pub fn changes_unwritten(&self, s: &StateSlice, next: &StateSlice) -> bool {
+        let (a, a_tail) = s.0.as_chunks::<8>();
+        let (b, b_tail) = next.0.as_chunks::<8>();
+        let mut changed = 0u64;
+        for ((x, y), keep) in a.iter().zip(b).zip(self.writes.iter()) {
+            changed |= (u64::from_ne_bytes(*x) ^ u64::from_ne_bytes(*y)) & keep;
+        }
+        if !a_tail.is_empty() {
+            let keep = self.writes[self.writes.len() - 1];
+            changed |= (word(a_tail) ^ word(b_tail)) & keep;
+        }
+        changed != 0
+    }
+
     /// Whether `slot` passes the row tests of param `param`.
     pub fn row_holds(&self, param: usize, state: &StateSlice, slot: usize) -> bool {
         self.rows[param]
@@ -134,51 +164,59 @@ impl TransitionSystem {
             pre_kinds: pre.iter().map(super::perf::Kind::of).collect(),
             pre: pre.into(),
             post: post.into(),
-            #[cfg(any(debug_assertions, feature = "shadow"))]
             writes: self.written_cells(action),
         }
     }
 
-    /// The state bytes the vars of `action_writes(action)` hold.
-    #[cfg(any(debug_assertions, feature = "shadow"))]
-    fn written_cells(&self, action: &Action) -> Box<[bool]> {
-        let mut cells = vec![false; self.width];
-        for var in self.action_writes(action).iter() {
+    /// `Plan::writes` of `action`. A test that plants a writer `action_writes` misses
+    /// (`dropped("action_writes")`) leaves the first var of each action's set out.
+    fn written_cells(&self, action: &Action) -> Box<[u64]> {
+        let mut cells = vec![0xFFu8; self.width];
+        let planted = usize::from(crate::lifecycle::explore::symmetry::dropped(
+            "action_writes",
+        ));
+        for var in self.action_writes(action).iter().skip(planted) {
             let at = self.offset(*var);
             let n = self.slots_of(&self.var(*var).kind);
-            cells[at..at + n].fill(true);
+            cells[at..at + n].fill(0);
         }
-        cells.into()
+        cells.chunks(8).map(word).collect()
     }
 
     /// Checks that a step of `act` from `s` to `next` changes only bytes of vars
     /// `action_writes` names (claims A1, B6 of docs/theory/claims.md): the cone's closure
-    /// (Lemma 2 of docs/theory/cones.md) reads `Wr(a)` as every var a step of `a` can change,
-    /// so a step that changes another var would make a cone drop a writer it needs. Panics,
-    /// naming the action and the var, when one does.
-    #[cfg(any(debug_assertions, feature = "shadow"))]
-    pub(crate) fn check_writes(
-        &self,
-        act: crate::lifecycle::types::ActId,
-        s: &StateSlice,
-        next: &StateSlice,
-    ) {
-        let writes = &self.plans()[act.index()].writes;
-        for (cell, (a, b)) in s.0.iter().zip(next.0.iter()).enumerate() {
-            if a != b && !writes[cell] {
-                let var = (self.var_ids())
-                    .filter(|v| self.offset(*v) <= cell)
-                    .max_by_key(|v| self.offset(*v))
-                    .expect("a var holds every byte");
-                panic!(
-                    "shadow: step of {} changes {}, which action_writes leaves out",
-                    self.actions[act.index()].name,
-                    self.var_name(var)
-                );
-            }
+    /// (Lemma 2 of docs/theory/cones.md) and the prover's step pruning (Lemma F5 of
+    /// docs/theory/z3.md) read `Wr(a)` as every var a step of `a` can change, so a step that
+    /// changes another var would make a cone drop a writer it needs. Every step a run takes
+    /// comes through here (`each_raw_move`); one that changes another var stops the run as a
+    /// tool error, naming the action and the var (a debug or `shadow` build panics with
+    /// `shadow:`).
+    #[inline]
+    pub(crate) fn check_writes(&self, plan: &Plan, act: ActId, s: &StateSlice, next: &StateSlice) {
+        if plan.changes_unwritten(s, next) {
+            self.writes_fault(plan, act, s, next);
         }
         #[cfg(feature = "shadow")]
         crate::shadow::compared(crate::shadow::Twin::Writes);
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn writes_fault(&self, plan: &Plan, act: ActId, s: &StateSlice, next: &StateSlice) -> ! {
+        let cell = (s.0.iter().zip(next.0.iter()).enumerate())
+            .position(|(cell, (a, b))| a != b && !plan.writes(cell))
+            .expect("a changed byte outside the mask");
+        let var = (self.var_ids())
+            .filter(|v| self.offset(*v) <= cell)
+            .max_by_key(|v| self.offset(*v))
+            .expect("a var holds every byte");
+        let fault = format!(
+            "step of {} changes {}, which action_writes leaves out",
+            self.actions[act.index()].name,
+            self.var_name(var)
+        );
+        crate::shadow_assert!(false, "shadow: {fault}");
+        panic!("tool error: a {fault} (a tool bug, not a finding about the model)");
     }
 
     /// The test of a conjunct `one_row` maps to `(param, var)`: `eval` itself, run on every

@@ -542,27 +542,102 @@ after(Decide).assert(Doc.status != drop)
     assert!(exact > 0);
 }
 
-/// A step that changes a var its action's `action_writes` leaves out stops a debug or
-/// `shadow` build at the step (claims A1, B6): the cones read `action_writes` as every
-/// var a step can change (Lemma 2 of docs/theory/cones.md), so such a step would let a cone
-/// drop a writer it needs. Every other test that explores holds every step it takes to it.
-#[cfg(any(debug_assertions, feature = "shadow"))]
+/// The systems of the samples of samples/formal-verification and, per system, a step from
+/// an initial state.
+fn first_steps() -> Vec<(TransitionSystem, State, crate::lifecycle::explore::Move)> {
+    let mut out = Vec::new();
+    let mut paths: Vec<_> = std::fs::read_dir(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../samples/formal-verification"),
+    )
+    .unwrap()
+    .map(|e| e.unwrap().path())
+    .filter(|p| p.extension().is_some_and(|x| x == "rdra"))
+    .collect();
+    paths.sort();
+    for path in paths {
+        let rel = path.strip_prefix(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
+        let ts = TransitionSystem::build(
+            &load(rel.unwrap().to_str().unwrap()),
+            Bounds::VERIFY,
+            &Scope::ALL,
+        )
+        .ts;
+        let Some(s) = ts.initial_states().into_iter().next() else {
+            continue;
+        };
+        if let Some(step) = ts.moves(&s).next() {
+            out.push((ts, s, step));
+        }
+    }
+    out
+}
+
+/// The mask every step is held to (claims A1, B6): flipping one byte of a step's successor
+/// is caught exactly when no var of `action_writes` holds the byte, in a whole 8-byte word
+/// of the state and in the state's last, partial word alike.
+#[test]
+fn a_changed_byte_is_caught_exactly_when_its_action_does_not_write_it() {
+    let (mut body, mut tail) = (0, 0);
+    for (ts, s, step) in first_steps() {
+        let plan = &ts.plans()[step.act.index()];
+        assert!(
+            !plan.changes_unwritten(&s, &step.next),
+            "a step of the system passes"
+        );
+        let width = s.0.len();
+        for cell in 0..width {
+            let mut next = step.next.clone();
+            next.0[cell] ^= 1;
+            assert_eq!(
+                plan.changes_unwritten(&s, &next),
+                !plan.writes(cell),
+                "byte {cell} of {width}"
+            );
+            if !plan.writes(cell) {
+                if cell < width / 8 * 8 {
+                    body += 1;
+                } else {
+                    tail += 1;
+                }
+            }
+        }
+    }
+    assert!(
+        body > 0 && tail > 0,
+        "{body} whole-word and {tail} tail bytes"
+    );
+}
+
+/// A step that changes a var its action's `action_writes` leaves out stops the run at the
+/// step, as a tool error (a debug or `shadow` build panics with `shadow:`; claims A1, B6):
+/// the cones read `action_writes` as every var a step can change (Lemma 2 of
+/// docs/theory/cones.md), so such a step would let a cone drop a writer it needs. Every
+/// other test that explores holds every step it takes to it.
 #[test]
 #[should_panic(expected = "which action_writes leaves out")]
 fn a_step_that_changes_a_var_its_action_does_not_write_is_caught() {
-    let ts = TransitionSystem::build(
-        &load("samples/formal-verification/order.rdra"),
-        Bounds::STATES,
-        &Scope::ALL,
-    )
-    .ts;
-    let s = ts.initial_states().remove(0);
-    let step = ts.moves(&s).next().expect("a move from the initial state");
-    let writes = &ts.plans()[step.act.index()].writes;
-    let cell = (0..writes.len())
-        .find(|&c| !writes[c])
+    let (ts, s, step) = first_steps().remove(0);
+    let plan = &ts.plans()[step.act.index()];
+    let cell = (0..s.0.len())
+        .find(|&c| !plan.writes(c))
         .expect("a byte the first step does not write");
     let mut next = step.next;
     next.0[cell] ^= 1;
-    ts.check_writes(step.act, &s, &next);
+    ts.check_writes(plan, step.act, &s, &next);
+}
+
+/// A writer `action_writes` misses (planted: each action's mask leaves out the first var
+/// of its set) stops an exploration at the first step that changes that var.
+#[test]
+#[should_panic(expected = "which action_writes leaves out")]
+fn a_run_stops_at_a_step_that_changes_a_var_action_writes_misses() {
+    crate::lifecycle::explore::symmetry::witnesses::dropping("action_writes", || {
+        let ts = TransitionSystem::build(
+            &load("samples/formal-verification/order.rdra"),
+            Bounds::STATES,
+            &Scope::ALL,
+        )
+        .ts;
+        ts.run(Caps::new(usize::MAX, 100_000))
+    });
 }

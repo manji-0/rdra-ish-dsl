@@ -415,8 +415,7 @@ impl TransitionSystem {
                         })
                     };
                     if holds {
-                        #[cfg(any(debug_assertions, feature = "shadow"))]
-                        self.check_writes(act, s, next);
+                        self.check_writes(plan, act, s, next);
                         found(act, params, next);
                     }
                 });
