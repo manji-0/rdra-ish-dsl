@@ -453,7 +453,7 @@ impl Enc<'_> {
                     numbers,
                 } => match values
                     .iter()
-                    .map(|c| self.value(*var, c.value))
+                    .map(|c| Ok((c.value, self.value(*var, c.value)?)))
                     .collect::<R<Vec<_>>>()
                 {
                     Ok(vals) => {
@@ -522,13 +522,23 @@ impl Enc<'_> {
         }
     }
 
-    /// `c` is one of the values a choice lists (whose terms are `terms`), or, for a choice of
-    /// every number (`Numbers`), any index from its `from`: the list holds those only up to
-    /// the run's top, and a proof holds for every Int range.
-    fn one_of(&self, numbers: &Option<Numbers>, terms: Vec<Expr>, c: &Expr) -> Expr {
+    /// `c` is one of the values a choice lists (each with its term), or, for a choice of
+    /// every number (`Numbers`), any index from its `from` or one of the listed values below
+    /// it: the list holds the numbers only up to the run's top, and a proof holds for every
+    /// Int range. A value below `from` is one a `.when`-guarded line of the same column
+    /// asks for beside the numbers, as `null` beside `present` (`build/sets.rs::guarded_set`),
+    /// which the step must still be able to write.
+    fn one_of(&self, numbers: &Option<Numbers>, listed: Vec<(Value, Expr)>, c: &Expr) -> Expr {
+        let is = |t: Expr| eq(c.clone(), t);
         match numbers {
-            Some(n) => smt::rel(Rel::Le, Expr::int(i64::from(n.from.0)), c.clone()),
-            None => any(terms.into_iter().map(|t| eq(c.clone(), t)).collect()),
+            Some(n) => {
+                let every = smt::rel(Rel::Le, Expr::int(i64::from(n.from.0)), c.clone());
+                let below = listed.into_iter().filter(|(v, _)| *v < n.from);
+                any(std::iter::once(every)
+                    .chain(below.map(|(_, t)| is(t)))
+                    .collect())
+            }
+            None => any(listed.into_iter().map(|(_, t)| is(t)).collect()),
         }
     }
 
