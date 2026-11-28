@@ -24,7 +24,7 @@ contract and the Verus crate may change in any release.
 | `codegen ... --lang rust --verus <DIR>` | Also writes a Verus crate to `DIR`. | [`codegen`](./cli-reference.md#codegen) |
 | `codegen <INPUTS> --format json` | Prints the contract the code is generated from, as data. | [The JSON contract](./cli-reference.md#the-json-contract) |
 | `codegen <INPUTS> --code` | Writes every file the `[code.<lang>]` tables of `rdra.toml` name: domain code (or adapter), traces, probe. `--probe` writes only the probes. | [The code tables](./cli-reference.md#the-code-tables) |
-| `codegen ... --check <FILE>` | Generates again and compares with `FILE`, by the fingerprint on its second line. | [`codegen`](./cli-reference.md#codegen) |
+| `codegen ... --check <FILE>` | Generates again and compares the text with `FILE`, ignoring the fingerprint line, which names the cause of a difference. | [`codegen`](./cli-reference.md#codegen) |
 | `check <INPUTS> --code[=fresh\|build\|run]` | Checks the service code the `[code]` tables name: the files are fresh, the probe compiles, the conformance test passes. `--deny-incomplete`, `--mutants` and `--mutant-seed` go with `run`. | [`check --code`](./cli-reference.md#check---code) |
 
 `codegen` runs `check` first. On a model `check` rejects it exits 1, unless
@@ -66,6 +66,7 @@ makes `codegen model --code` write three files:
 ```
 wrote svc/src/domain.rs
 wrote svc/tests/traces.txt: 4 of 4 moves in 9 traces, 7 refused calls, 5 interleaved commits
+...
 wrote svc/tests/rdra_contract.rs
 ```
 
@@ -167,11 +168,12 @@ record and state type gets a rule check (`rule_violations`), which names the ent
 rules a row breaks. Each result lists what its commit writes, and `commit_writes` writes that list
 through a `CommitStore` the service implements.
 
-The errors are values; no function throws or panics, except TypeScript's `assertNever`.
+The errors are values: no transition function or dispatcher throws or panics, and only
+TypeScript's `assertNever` throws, on a value outside its type.
 Every `<UseCase>Error` has `NotEnabled`, `NotFound` and `StoreFailed`, and `Rejected` and
 `InvalidArgument` where the use case can give them.
 
-Each use case also gets a contract, which the service implements: `prepare*` loads the rows
+Each use case that writes also gets a contract, which the service implements: `prepare*` loads the rows
 by id and runs the function, writing nothing; `commit*` stores the result in one transaction.
 It is a Rust trait, a Go interface, or a TypeScript type whose members return `Promise`s:
 
@@ -183,6 +185,10 @@ export type PayUseCase = {
 };
 ```
 
+Until a method exists, the service can take the unimplemented port, a stand-in whose methods
+fail as "not implemented" (Go and TypeScript return an error, Rust panics); `check --code=run`
+counts the calls that reach it ([The unimplemented port](./cli-reference.md#the-unimplemented-port)).
+
 A use case that actors perform takes a caller first, made from the capabilities of those
 actors. Split use cases get one function per step, linked by run marks. Events carry the id
 of each row they mark. Choices, links, copies and `@derived` columns are in
@@ -192,7 +198,8 @@ Some use cases get no function. The header lists each with the reason, and the c
 gives it an entry point (`run_<action>`) that the service writes whole. The reasons include:
 a use case that reads `now`, guards on or drives a comparison proposition, joins by a key
 over several columns, raises or handles a counted event, chooses among some values of a
-column, or computes an arithmetic `@derived` column.
+column. A `@derived` column the function cannot compute (arithmetic, `now`, an input) does
+not stop the function: it becomes an input.
 
 ### Obligations
 
@@ -223,6 +230,7 @@ X NotFound Cancel 101
 C 1 Place 1
 C 2 Pay 1 2026-01-01T00:00:00Z
 X NotEnabled Pay 1 2026-01-01T00:00:00Z
+...
 ```
 
 `S`/`A` define a state and its rows, `T` starts a trace, `G` ends its seed, `C` is a call
@@ -291,12 +299,14 @@ Error: --verus does not cover this model yet (3 reason(s) above); the ordinary o
 
 The state types and functions rest on the rules `check` verified. That `check` explores at
 one instance per entity, `Int 0..5`, with no state cap and the memory limit of `[check]`
-(`memory`, default `4GiB`; `codegen` takes no `--memory`). The state refinements explore at
-the same limits. The header prints these bounds. A rule `check` cannot see at those bounds
+(`memory`, default `4GiB`; `codegen` takes no `--memory`). The candidate rules in the header
+come from a second exploration at the same limits. The header prints these bounds. A rule `check` cannot see at those bounds
 can still fail at larger ones: run [`verify`](./formal-verification.md) for those.
 
 The traces come from a second BFS. That one stops at `--conformance-states` states
 (`conformance_states` in the table, default 65,536) and is not charged to the memory limit.
+The `# bounds:` line of a traces file is `check`'s line; the cap shows in the summary
+`codegen` prints and in the `BFS:` line of a run.
 
 ### What the types enforce
 
@@ -393,16 +403,17 @@ Because a traces file can be this large, `codegen --check` and `check --code=fre
 it by hash, reading it once without holding it. The TypeScript harness reads the file as an
 `AsyncIterable` of lines, so a file past Node's longest string (about 512 MB) still runs.
 
-The harness makes a fresh port once per trace and seeds it, so `new` and `seed` dominate the
-run time of a large suite. Make `new` cheap: share one database and let `seed` clear it.
+The harness calls `new` once per trace (181,111 times on clinic-ops) and `seed` empties the
+store each time. Make `new` cheap: share one database and let `seed` clear it.
 
 ## Known limitations
 
 - The Verus crate does not check which error a function returns. A contract asks for `Err`
   exactly when the guards fail; `Rejected` and `InvalidArgument` are not told apart.
-- The Verus crate covers no `Int` or nullable column, `now`, run mark, split use case, event,
-  choice, entity no use case creates, optional key, deleted parent, nested quantifier, or
-  condition on a successor row. Verus may also reject a model in scope: a rule that holds but
+- The Verus crate covers no `Int` or nullable column, `now`, proposition, run mark, split use
+  case, event, choice, entity no use case creates, optional key, deleted parent, nested
+  quantifier, condition on a successor or created row, two rows of one entity in one action,
+  ordering comparison, or input other than a row's id. Verus may also reject a model in scope: a rule that holds but
   is not inductive with the key lemmas alone fails its preservation lemma.
 - The contracts and the conformance port need every entity to have a one-column primary
   key that is not `Bool`. For another model the code has no contracts, and `--conformance`
