@@ -37,9 +37,13 @@ while IFS= read -r sample; do
   true
 
   # verify --with-tlc when tlc is on PATH, so the snapshot holds both engines' verdicts.
-  with_tlc=()
-  command -v tlc >/dev/null 2>&1 && with_tlc=(--with-tlc)
-  timeout "${RDRA_VERIFY_TIMEOUT:-300}" "$bin" verify "$sample" ${with_tlc[@]+"${with_tlc[@]}"} -o "$dir/tla" >"$dir/verify.txt" 2>&1
+  # --no-prove where the binary has it: the proof's lines name the z3 version and hang on
+  # whether z3 is installed, so they would differ between two runs for reasons other than
+  # the engines; a build older than the flag runs no proof by default.
+  extra=()
+  command -v tlc >/dev/null 2>&1 && extra=(--with-tlc)
+  "$bin" verify --help 2>/dev/null | grep -q -- '--no-prove' && extra+=(--no-prove)
+  timeout "${RDRA_VERIFY_TIMEOUT:-300}" "$bin" verify "$sample" ${extra[@]+"${extra[@]}"} -o "$dir/tla" >"$dir/verify.txt" 2>&1
   rc=$?
   [[ $rc -eq 124 ]] && echo "result: timeout after ${RDRA_VERIFY_TIMEOUT:-300}s" >>"$dir/verify.txt"
   echo "exit=$rc" >>"$dir/verify.txt"
