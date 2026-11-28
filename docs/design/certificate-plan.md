@@ -393,6 +393,12 @@ not opened for this plan. That it has the same shape, with `is_real` and π per 
 confirmed in 4b, and π is checked by `Group::apply(π, ·)` against the stored state. N9, N10
 and the plain search's code move from read to W; A23's code moves after 4b.
 
+4a implements the plain half in `explore/liveness/certify.rs::ComponentRun::search_faults`, with
+the stop check split from the end check: six clauses (`Order`, `FairComponent`, `Stop`, `End`,
+`Closure`, `Start`), each caught on a planted witness in its tests. It runs on the plain search
+and on the reduced search with looping classes, until a binding finds a start. Its main cost is
+the second evaluation of the goal per state (`holds_bound`).
+
 **C20, TV on counterexamples.** Validate each printed lasso and trace with an independent
 evaluator, the reference interpreter of C28 linked into the binary for models in its subset.
 It costs only on counterexamples. Outside the subset it stays as today (R, shared).
@@ -542,7 +548,7 @@ and the planted-bug test that every certificate needs (as
 | 2 | 2a prover TVs (**Done**) | C22, C25, C24 | TV, W | 5 d | `--prove` only: ms + two builds already made + states × helper lemmas / 0 | B1 compare → TV; B2 Lemma U, B3 → TV; false helper lemmas → W on explored states (B16 unchanged) | none |
 | 3 | 3a step writes in release (measured, over budget: stays read) | C4 | R | 2 d + measure | per successor, target < 1% / 0 (per-action mask); measured at `RDRA_JOBS=1` `verify`: +1.45% instructions on patent-ops, +2.05% on clinic-ops (66–78 per step), max RSS unchanged | none until a cheaper form passes (see C4) | none |
 | 3 | 3b canonical membership | C16 (R + K) | R, K | 3 d + measure | per canonicalization, target < 1% / one scratch row per worker | A21 "member of the orbit" → R, "function of the state" → K; T13 canonical gap → K | none |
-| 4 | 4a liveness witness, plain | C19 (plain) | W | 4 d | O(V+E) per binding with no start; target < 1% of the run / transient per-component arrays as `avoid`'s | N9, N10 code → W; T8 / residual risk 2 for liveness `ok` narrowed to the shared predicates | none |
+| 4 | 4a liveness witness, plain (**Done**) | C19 (plain) | W | 4 d | O(V+E) per binding with no start; target < 1% of the run / transient per-component arrays as `avoid`'s; measured at `RDRA_JOBS=1` `verify`: the check, run 11 times over per call, retires 0.26 G per run on patent-ops (0.57%) and 2.85 G on insurance-claim-ops (0.52%), under 0.01% on food-permit-ops; main → branch 45.17–45.18 → 45.31–45.32 G (patent-ops), 547.8 → 549.8 G (insurance-claim-ops), 233.1 → 232.4 G (food-permit-ops), 141.1–141.2 → 140.7–140.8 G (clinic-ops, no liveness property); max RSS within the run-to-run spread; stdout and stderr byte-identical | N9, N10 code → W; T8 / residual risk 2 for liveness `ok` narrowed to the shared predicates | none |
 | 4 | 4b liveness witness, orbit | C19 (orbit), C21 (initial + lasso states) | W, R | 3 d (after reading `orbit/liveness.rs`) | as 4a | A23 search code → W; LiveEqui partially R | 3b, 4a |
 | 5 | 5a fold exactness | C2 | R / K | 4 d | once per fold (≤ 2^16 points) / table freed after | A8/A11 `exact` → R on small folds, K widened otherwise | 1b |
 | 5 | 5b input monotonicity on rises | C6 | R | 2 d | per rise edge, already walked / 0 | A10 `Pre` → R on the run; `acyclic` → R (topological witness) | 1b |

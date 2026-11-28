@@ -31,7 +31,7 @@ mod violations;
 pub use arena::{States, Unpacked};
 pub use edges::{AnEdge, EdgeIter, Edges, Ends, Listed};
 pub use graph::{Adjacency, LabelledEdges};
-pub use liveness::{LassoFault, ReducedVerdict, Spurious};
+pub use liveness::{LassoFault, ReducedVerdict, SearchClause, SearchFault, Spurious};
 pub use orbit::{LabelledEdge, OrbitRun};
 pub(crate) use plan::Plans;
 pub use properties::PropertyVerdict;

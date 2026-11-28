@@ -182,6 +182,11 @@ Every run, in every build:
   `::marking_splits_nothing`, A8, A9);
 - lifts a reduced trace only through an extended sub-lifecycle that rebuilds as it was
   built (`Extended::rebuild_checked`, N16);
+- holds every liveness search that finds no counterexample for a binding to N9's criterion
+  on the recorded graph (its components, fair flags, stops and backward walk, with `N`
+  re-derived from the goal), and stops as a tool error when the witness fails, so no `ok`
+  or `not decided` prints (`explore/liveness/certify.rs::ComponentRun::search_faults`, N9,
+  N10); the run up to instance symmetry is not checked;
 - refuses to prove anything from an unsatisfiable premise (`prove/mod.rs::premise`, B2);
 - uses a cached certificate only after it re-checks (B15);
 - with TLC, replays every TLC trace through BFS's step relation (T2).
@@ -217,7 +222,11 @@ documents arrive at them from their own side.
    hand-written expectations, such as the engine corpus's `expect` lines, see such a fault,
    and only on the models they name (T7).
 2. **No run-time check of an `ok` or a `proved` as such.** A counterexample is checked
-   before it prints (N16); an `ok` and a `proved` are not. The causes of a wrong one that
+   before it prints (N16); a `proved` and a safety `ok` are not. A liveness `ok` of a plain
+   run is: every run holds the search's witness to N9's criterion on the recorded graph. That
+   check shares the run's states and edges, the goal, trigger and cause predicates, and the
+   fair instances with the search, so a fault in those still passes it, and a liveness `ok`
+   up to instance symmetry is not checked. The causes of a wrong one that
    are known are refused or checked in every run (see
    [What every run checks](#what-every-run-checks)). A fault of another kind that gives a
    wrong `ok` or `proved` passes unnoticed in the run. The evidence against it is offline:
@@ -364,10 +373,12 @@ not a bound on what exists.
 - **N8.** TLC cannot state `can_reach`. The naive oracle shares the step relation and the
   evaluator, and does not cover entity cones up to symmetry. That the reported state is the
   first in BFS order rests on the proof alone.
-- **N9.** The Lean proof states the acceptance criterion, not `avoid`'s code: Tarjan's
-  components, the bit sets, the choice of binding and start, and N10's cut are read from the
+- **N9.** The Lean proof states the acceptance criterion, not `avoid`'s code, and the
+  run-time certificate's argument is on paper; what the certificate shares with the search
+  (the run's graph, the predicates, `fair_steps`, `expanded`) and the choice of binding and
+  start are read from the code.
+- **N10.** No Lean theorem covers a stopped graph: the value of `expanded` is read from the
   code.
-- **N10.** No Lean theorem covers a stopped graph: the cut at `expanded` is read from the code.
 - **N11.** The lasso checks share code with the search they certify (`moves` and
   `Property::fair_instance`; `holds_bound` and `triggers`), so a fault there passes both.
 - **N13.** The second half of `a_path_that_does_not_replay_is_a_fault` never runs.
@@ -388,7 +399,8 @@ not a bound on what exists.
   roots shares its variables with an invariant's cone, and so meets TLC there, is open.
 - **T6.** TLC's deadlock check is one-sided.
 - **T7.** Each corpus header checks only the model it names.
-- **T8.** A wrong `ok` is not checked at run time (residual risk 2).
+- **T8.** A wrong safety `ok`, or a liveness `ok` up to instance symmetry, is not checked at
+  run time (residual risk 2).
 - **T9.** The random-model comparison is no required check (Process, below).
 - **T11.** Batch JVMs are compared with processes only on cones of at most 5,000 states, and
   in no required check.

@@ -590,6 +590,51 @@ lie in a list, with a component as mutual reachability by `E_N` and the stop rul
 (`oAccepts_iff`), also with the commutation only on Theorem A18's set `W` (`oAccepts_on_iff`). Neither reads the code: Tarjan's components, the bit sets and N10's cut are
 read from it ([proofs/lean/README.md](../../proofs/lean/README.md#the-liveness-searches)).
 
+*Certificate.* Every build holds the witness of each binding whose search finds no start to
+the criterion above on the recorded graph, until some binding finds one
+(`explore/liveness/certify.rs::ComponentRun::search_faults`). The witness is what `avoid`
+leaves: `comp` per state, the fair flag per component, the stops and `toward`. The checker
+re-derives `N_b` from `goal_b` and reads neither `avoid`'s adjacency nor its bit sets. In
+one pass over the states and one over the edges it checks six clauses:
+
+1. `Order`: every edge of `E_N` goes from a component to one numbered no higher.
+2. `FairComponent`: each component's fair flag is the one recomputed from the component's
+   size, its states at or past `expanded(G)`, the fair instances enabled at all of its
+   states, and the instances its edges between different states take.
+3. `Stop`: each state's stop flag is the stop rule's (`Plain`, `WfNext` or `Looping`),
+   with the cut at `expanded(G)`.
+4. `End`: every stop and every state of a fair component has `toward ≠ NONE`.
+5. `Closure`: for every edge `s → t` of `E_N`, `toward(t) ≠ NONE` implies
+   `toward(s) ≠ NONE`.
+6. `Start`: no state with `toward ≠ NONE` has `trig_b ∧ cause_b`.
+
+If every clause holds, no state with `trig_b ∧ cause_b ∧ ¬goal_b` reaches an end inside
+`N_b`, so on a complete `G` the property holds for `b` by N9 (⇒). To see this, let `C` be a
+fair component in N9's sense, a set of mutual reachability. Along a cycle of `E_N` the
+numbers never rise (clause 1) and come back to where they started, so they are constant, and
+all of `C` lies in one computed component `D`. `D` has at least as many states as `C`, and
+on a complete graph none of them is past the cut. Every instance enabled at all states of
+`D` is enabled at all states of `C`, and every instance an edge of `C` takes is taken inside
+`D`. So `D`'s recomputed flag is set, the witness's flag equals it (clause 2), and every
+state of `C` has `toward ≠ NONE` (clause 4). So does every stop (clauses 3 and 4), and,
+by clause 5, every state that reaches an end by edges of `E_N`. Clause 6 then leaves no
+start. The proof needs no fact about Tarjan's algorithm or the backward BFS. A component
+coarser than an SCC only adds states and edges, and so can only set a flag that a
+counterexample's checks then reject (N11).
+
+The checker shares with the search the run's states and edges, `holds_bound`, `triggers`,
+`fair_steps` (the fair instances and where each is enabled) and `expanded`. A fault is
+`LassoFault::Search`: the CLI reports a tool error for the property, prints no verdict, and
+a debug or `shadow` build panics with a message that starts `shadow:`. The search on a
+reduced cone with looping classes (`decide_liveness_reduced`) is checked the same way. A
+counterexample is checked by N11, not by this certificate. The run up to symmetry
+(`OrbitRun::decide_liveness`) has no certificate. The cost is one evaluation of `goal_b` per
+state, `trig_b` and `cause_b` only where `toward ≠ NONE`, one pass over the edges, and
+per-component arrays of the size `avoid` allocates, which are freed before the next binding.
+At `RDRA_JOBS=1` it retires about 0.6% of the instructions of `verify` on patent-ops and
+insurance-claim-ops, the samples whose liveness cones are largest
+([certificate-plan.md](../design/certificate-plan.md#3-phases)).
+
 **N10 (Stopped graph).** On a stopped `G`, a state at or after `expanded(G)` is never a
 stop, and a component that holds one is never fair (`avoid`'s `open` and the `s < expanded`
 test). Then every end found has its out-edges fully recorded, so `En`, `Moves` and `Tk` are
@@ -609,8 +654,13 @@ steps of `T` between goal-free states, holds at least two states, and takes ever
 enabled at all of its states. That is what N9's (⇐) uses of a fair component: it needs neither
 that `C` is a maximal component of `T`'s graph nor that `T` has no other edges. So the
 construction of N9's (⇐) gives a behaviour of `T` that satisfies `F` and violates the property.
-It does not use τ. No Lean theorem states this: `Search.lean` takes the graph complete, and the
-cut at `expanded` (`avoid`'s `open` and the `s < expanded` test) is read from the code.
+It does not use τ. No Lean theorem states this, because `Search.lean` takes the graph
+complete. The certificate of N9 recomputes the cut on every run: the stop flags take
+`s < expanded`, and a component that holds a state at or past `expanded` has no fair flag. A
+search that applies the cut otherwise is a tool error. The value of `expanded` itself is
+shared with the search and read from the code. On a stopped graph the certificate's pass
+leaves `Undecided`, and a counterexample is checked by N11, whose replay and fairness check
+read the system's moves, not the recorded edges.
 
 **N11 (Self-certification).** Before a native lasso prints, `decide_liveness` replays it
 through the step relation (`lasso.rs::TransitionSystem::replay_lasso`: the first state must
