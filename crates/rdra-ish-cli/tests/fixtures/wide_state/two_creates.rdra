@@ -1,4 +1,4 @@
-// P50: 34 Int columns; at --instance-count 255 --int-range-max 255 a state packs into
+// Claim N2: 34 Int columns; at --instance-count 255 --int-range-max 255 a state packs into
 // 255 x (34 x 8 + 2) = 69,870 bits, past bit 65,535. CreateB makes a row with c32 = 2, which
 // the rule forbids: a counterexample at every bound.
 entity Row "行" {

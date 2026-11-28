@@ -314,7 +314,8 @@ creates(FileReport, Report)
 /// A cone that holds the handler but not the raiser's writes leaves the mark out and runs
 /// the handler unordered. Such a counterexample is decided again on the rule's exact cone,
 /// which holds the raiser: a real violation is reported with the raise on its trace, and one
-/// the event order rules out at every bound is no violation (P1).
+/// the event order rules out at every bound is no violation (claims A2, A6 of
+/// docs/theory/claims.md).
 #[test]
 fn a_cone_without_the_raiser_has_its_counterexample_decided_on_the_exact_cone() {
     const DOC: &str = r#"

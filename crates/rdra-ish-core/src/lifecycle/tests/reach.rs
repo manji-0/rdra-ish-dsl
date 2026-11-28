@@ -118,8 +118,8 @@ fn a_cone_stopped_at_the_state_cap_leaves_the_property_undecided() {
 }
 
 /// A stopped graph decides no `can_reach`: asked anyway, `reach_failure` stops the process in
-/// every build, not only in a debug one (open problem P19), rather than read a state it did
-/// not expand as one with no way to the goal.
+/// every build, not only in a debug one (claim N8 of docs/theory/claims.md), rather than read a
+/// state it did not expand as one with no way to the goal.
 #[test]
 #[should_panic(expected = "a capped graph decides no can_reach")]
 fn a_stopped_graph_decides_no_can_reach() {

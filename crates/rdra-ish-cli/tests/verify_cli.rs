@@ -1426,7 +1426,7 @@ forbidden(E, v == true, status == raised)
 /// than the cone does: it lacks a var the cone's use case writes, or it keeps a guard the
 /// cone drops. Each cone runs. The assert's cone reports its counterexample; the rule's cone
 /// finds one that runs Handle without its event, which the rule's exact cone, holding Raise,
-/// rules out (P1), so the line reads `ok` and says why.
+/// rules out (claims A2, A6 of docs/theory/claims.md), so the line reads `ok` and says why.
 #[test]
 fn a_cone_that_takes_steps_the_larger_module_does_not_still_runs() {
     for (test, src, failing, verdict) in [
@@ -1700,9 +1700,7 @@ invariant(Order).when(status == placed).none(Shipment).label("no shipment yet").
 /// between the engines: the run prints `error[EngineDisagreement]` and ends `tool_error`. A
 /// `tlc` on PATH that runs the real one and turns every `"cancelled"` in its output into a
 /// value no Order has makes every trace that reaches a cancelled Order leave the cone
-/// (`--entity Order` keeps the run short). Such a
-/// trace was once only printed as an `error:` line, the first of each check, and the run
-/// ended `counterexample` (P12 of docs/theory/README.md).
+/// (`--entity Order` keeps the run short); each such trace is a disagreement (claim T2).
 #[cfg(unix)]
 #[test]
 fn a_tlc_counterexample_that_does_not_replay_fails_the_run_as_a_tool_bug() {
@@ -1757,9 +1755,8 @@ fn a_tlc_counterexample_that_does_not_replay_fails_the_run_as_a_tool_bug() {
 }
 
 /// A native property run stopped at `--max-states` decides nothing, so TLC's counterexample on
-/// the same run is no disagreement (agreement rule 1). The stopped run was once recorded as
-/// `ok` for the run-by-run comparison, which read as `native ok, TLC counterexample` and
-/// failed the run as a tool error (P21 of docs/theory/README.md).
+/// the same run is no disagreement (agreement rule 1; claim N15): the run-by-run comparison
+/// does not read the stopped run as `ok`.
 #[test]
 fn a_property_run_stopped_at_the_cap_is_no_disagreement_with_tlc() {
     if !have_tlc() {
@@ -1790,9 +1787,8 @@ fn a_property_run_stopped_at_the_cap_is_no_disagreement_with_tlc() {
 }
 
 /// The native `WF_vars(Next)` run on a reduced cone decides a system TLC runs no module of,
-/// so its line names it apart, not as TLC's `Cone_P_WF` on the unreduced cone. The note once
-/// read `Cone_P_WF: ok on the reduced cone`, and both the run-by-run comparison and the corpus
-/// harness paired it with TLC's `Cone_P_WF` by that label (P23 of docs/theory/README.md).
+/// so its line names it apart, not as TLC's `Cone_P_WF` on the unreduced cone, and neither the
+/// run-by-run comparison nor the corpus harness pairs it with TLC's `Cone_P_WF` (claim T3).
 #[test]
 fn a_wf_run_on_the_reduced_cone_is_named_native_only() {
     let tmp = scratch("verify_cli_reduced_wf_native_only");
@@ -2428,7 +2424,7 @@ fn a_plan_lists_the_tlc_launches_and_starts_no_tlc() {
     let _ = std::fs::remove_dir_all(&tmp);
 }
 
-/// A state of more than 65,535 bits (P50): 255 rows of 34 Int columns at Int 0..255. The
+/// A state of more than 65,535 bits (claim N2): 255 rows of 34 Int columns at Int 0..255. The
 /// verdicts are the ones a narrow bound gives: a row with `c32 = 2` is a counterexample, and
 /// a rule no reachable row breaks is `ok`. When the packed store placed every cell past bit
 /// 65,535 at one offset, the first printed `ok` and the second a counterexample whose rows

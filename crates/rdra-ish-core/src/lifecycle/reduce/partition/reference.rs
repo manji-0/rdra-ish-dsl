@@ -4,7 +4,7 @@
 //! compute to it, and the random graphs of `the_worklist_partition_is_the_partition_of_
 //! repeated_sweeps`. A `shadow` build holds the quotients of up to `SHADOW_CAP` states.
 //! Every build certifies the worklist's partition (`stable`) and falls back to the sweeps
-//! when the certificate fails (P7).
+//! when the certificate fails (claims A8, A9 of docs/theory/claims.md).
 
 use crate::lifecycle::narrow::id32;
 use std::collections::{BTreeSet, HashMap};
@@ -26,7 +26,7 @@ use super::Adj;
 #[cfg(all(feature = "shadow", not(test)))]
 const SHADOW_CAP: usize = 2_500_000;
 
-/// Whether `blocks` is a partition the reduction may use (P7): it refines `initial`, it is
+/// Whether `blocks` is a partition the reduction may use (claim A8): it refines `initial`, it is
 /// divergence-blind stuttering stable under the silent edges (a sweep of
 /// `stuttering_blocks` with every block a splitter splits nothing), and it is strongly
 /// stable under the rises (the states of a block enter the same blocks by a rise). These are

@@ -320,9 +320,9 @@ holds(AllSettled, Case.status == closed).none(Claim.status == open)
 /// used once some ticket is issued; `Issue`, EvPaid's handler, issues a ticket. In the order's
 /// cone S is Voucher and Ticket, and `Issue` folds keyed by its ticket with a `Triggered` Order
 /// param beside the key. Voucher's owner keeps Order in the extended sub-lifecycle as a stub,
-/// absent forever since `Place` creates it, and before P67 the kept `Triggered` param bound no
-/// row of it: `Issue` never ran there, no voucher was used, and the reduced cone said `ok` to
-/// a rule the cone breaks in 7 steps.
+/// absent forever since `Place` creates it. The kept `Triggered` param binds a row of the stub
+/// (claims A8, A11 of docs/theory/claims.md), so `Issue` runs there, a voucher is used, and the
+/// reduced cone breaks the rule the cone breaks in 7 steps.
 const TRIGGERED_ON_A_STUB: &str = r#"
 entity Order "注文" { id: Int @pk  status: Enum(new, paid, shipped) @default(new) }
 entity Voucher "券" { id: Int @pk  status: Enum(open, used) @default(open) }
@@ -358,8 +358,8 @@ forbidden(Order, status == shipped)
 /// creates a sheet under an order; a voucher is used once some sheet and some ticket exist.
 /// In the order's cone S is Voucher and Ticket, and Sheet's existence is an input that `Note`
 /// raises. Voucher's owner keeps Order in the extended sub-lifecycle as a stub, so `Note`'s
-/// rise there keeps its `Parent` Order param; before P67 it bound no row of the stub, the
-/// rise never ran, and the reduction panicked looking it up for the cone's `Note` step.
+/// rise there keeps its `Parent` Order param, which binds a row of the stub (claims A8, A11),
+/// so the reduction finds the rise for the cone's `Note` step.
 const RISE_ON_A_STUB: &str = r#"
 entity Order "注文" { id: Int @pk  status: Enum(new, paid, shipped) @default(new)  hold: Bool @default(false) }
 entity Voucher "券" { id: Int @pk  status: Enum(open, used) @default(open) }
@@ -1475,10 +1475,9 @@ applies_to(GateUp, Start)
 forbidden(Job, status == running).label("作業は始まらない")
 "#;
 
-/// P65: a column whose domain holds 256 values (a non-null Int at `--int-range-max 255`) that
-/// a use case sets both up and down is not monotone. `monotone_vars` listed the values such a
-/// write starts from as `0..size as u8`, empty at 256, so the column had no edge and read as
-/// monotone at 255 while it was not at 254.
+/// Claim A10: a column whose domain holds 256 values (a non-null Int at `--int-range-max 255`)
+/// that a use case sets both up and down is not monotone, at 255 as at 254: `monotone_vars`
+/// lists every value such a write starts from, all 256 of them.
 #[test]
 fn a_256_value_column_set_both_ways_is_not_monotone() {
     let model = model_from(SWINGING_LEVEL);
@@ -1643,7 +1642,7 @@ struct FoldsChecked {
     s_steps: usize,
 }
 
-/// The fold half of Lemma 6 of docs/theory/cones.md (open problem P31), checked against the
+/// The fold half of Lemma 6 of docs/theory/cones.md (claims A8, A11), checked against the
 /// cone's own step relation rather than against a second evaluation of the folded guards:
 /// for every reachable state of every reduced cone of `models` whose reduction folds an S
 /// action's reads of T into a bit, and every move of that action, the bit holds at the slot
@@ -1663,7 +1662,7 @@ fn fold_bits_hold_where_their_actions_run(
             let steps = silent.from(red, cone, &s);
             for m in cone.moves(&s) {
                 // Every S step of the cone is a silent step of the extended sub-lifecycle to
-                // the same state, by an action it stands for (P67): a true bit is not enough,
+                // the same state, by an action it stands for (claim A11): a true bit is not enough,
                 // the step's other params must bind there too.
                 if red.s_actions().contains(&m.act) {
                     assert!(
@@ -1710,7 +1709,7 @@ fn fold_bits_hold_where_their_actions_run(
     seen
 }
 
-/// The converse, the other half of the fold half of Lemma 6 (P31): a bit adds no step the
+/// The converse, the other half of the fold half of Lemma 6 (claim A11): a bit adds no step the
 /// cone lacks. For every reachable state of every reduced cone of `models` whose reduction
 /// folds, every silent step the extended sub-lifecycle takes from the state's projection (its
 /// S part, raw inputs, and bits, as `Reduction::key` computes them) is a move of the cone: an
@@ -1802,7 +1801,7 @@ fn case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0() {
 }
 
 /// A `Triggered` param beside a fold's key, on an entity the extended sub-lifecycle stubs,
-/// binds there as the key does (P67): the reduced cone finds the violation the cone has, at
+/// binds there as the key does (claim A11): the reduced cone finds the violation the cone has, at
 /// one and two instances, and both halves of the fold check pass on it.
 #[test]
 fn a_triggered_param_on_a_stub_binds_in_the_extended_sub_lifecycle() {
@@ -1843,8 +1842,8 @@ fn a_triggered_param_on_a_stub_binds_in_the_extended_sub_lifecycle() {
 }
 
 /// A rise whose `Parent` param is on an entity the extended sub-lifecycle stubs binds there
-/// (P67): the cone's `Note` step has its rise, and the reduced cone decides what the cone
-/// decides.
+/// (claims A8, A11): the cone's `Note` step has its rise, and the reduced cone decides what the
+/// cone decides.
 #[test]
 fn a_rise_with_a_param_on_a_stub_is_a_rise_of_the_extended_sub_lifecycle() {
     let model = model_from(RISE_ON_A_STUB);
@@ -1857,7 +1856,7 @@ fn a_rise_with_a_param_on_a_stub_is_a_rise_of_the_extended_sub_lifecycle() {
 /// path changes the column or deletes the row" (`can_leave`), a reachability the quotient
 /// keeps, not "no step at all", which it does not: a state looping forever in its block's
 /// silent cycle and a state with no step left are both stuck, on the cone and on the reduced
-/// cone alike (P34). The gate's x3/x4 toggle is such a silent cycle; the job seen at x2 is
+/// cone alike (claim A8). The gate's x3/x4 toggle is such a silent cycle; the job seen at x2 is
 /// stuck with no move of the gate left.
 #[test]
 fn a_silent_cycle_and_a_stuck_state_give_the_same_deadlocks_reduced() {
@@ -1885,7 +1884,7 @@ fn a_silent_cycle_and_a_stuck_state_give_the_same_deadlocks_reduced() {
 
 /// The lift checks every lifted step against the unreduced cone's step relation in every
 /// build, not only under `debug_assert!`: a T step that is no move of the cone is the
-/// `ReplayError` of that step, which the caller reports as a fault, never a panic (P20). Here
+/// `ReplayError` of that step, which the caller reports as a fault, never a panic (claim A16). Here
 /// the first T step of a reduced path is forged to land on the state it left.
 #[test]
 fn a_lifted_step_that_is_no_move_of_the_cone_is_a_replay_error() {
@@ -1910,7 +1909,7 @@ fn a_lifted_step_that_is_no_move_of_the_cone_is_a_replay_error() {
 
 /// A reduced path whose start is no initial state of the cone, here a stored state with its
 /// sub-lifecycle part forged to values no class holds, is `NotInitial`, a fault, never a
-/// panic (P20): the lift's look-ups of the start's class are checked in every build.
+/// panic (claim A16): the lift's look-ups of the start's class are checked in every build.
 #[test]
 fn a_lift_from_no_initial_state_is_a_replay_error() {
     let model = model_from(CASE_FOLD);
@@ -1931,7 +1930,7 @@ fn a_lift_from_no_initial_state_is_a_replay_error() {
 
 /// A class move with no S path behind it, here a reduced path that takes a real class move
 /// and then a forged one back to the class it left, is the `NoMove` of that step, a fault,
-/// never a panic (P20): the claims' S actions only create, review and pay, so no S path leads
+/// never a panic (claim A16): the claims' S actions only create, review and pay, so no S path leads
 /// back, and the lift's path search is checked in every build like its look-up of the target.
 #[test]
 fn a_class_move_with_no_s_path_is_a_replay_error() {

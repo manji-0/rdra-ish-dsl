@@ -1,8 +1,8 @@
-//! `proved` against the reference at larger Int ranges (P43's shape). A rule z3 proves at
+//! `proved` against the reference at larger Int ranges (claim B1). A rule z3 proves at
 //! `--int-range-max m` holds, by claim B2 of docs/theory/claims.md, for every slot count
 //! and every `m'` at which the model builds. The reference explores the model at `m' > m`
 //! without reading the builder's system, so a `proved` that depends on the run's own bound
-//! (P43: a `.when`-guarded `present` write listed only the values up to `m`) shows as a
+//! (a `.when`-guarded `present` write that lists only the values up to `m`) shows as a
 //! reachable violation there.
 
 use std::collections::BTreeSet;
@@ -89,7 +89,7 @@ const GUARDED_PRESENT: &str =
     sets(Fill, Item.n == present).when(Open)\n\
     forbidden(Item, n > 5)\n";
 
-/// P43: `forbidden(Item, n > 5)` is no theorem, since `Fill` may write any Int, so it must
+/// Claim B1: `forbidden(Item, n > 5)` is no theorem, since `Fill` may write any Int, so it must
 /// not be proved at 5; the reference breaks it at 6.
 #[test]
 fn a_rule_proved_at_one_int_range_holds_at_wider_ones() {
@@ -117,7 +117,7 @@ const GUARDED_NULL: &str =
     sets(Fill, Item.n == null).when(IsClosed)\n\
     forbidden(Item, n == null)\n";
 
-/// P66: a guarded `null` beside a guarded `present` of one column is a step of the proof, so
+/// Claim B1: a guarded `null` beside a guarded `present` of one column is a step of the proof, so
 /// `forbidden(Item, n == null)`, which Add, Close and Fill break, is not proved; the
 /// reference breaks it at every range.
 #[test]

@@ -142,8 +142,8 @@ pub(super) fn assert_cones_exact(
         }
         // A check's cone that leaves a raised mark out runs the handler without its event and
         // reaches a superset; its verdict is still the whole system's, since a counterexample
-        // it cannot vouch for is decided on the exact cone (P1). An entity's cone never
-        // leaves one out (P32).
+        // it cannot vouch for is decided on the exact cone (claims A2, A6 of
+        // docs/theory/claims.md). An entity's cone never leaves one out (claim A1).
         if sub.cone_leaves_marks(&cr.cone) {
             assert!(
                 !matches!(target, Target::Entity(_)),
@@ -174,7 +174,7 @@ pub(super) fn assert_cones_exact(
     (checked, freed)
 }
 
-/// P1, P32: Review never raises the event (no use case enters phase b), so Finalize never
+/// Claims A1, A2, A6: Review never raises the event (no use case enters phase b), so Finalize never
 /// runs. The rule's cone leaves the mark out and reaches `final`; its verdict is still the
 /// whole system's. Note's cone reads `final` through Close's guard; it holds Finalize, and
 /// Review with it, so it reaches no `final` and Close never runs there either.
@@ -543,7 +543,7 @@ after(Decide).assert(Doc.status != drop)
 }
 
 /// A step that changes a var its action's `action_writes` leaves out stops a debug or
-/// `shadow` build at the step (open problem P35): the cones read `action_writes` as every
+/// `shadow` build at the step (claims A1, B6): the cones read `action_writes` as every
 /// var a step can change (Lemma 2 of docs/theory/cones.md), so such a step would let a cone
 /// drop a writer it needs. Every other test that explores holds every step it takes to it.
 #[cfg(any(debug_assertions, feature = "shadow"))]

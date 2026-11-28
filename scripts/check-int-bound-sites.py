@@ -31,7 +31,7 @@ module declared as `#[cfg(test)] mod name;`.
 
 What it does not see: a read through a helper with another name (only `Domain::size` and
 `Domain::of_number` are followed, and `size` only inside `build/`), a derived read such as a
-second pass over a list the bound filled (P43 was that kind: `arm_guards` reading a
+second pass over a list the bound filled (as when `arm_guards` reads a
 `Choose` list), and slot counts, which Lemma U reads too. It holds the list, not the lemma.
 
 The list lives in z3.md in a fenced block whose info string is `int-bound-sites`: one site

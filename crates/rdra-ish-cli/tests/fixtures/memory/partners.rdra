@@ -1,8 +1,8 @@
-// P53: two entities, each with a safety cone whose system is also its `eventually`'s reduced
-// cone (a partner), so the safety pass runs it to the end to give the property its plain
-// answer. Each entity cone also flips g8 and g9, which no check reads: the entity cones are
-// four times the safety cones and stop at a memory limit (7 to 10 MiB) at which one safety
-// cone completes alone but two side by side do not.
+// Claims N4, N17: two entities, each with a safety cone whose system is also its
+// `eventually`'s reduced cone (a partner), so the safety pass runs it to the end to give
+// the property its plain answer. Each entity cone also flips g8 and g9, which no check
+// reads: the entity cones are four times the safety cones and stop at a memory limit (7 to
+// 10 MiB) at which one safety cone completes alone but two side by side do not.
 entity Task "Task" {
   g8: Enum(off, on) @default(off)
   g9: Enum(off, on) @default(off)

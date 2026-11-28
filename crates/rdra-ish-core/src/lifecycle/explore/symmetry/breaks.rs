@@ -149,8 +149,8 @@ impl Scan<'_> {
 
     /// An owner read on the row a step creates, in the state before the step: the row is
     /// absent there and its owner holds the base value, which `Group::apply` does not relabel,
-    /// so the guard would read a different parent in a permuted state (P30). Leaving the
-    /// parent's class out keeps its slots where they are.
+    /// so the guard would read a different parent in a permuted state (claim A18 of
+    /// docs/theory/claims.md). Leaving the parent's class out keeps its slots where they are.
     fn absent_owners(&mut self, pred: &Pred, params: &[Param]) {
         for term in pred.terms() {
             let Term::Slot {

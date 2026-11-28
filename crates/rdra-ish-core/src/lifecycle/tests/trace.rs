@@ -113,7 +113,8 @@ forbidden(Order, status == retried)
 
 /// The rule's exact cone counts every slot, so the counterexample past the bound above is no
 /// counterexample there at one instance, and at two the exact cone's is within the bound
-/// (P11: escalation prints the instances of the system that reaches it).
+/// (claim A25 of docs/theory/claims.md: escalation prints the instances of the system that
+/// reaches it).
 #[test]
 fn a_recheck_that_counts_every_slot_finds_only_runs_within_the_bound() {
     let model = model_from(
@@ -212,7 +213,7 @@ fn a_replayed_path_explains_its_violation_and_a_corrupted_one_fails() {
 
 /// A counterexample that runs a handler without its event is a candidate: the recheck adds
 /// the event's raisers to the cone and runs it again, until a counterexample is a run of the
-/// whole system (P1). The cone it ends on reads the mark and lies inside the exact cone.
+/// whole system (claims A2, A6). The cone it ends on reads the mark and lies inside the exact cone.
 #[test]
 fn a_candidate_counterexample_refines_its_cone_with_the_events_raisers() {
     let model = model_from(

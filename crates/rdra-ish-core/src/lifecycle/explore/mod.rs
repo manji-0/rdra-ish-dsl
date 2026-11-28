@@ -812,7 +812,8 @@ impl TransitionSystem {
 /// What a reduced run reports for `reduced`, a violation it found, given `rebuilt`, the check
 /// evaluated on the lifted last state: that violation, or a `LiftFault` with
 /// `LassoFault::Satisfies` when the lifted state does not violate the check, as a liveness
-/// lasso that satisfies its property is a fault; never the reduced message as if it did (P52).
+/// lasso that satisfies its property is a fault; never the reduced message as if it did
+/// (claim N16 of docs/theory/claims.md).
 fn lifted(rebuilt: Option<StateDiag>, reduced: &StateDiag) -> StateDiag {
     match rebuilt {
         Some(d) => d,
@@ -821,7 +822,7 @@ fn lifted(rebuilt: Option<StateDiag>, reduced: &StateDiag) -> StateDiag {
 }
 
 /// The `LiftFault` of `found`, a run's violation, whose trace failed its own check by
-/// `fault`: a tool bug, never a finding about the model (P20, P52).
+/// `fault`: a tool bug, never a finding about the model (claim N16).
 fn faulted(found: &StateDiag, fault: LassoFault) -> StateDiag {
     match found {
         StateDiag::ConstraintViolated { name, site, .. }
@@ -841,7 +842,7 @@ impl ComponentRun {
         let run = self;
         for (at, reach) in violations {
             // Every stored path replays through the run's own step relation, and lifts, before
-            // it prints (P20): one that does not is a fault of the tool, with no trace.
+            // it prints (claim N16): one that does not is a fault of the tool, with no trace.
             let (trace, last) = match run.trace_of(reach) {
                 Ok(found) => found,
                 Err(e) => {

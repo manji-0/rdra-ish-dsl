@@ -284,10 +284,10 @@ impl TransitionSystem {
     /// (`exact_target_cone`, with slots). The plain cone of an invariant leaves out a mark
     /// whose raisers write nothing else in it, and runs the handler without the mark: an error
     /// that alters such a raiser (its guard built as `false`) changes which handler steps the
-    /// whole system takes, and `prove`, which encodes the whole system, proved a rule there
-    /// that the model breaks (P4). The exact cone keeps every writer, each mark it reads, and
-    /// every entity it creates, so an action outside it, altered or not, changes nothing the
-    /// cone reads.
+    /// whole system takes, and `prove`, which encodes the whole system, would prove a rule there
+    /// that the model breaks (claim B2 of docs/theory/claims.md). The exact cone keeps every
+    /// writer, each mark it reads, and every entity it creates, so an action outside it,
+    /// altered or not, changes nothing the cone reads.
     pub(crate) fn select(
         &self,
         scope: &Scope,

@@ -45,7 +45,7 @@ pub(super) fn refuted(
 
 /// The instances `d`'s counterexample takes: `at`, the slots of each entity its cone counts,
 /// and for an entity the cone does not count (`Trace::over_bound`) the rows the trace creates,
-/// each a creation of the whole system's actions (P11).
+/// each a creation of the whole system's actions (claim A25 of docs/theory/claims.md).
 fn instances(ts: &TransitionSystem, at: &Instances, d: &Diag) -> Instances {
     let mut out = at.clone();
     let Some(trace) = d.diag.trace() else {

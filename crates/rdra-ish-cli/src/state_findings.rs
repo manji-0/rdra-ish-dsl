@@ -464,10 +464,10 @@ pub(crate) fn location(program: &ResolvedProgram, site: &Site) -> Option<String>
     format_location(program, site.span.as_ref()?)
 }
 
-/// The instances per entity a counterexample was found at, as `verify` prints them (P11):
-/// `n` when every entity has `n` slots, else each entity's own count, `Loan=4 Member=3`, in
-/// the system's entity order. `--instances E=k` keeps the counts apart, and one maximum would
-/// name slots some entity does not have.
+/// The instances per entity a counterexample was found at, as `verify` prints them (claim A25
+/// of docs/theory/claims.md): `n` when every entity has `n` slots, else each entity's own
+/// count, `Loan=4 Member=3`, in the system's entity order. `--instances E=k` keeps the counts
+/// apart, and one maximum would name slots some entity does not have.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(crate) struct Instances(Vec<(String, usize)>);
 

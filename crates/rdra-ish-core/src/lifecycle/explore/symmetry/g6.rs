@@ -1,4 +1,4 @@
-//! (G6) of Theorem A18 for the predicates the scan does not read (P30): invariants, `after`
+//! (G6) of Theorem A18 for the predicates the scan does not read: invariants, `after`
 //! assertions, properties, and `can_reach`. `Rule::AbsentOwner` covers action guards, where a
 //! `New` parameter names a row before it exists. Outside guards, every read a verdict depends
 //! on happens where each row it names is present or deleted, whatever the predicate is:
@@ -221,9 +221,10 @@ fn verdicts(ts: &TransitionSystem) -> (Vec<String>, Vec<String>) {
 
 /// On a built model whose invariants, `after` assertions, properties and `can_reach` read
 /// owners, with both classes in the group, every read a verdict depends on is the same on a
-/// state and its canonical form (P30). A goal given, by hand, a read of the order's key reads
-/// it on orders never created too, whose key `apply` does not relabel, and differs there;
-/// the gated reads and the verdicts up to symmetry stay the plain run's.
+/// state and its canonical form (claim A18 of docs/theory/claims.md). A goal given, by hand, a
+/// read of the order's key reads it on orders never created too, whose key `apply` does not
+/// relabel, and differs there; the gated reads and the verdicts up to symmetry stay the plain
+/// run's.
 #[test]
 fn reads_outside_guards_meet_no_absent_owner() {
     let mut ts = system(SHOPS);

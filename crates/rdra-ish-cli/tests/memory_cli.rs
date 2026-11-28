@@ -113,7 +113,8 @@ fn a_run_at_the_memory_limit_estimates_what_finishing_needs() {
     );
     // A cone still growing, whose variables allow far more states than 1TiB holds, gives no
     // figure. The figures are those of an entity cone that holds every raiser of the events its
-    // use cases wait for (P32, #477): such a cone is the entity's exact cone.
+    // use cases wait for (claim A1 of docs/theory/claims.md): such a cone is the entity's exact
+    // cone.
     let out = run(
         &repo(),
         &["check", "--memory", "1MiB", "samples/insurance-claim-ops"],
@@ -204,19 +205,19 @@ fn cones_side_by_side_stop_where_they_stop_one_at_a_time() {
     };
     let one = run_on("1");
     // Ten stop since an entity cone that would leave a raised mark out is the entity's exact
-    // cone (P32, #477), whose states are wider; some cones still finish.
+    // cone (claim A1), whose states are wider; some cones still finish.
     let stops = one.matches("error[MemoryCapReached_").count();
     assert!((1..16).contains(&stops), "{stops} cones stopped\n{one}");
     assert_eq!(run_on("8"), one);
     assert_eq!(run_on("3"), one);
 }
 
-/// The safety and property passes give on any number of threads what they give on one (P53).
-/// A safety cone with a partner property runs to the end; beside the other cone's run it
-/// meets the memory limit where alone it completes. It then runs again alone, with the whole
-/// room of the pool, and prints the complete run's state count, as one thread does; before,
-/// it was decided on a run that stopped once its check failed (`counterexample (15150
-/// states)` against `(65793 states)`).
+/// The safety and property passes give on any number of threads what they give on one (claims
+/// N4, N17). A safety cone with a partner property runs to the end; beside the other cone's run
+/// it meets the memory limit where alone it completes. It then runs again alone, with the whole
+/// room of the pool, and prints the complete run's state count, as one thread does; before, it
+/// was decided on a run that stopped once its check failed (`counterexample (15150 states)`
+/// against `(65793 states)`).
 #[test]
 fn safety_and_property_passes_stop_where_they_stop_one_at_a_time() {
     let dir = scratch("memory_cli_partners");

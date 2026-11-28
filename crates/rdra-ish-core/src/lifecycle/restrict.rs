@@ -29,7 +29,7 @@ impl TransitionSystem {
     /// through a stub of the parent: an entity of its existence alone, after every var of
     /// `vars`, which no action here writes. A param on a stub keeps its role, so one that
     /// needs a present row never binds here; the extended sub-lifecycle of `reduced` binds
-    /// such params to any slot (`Extended::build`, P67).
+    /// such params to any slot (`Extended::build`, claim A11 of docs/theory/claims.md).
     pub fn restrict_to(&self, vars: &VarSet, keep: &BTreeSet<ActId>) -> TransitionSystem {
         self.restrict_to_mapped(vars, keep, true).0
     }

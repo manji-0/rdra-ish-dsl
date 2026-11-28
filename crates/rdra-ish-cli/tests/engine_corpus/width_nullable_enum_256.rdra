@@ -1,4 +1,4 @@
-// trap: a nullable Enum of 256 values, one value past a byte with its null (P54).
+// trap: a nullable Enum of 256 values, one value past a byte with its null (claim N2).
 // With null the column has 257 values. Before #470 its last value wrapped to null when the
 // build encoded it, at the default bounds, in BFS, TLC and z3 alike: `Create` writes `v255`,
 // yet `forbidden(Row, s != null)` was `ok`. The column is now `DomainTooLarge`, an error, and

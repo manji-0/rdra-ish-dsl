@@ -677,7 +677,8 @@ fn a_run_that_stops_once_every_check_fails_evaluates_every_check() {
 
 /// A reduced run's violation whose lifted last state does not violate its check becomes a
 /// `LiftFault` of that check, an error, and never keeps the reduced message as a violation
-/// (P52); one whose lifted state does violate is reported as that state's violation.
+/// (claim N16 of docs/theory/claims.md); one whose lifted state does violate is reported as
+/// that state's violation.
 #[test]
 fn a_violation_that_does_not_lift_is_a_lift_fault() {
     use crate::lifecycle::{Severity, StateDiag};
@@ -720,7 +721,7 @@ fn a_violation_that_does_not_lift_is_a_lift_fault() {
 }
 
 /// A path that does not replay through the step relation is a fault, never a panic and never
-/// a counterexample (P20): a step to a state its action does not reach fails at that state,
+/// a counterexample (claim N16): a step to a state its action does not reach fails at that state,
 /// and a violation whose stored path fails to replay becomes the `LiftFault` of its check.
 #[test]
 fn a_path_that_does_not_replay_is_a_fault() {

@@ -383,11 +383,11 @@ impl BitGroups {
     }
 }
 
-/// Binds every param on a stub to any slot (P67). A stub is an entity of T whose existence
-/// `system` does not hold: `restrict_to` keeps it for an owner var of S, and no action writes
-/// it, so a param whose role needs a present row of it (`Existing`, `Parent`, `Triggered`)
-/// would never bind, and its action would never run, although it runs in the cone. Two kinds
-/// of action keep such a param:
+/// Binds every param on a stub to any slot (claims A8, A11 of docs/theory/claims.md). A stub is
+/// an entity of T whose existence `system` does not hold: `restrict_to` keeps it for an owner
+/// var of S, and no action writes it, so a param whose role needs a present row of it
+/// (`Existing`, `Parent`, `Triggered`) would never bind, and its action would never run,
+/// although it runs in the cone. Two kinds of action keep such a param:
 ///
 /// - a folded S action, whose T params the bit stands for: the bit holds at the key when some
 ///   binding of them is on rows that are present where they must be and makes every folded

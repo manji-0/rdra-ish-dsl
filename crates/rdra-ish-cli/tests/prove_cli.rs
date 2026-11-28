@@ -218,11 +218,12 @@ fn model_file(name: &str, model: &str) -> String {
     path.to_string_lossy().into_owned()
 }
 
-/// P1: the rule's cone leaves out Review, the only raiser of the event that triggers
-/// Finalize, so it runs Finalize unordered and breaks the rule; Review never runs (no use case
-/// enters phase b), so no run of the model does. The counterexample is decided again on the
-/// rule's exact cone, which passes: the cone reads `ok`, the proof is not told the rule was
-/// refuted, and proves it. Properties on such a cone go to the whole model.
+/// Claims A2, A6 of docs/theory/claims.md: the rule's cone leaves out Review, the only raiser
+/// of the event that triggers Finalize, so it runs Finalize unordered and breaks the rule;
+/// Review never runs (no use case enters phase b), so no run of the model does. The
+/// counterexample is decided again on the rule's exact cone, which passes: the cone reads `ok`,
+/// the proof is not told the rule was refuted, and proves it. Properties on such a cone go to
+/// the whole model.
 #[test]
 fn a_counterexample_that_runs_a_handler_without_its_event_is_no_refutation() {
     let model = model_file(
@@ -285,7 +286,7 @@ forbidden(Doc, status == final)
     assert!(!stdout.contains("refuted"), "{stdout}");
 }
 
-/// P11: the rule's cone does not count Payment slots, and at two instances its counterexample
+/// Claim A25: the rule's cone does not count Payment slots, and at two instances its counterexample
 /// takes four Payments (one per Place and per Retry), which two or three instances do not
 /// have. Escalation decides it again on the exact cone, which counts them: no counterexample
 /// at 2 instances.
@@ -681,7 +682,7 @@ forbidden(Door, state == open)
 }
 
 /// Under `--entity`, a build error the scope defers is in the system the prover encodes, so
-/// it must change nothing a proved rule depends on (P4). Approve's guard reads a derived
+/// it must change nothing a proved rule depends on (claim B2). Approve's guard reads a derived
 /// column the build cannot evaluate and is built as `false`; Approve raises the event that
 /// starts ShipIt, which ships the shipment the rule forbids. The rule's plain cone runs ShipIt
 /// without the mark and reads no Audit var, so the error was deferred and the run printed
@@ -1259,7 +1260,7 @@ fn an_unproved_rule_that_passes_at_3_is_checked_at_4() {
     );
 }
 
-/// P11: under `--instances E=k` the cone's entities have different counts, and the escalation
+/// Claim A25: under `--instances E=k` the cone's entities have different counts, and the escalation
 /// names each one's rather than the largest: at two instances with one Member, the rule needs
 /// four Loans of one member, which the second step up has with three Members, not four. A
 /// refutation at the run's bounds names each count too.
@@ -1440,7 +1441,7 @@ fn an_escalation_past_ten_times_the_store_decides_nothing() {
     );
 }
 
-/// P66: a `.when`-guarded `present` and a `.when`-guarded `null` on one nullable Int join one
+/// Claim B1: a `.when`-guarded `present` and a `.when`-guarded `null` on one nullable Int join one
 /// choice of every number (`build/sets.rs::guarded_set`), with null listed beside the numbers.
 /// The encoding read only the numbers (`c ≥ 1`), so it had no step that writes null: with the
 /// cone stopped at the state cap, `Forbidden_Item_0` printed `proved` and the run `OK`, though

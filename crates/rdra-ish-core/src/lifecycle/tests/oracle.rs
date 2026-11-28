@@ -1,4 +1,4 @@
-//! An oracle for `can_reach` and deadlocks (open problem P19 of docs/theory/README.md): TLC
+//! An oracle for `can_reach` and deadlocks (claims N8 and N14 of docs/theory/claims.md): TLC
 //! cannot state `can_reach`, and its deadlock check is not the one `verify` makes, so each
 //! has a naive reference here. The reference explores the whole system on its own, from
 //! `initial_states` through `moves` into a map of its own, and decides each check by a

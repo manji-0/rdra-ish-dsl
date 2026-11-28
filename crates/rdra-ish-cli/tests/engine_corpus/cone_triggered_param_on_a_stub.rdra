@@ -1,4 +1,4 @@
-// trap: a `Triggered` param beside a fold's key, on an entity the reduction stubs (P67).
+// trap: a `Triggered` param beside a fold's key, on an entity the reduction stubs (claims A8, A11).
 // The rule's cone has T = Order and S = Voucher and Ticket. `Issue`, EvPaid's handler, folds
 // keyed by its ticket, with its `Triggered` Order param beside the key. Voucher's owner keeps
 // Order in the extended sub-lifecycle as a stub, which `Place` leaves absent there forever.

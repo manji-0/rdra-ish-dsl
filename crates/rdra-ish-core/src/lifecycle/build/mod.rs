@@ -123,7 +123,7 @@ impl<'m> Builder<'m> {
 
 /// `StateTooWide` when a packed state of `bits` bits passes `most`, the bits a packed state
 /// addresses: the build stops there, as `DomainTooLarge` stops a column past a byte, rather
-/// than any engine packing two cells into one place (P50).
+/// than any engine packing two cells into one place (claim N2 of docs/theory/claims.md).
 fn too_wide(bits: u64, most: u64) -> Option<StateDiag> {
     (bits > most).then_some(StateDiag::StateTooWide { bits, most })
 }
@@ -332,8 +332,9 @@ mod width_tests {
     use std::num::NonZeroU8;
 
     /// The build counts a state's packed bits and stops a system one bit past the bits a
-    /// packed state addresses with `StateTooWide`, an error (P50). The P50 reproduction's
-    /// state, 255 rows of 34 Int columns at Int 0..255, passes bit 65,535 and stays far inside.
+    /// packed state addresses with `StateTooWide`, an error (claim N2). The
+    /// `tests/fixtures/wide_state` state, 255 rows of 34 Int columns at Int 0..255, passes bit
+    /// 65,535 and stays far inside.
     #[test]
     fn a_state_past_the_packed_width_is_a_build_error() {
         let cols: String = (0..34)

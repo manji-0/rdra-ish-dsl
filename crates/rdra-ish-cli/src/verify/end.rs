@@ -224,8 +224,8 @@ mod tests {
     }
 
     /// A deadlock's, a `can_reach` failure's, or a witness's trace that fails to replay is a
-    /// fault of the tool (P20): the run's result is `tool_error`, as for a `LiftFault`, and
-    /// never a finding about the model.
+    /// fault of the tool (claim N16 of docs/theory/claims.md): the run's result is
+    /// `tool_error`, as for a `LiftFault`, and never a finding about the model.
     #[test]
     fn a_trace_fault_is_a_tool_error() {
         assert_eq!(end().result(0), RunResult::Ok);

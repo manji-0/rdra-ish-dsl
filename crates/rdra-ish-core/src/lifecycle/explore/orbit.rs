@@ -250,7 +250,8 @@ impl TransitionSystem {
                     ts.after_violation(*after, *act, params, last)
                 }
             };
-            // A lifted state that does not violate what its class does is a fault (P52).
+            // A lifted state that does not violate what its class does is a fault (claim N16 of
+            // docs/theory/claims.md).
             let mut d = super::lifted(rebuilt.map(|d| d.diag), &run.diags[*at].diag);
             if let Some(t) = d.trace_mut() {
                 *t = ts.trace_from(&start, &steps);
@@ -301,7 +302,7 @@ fn lift(
 
 /// `path`, stored edges from `states[first]` on, lifted to concrete states as `lift` does,
 /// with the permutation `τ` the last concrete state is read through. A stored edge that is no
-/// move of its source is the `ReplayError` of that step, a fault, never a panic (P20).
+/// move of its source is the `ReplayError` of that step, a fault, never a panic (claim N13).
 pub(super) fn lift_path(
     run: &ComponentRun,
     g: &Group,
@@ -363,7 +364,7 @@ fn concrete(
 }
 
 /// A lifted trace replays through the step relation (agreement rule 3): one that does not
-/// is a tool bug, never a finding about the model, and is reported as a fault (P20). A step
+/// is a tool bug, never a finding about the model, and is reported as a fault (claim N13). A step
 /// that replays but binds other rows than it names fails at that step.
 pub(super) fn replays(
     ts: &TransitionSystem,

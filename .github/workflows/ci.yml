@@ -348,11 +348,11 @@ jobs:
         # when a line is missing (a build without the feature) or a twin compared none in all
         # ten. The tenth runs clinic-ops with the BFS workers probing (#296 item 3.1 part 2).
         # Each line counts `compared/skipped/stopped` per twin: a call skipped over the twin's
-        # cap, or stopped at a limit of the run, passed unchecked (P17 of
-        # docs/theory/README.md), so the step fails on such a call in a run and twin
+        # cap, or stopped at a limit of the run, passed unchecked (claim T14 of
+        # docs/theory/claims.md), so the step fails on such a call in a run and twin
         # `expected_skips` does not name. The fourth run is the path a release build takes
         # (workers that do not probe): the twins of that path must compare calls there, and
-        # the probe twins (`hit`, `recent`) none but in the tenth (P18).
+        # the probe twins (`hit`, `recent`) none but in the tenth (claim N4).
         run: |
           for run in "verify samples/patent-ops --symmetry always" \
                      "verify samples/clinic-ops --symmetry always" \

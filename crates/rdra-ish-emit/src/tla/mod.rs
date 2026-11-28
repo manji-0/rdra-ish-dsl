@@ -60,8 +60,8 @@ pub fn print(ts: &TransitionSystem, mode: PrintMode, module_name: &str) -> TlaBu
 
 /// `print`, with `Next` split into one operator per binding of each action's params, so
 /// that TLC labels each step with its binding (`TlaNames::bound_action`). The state graph
-/// is the same; only the graph comparison of `tests/engine_equivalence.rs` reads it (P25 of
-/// docs/theory/README.md).
+/// is the same; only the graph comparison of `tests/engine_equivalence.rs` reads it (claim T1 of
+/// docs/theory/claims.md).
 pub fn print_bound(ts: &TransitionSystem, mode: PrintMode, module_name: &str) -> TlaBundle {
     print_with(ts, mode, module_name, true)
 }

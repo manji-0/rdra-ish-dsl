@@ -77,9 +77,9 @@ applies_to(Audited, Pay)
 /// which the build cannot evaluate: the guard is built as `false`, so in the built system
 /// Approve never runs and no shipment is shipped. The rule over Order and Shipment reads no
 /// Audit var, and its plain cone runs ShipIt without the mark, so the error was deferred
-/// under `--entity Order`, and `verify --prove` proved a rule the model breaks (the same
+/// under `--entity Order`, `verify --prove` would prove a rule the model breaks (the same
 /// model with `Audit.count == 0`, which says the same, refutes it). Approve is in the rule's
-/// exact cone, so the error now blocks the run (P4).
+/// exact cone, so the error blocks the run (claim B2 of docs/theory/claims.md).
 const RAISER_ERROR: &str = r#"
 entity Order "注文" { id: Int @pk  status: Enum(pending, closed) @default(pending) }
 entity Shipment "出荷" { id: Int @pk  status: Enum(waiting, shipped) @default(waiting) }

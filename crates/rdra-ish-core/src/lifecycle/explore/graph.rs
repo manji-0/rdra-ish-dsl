@@ -457,8 +457,9 @@ impl ComponentRun {
     }
 
     /// Before it lifts, the path replays through the run's own step relation from one of its
-    /// initial states (agreement rule 3, P20); one that does not, or whose lift fails, is the
-    /// `ReplayError`, a tool bug the caller reports as a fault.
+    /// initial states (agreement rule 3, claim N16 of docs/theory/claims.md); one that does
+    /// not, or whose lift fails, is the `ReplayError`, a tool bug the caller reports as a
+    /// fault.
     fn lifted_path(
         &self,
         first: u32,

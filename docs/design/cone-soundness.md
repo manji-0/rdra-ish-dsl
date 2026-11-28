@@ -197,8 +197,8 @@ folded guard, which the `fold_holds` twin compares with a second implementation,
 `reduced_domain_cones_step_by_a_true_fold_bit_only_where_the_cone_steps` check against the cone's
 step relation in both directions: the bit holds wherever the action runs, and a step the bit
 lets the extended system take is a step of C; `case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0`
-checks both past slot 0 (P31 of
-[the theory's open problems](../theory/README.md#open-problems)).
+checks both past slot 0 (claims A8 and A11 of
+[the claims inventory](../theory/claims.md)).
 
 A divergence-blind stuttering bisimulation preserves every formula of CTL\* without the next
 operator, and the reduced cone's findings are such formulas over T and `obs`: a state is

@@ -275,7 +275,7 @@ pub(crate) fn entity_view(
     let via = view.via();
     let first = first_states(run, e);
     // A witness whose path fails to replay or lift is left out, and the view says why: a
-    // fault of the tool (P20).
+    // fault of the tool (claim N16 of docs/theory/claims.md).
     let mut faults = Vec::new();
     let patterns: Vec<ReachablePattern> = (0..view.patterns.len())
         .map(|id| ReachablePattern {

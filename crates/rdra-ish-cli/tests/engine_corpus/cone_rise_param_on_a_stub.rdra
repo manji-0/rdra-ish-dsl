@@ -1,4 +1,4 @@
-// trap: a rise whose `Parent` param is on an entity the reduction stubs (P67).
+// trap: a rise whose `Parent` param is on an entity the reduction stubs (claims A8, A11).
 // The rule's cone has T = Order and Sheet, and S = Voucher and Ticket. `Note` reads
 // `Order.hold`, which goes both ways, so it is in T; it creates a sheet under an order, and
 // Sheet's existence is an input of `Use`. Voucher's owner keeps Order in the extended

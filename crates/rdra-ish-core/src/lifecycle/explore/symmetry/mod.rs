@@ -147,7 +147,7 @@ pub enum Rule {
     UnlinkedCreate,
     /// A guard reads, before the step, an owner naming its rows on the row the step creates:
     /// that row is absent, its owner holds the base value, slot 0, and `Group::apply` does
-    /// not relabel an owner on an absent row (P30).
+    /// not relabel an owner on an absent row (claim A18 of docs/theory/claims.md).
     AbsentOwner,
     /// A row id of the entity compared with, or written into, something that is not a row
     /// id of the same class.
