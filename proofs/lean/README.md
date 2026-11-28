@@ -17,7 +17,9 @@ the cone by its actions
 commutation over a model of the cone by its slots
 ([Theorem A18 over slots](#theorem-a18-over-slots)). The action model of Lemmas 5 and 6 is
 read off that slot model, and `Local`, a hypothesis of both lemmas, is derived from its syntax
-([One model of the actions](#one-model-of-the-actions)). N9 of
+([One model of the actions](#one-model-of-the-actions)), and so are Lemma 6's other
+hypotheses but Lemma 5 (a)(b), the split's inputs and step (a)
+([Lemma 6's hypotheses from the syntax](#lemma-6s-hypotheses-from-the-syntax)). N9 of
 [native.md](../../docs/theory/native.md#the-check), the liveness search by fair components,
 and the same search on the pairs of a run up to symmetry are stated over abstract
 transition systems too ([The liveness searches](#the-liveness-searches)). None of them reads
@@ -240,7 +242,10 @@ The proofs assume the following hypotheses and do not derive them:
   `quotient_blocks`, `Group::apply` or `Canon::canonical`.
   - Lemma 6 is proved over the action model, whose `X` is built as `Extended::build` builds
     it. The fields of `Lemma6Hyp` are read from the code, and the model leaves out what
-    [below](#what-the-lemma-6-model-leaves-out) lists. Reading the builder itself would need
+    [below](#what-the-lemma-6-model-leaves-out) lists. Over the slot model, `fold_of` and
+    the conjuncts `restrict_to` keeps are modelled on the syntax, and every field but
+    Lemma 5 (a)(b) and step (a) is derived ([below](#lemma-6s-hypotheses-from-the-syntax));
+    that those models are the code's is read from it. Reading the builder itself would need
     a deep embedding of it.
   - (G1)–(G6) are stated over a slot-level model of the code's syntax
     ([below](#theorem-a18-over-slots)). That the model's `act`, hypotheses and effects are
@@ -286,8 +291,10 @@ The proofs assume the following hypotheses and do not derive them:
   - The folds. Their effect is inside the step relations that Lemma 6 relates. Lemma 5
     (c)–(e) are derived over the action model with `FoldData`
     ([below](#definition-3-and-lemma-5-over-actions)). Lemma 6's model reads a param fold's
-    bit and takes `Fold::holds` computing it exactly as the hypothesis `Lemma6Hyp.exact`;
-    node folds and groups of folds that share a bit are not modelled. Lemma 5 (e) enters
+    bit and takes `Fold::holds` computing it exactly as the hypothesis `Lemma6Hyp.exact`.
+    Over the slot model `exact_holdsB` proves it for the bit `holdsB` that the fold's
+    conditions define, so what is read from the code is that `holds_fast` computes
+    `holdsB`. Node folds and groups of folds that share a bit are not modelled. Lemma 5 (e) enters
     `a15` and `a8_plain_iff` as fair instances given on `T_a` labels.
 - **A15, the rest of the theorem.**
   - The run's search is the abstract one of
@@ -626,6 +633,10 @@ Each field is a fact about one action, read from the code:
   action, `Local` and Lemma 5 (c) give it.
 - `bind`: `bind_stub_params` runs.
 
+Over the slot model of [Theorem A18 over slots](#theorem-a18-over-slots), every field but
+`lemma5` and `exact` is derived from the syntax, and `exact` from a bit the syntax defines
+([Lemma 6's hypotheses from the syntax](#lemma-6s-hypotheses-from-the-syntax)).
+
 ### What the Lemma 6 model leaves out
 
 - **Initial states.** `X`'s initial states are the projections of the cone's. That
@@ -764,11 +775,89 @@ Lemmas 5 and 6 assume. What stays outside:
 - A `Triggered` parameter's existence counts as read. The code counts it only when the
   parameter's mark guard is found (`triggered_params`). A larger `rd` keeps `Local` and can
   only grow `T`.
-- The fields of `Lemma6Hyp` besides `local_`, `shape` and `new_writes` concern the split, the
-  folds and `X` (`Ext`), which the slot model does not build. They stay hypotheses, and so do
-  `FoldData` and `mono` for Lemma 5 (c)–(e).
+- `Lemma6Syntax.lean` builds the split's `X` (`Ext`) from the slot model and derives the
+  other fields of `Lemma6Hyp` but `lemma5` and `exact`
+  ([Lemma 6's hypotheses from the syntax](#lemma-6s-hypotheses-from-the-syntax)).
+  `FoldData` and `mono` for Lemma 5 (c)–(e) stay hypotheses.
 - `Local` is proved for the slot model as it stands, with the differences from
   `each_successor` that [Theorem A18 over slots](#theorem-a18-over-slots) lists.
+
+## Lemma 6's hypotheses from the syntax
+
+<!-- constrained-by #definition-4-and-lemma-6-over-actions -->
+<!-- constrained-by #one-model-of-the-actions -->
+
+`Lemma6Syntax.lean` builds the data `Ext` of Definition 4 from a slot system `SymAct.Sys`, its
+lists and a split (`SymAct.Sys.ext`), and derives the fields of `Lemma6Hyp` from the syntax
+(`SymAct.Sys.lemma6Hyp`). The model:
+
+- **What the syntax names** (`predPs`, `predNext`, `effPs`): the parameters a predicate's
+  terms name (`named_params`), whether a predicate reads the successor (`Pred::reads_next`),
+  and the parameters an effect names, its row and the row a column or an owner is set from
+  (the touched parameters of `fold_of`). A predicate depends on the binding only at the
+  parameters it names, and not on the successor when it reads none. The successor depends on
+  the binding only at the parameters the effects name, and on the choices.
+- **`fold_of`** (`foldKey`). An action with a `T` parameter folds when every guard that names
+  one reads no successor, and either reads `T_v` alone (a folded guard) or is a link
+  `v[k] = Index(p)`, with `v` in `S_v`, `k` not a `T` parameter and `p` one (`linkOf`). The
+  key is the first `T` parameter an effect or a link names, else the `S` parameter the folded
+  guards name, else the first `New` or `Existing` parameter. No effect or link names a `T`
+  parameter but the key, no folded guard names an `S` parameter but the key, and the key is
+  not `New` (`foldOk`). These are the code's tests: a touched or linked parameter is a `T`
+  one and an `S` key is not, so "each one is the key" is "at most one of each, and not a
+  link and an `S` key together".
+- **The folds the split keeps** (`keyOf`): an `S_a` action's fold that `fold_initial` gives
+  a start (`Cut.sel`, left open, as initial states are not modelled) and whose key
+  `restrict_to` keeps (`Fold::key_kept`, `keepsP`).
+- **A fold's conjuncts** (`foldedC`): the slot bounds of the `T` parameters and of the key,
+  and the folded guards. The key's bound makes the bit false past the key's slots.
+- **The kept conjuncts** (`keptOg`): the conjuncts of `og` that read only `S_v ∪ inputs` and
+  name no parameter the restriction drops. `keepsP` is `keeps_param` with havoc off: a `New`
+  parameter is kept when its existence is, any other when its entity's existence is or the
+  entity is a stub, the parent of a kept owner (`stubE`). The picks conjunct stands for the
+  choice effects and names what the effects name.
+- **The raw reads** (`rawRd`, `raw_reads`): an unfolded action's reads, and a folded action's
+  reads outside its `T` parameters' existences and its folded guards.
+
+`SymAct.Sys.Inputs` states what the split and its inputs give besides Lemma 5 (a)(b):
+
+- `col_side`: a column of an entity whose existence is in `T_v` is in `T_v`. This is the side
+  rule of Definition 3: `split_faults` checks it, and `Closed` gives it (`inputs_of_closed`).
+- `inputs_col`: the existence of a column's entity is an input when the column is.
+  `split_with` adds the existences of every input.
+- `raw`: the raw reads of an `S_a` action are in `S_v ∪ inputs`. `split_with` takes the raw
+  reads of `T_v` as inputs, and `split_faults` checks them. Lemma 5 (c) with the folds' reads
+  follows (`rd_split`).
+
+`split_faults` checks `col_side` and `raw` at run time; the certificate that `lemma5-check`
+reads holds neither, and `inputs_col` holds by the construction of the inputs alone.
+
+| Lean (`RdraIsh.`) | File | Claim | Statement |
+|---|---|---|---|
+| `SymAct.predPs`, `SymAct.predNext`, `SymAct.effPs`, `SymAct.Sys.eval_bind`, `SymAct.Sys.eval_succ`, `SymAct.Sys.post_bind`, `SymAct.Sys.picks_bind` | `Lemma6Syntax.lean` | none | What a predicate and an effect name, and whether a predicate reads the successor. A predicate's value depends on the binding only at what it names, and not on the successor when it reads none; the successor and the picks depend on the binding only at what the effects name and on the choices. |
+| `SymAct.linkOf`, `SymAct.linkOf_spec`, `SymAct.Sys.foldKey`, `SymAct.Sys.foldOk`, `SymAct.Sys.FoldSpec`, `SymAct.Sys.foldKey_spec` | `Lemma6Syntax.lean` | Lemma 6, "Parameters" | `fold_of` on the syntax. A fold it finds has no guard naming a `T` parameter that reads the successor, no folded guard naming an `S` parameter but the key, every other guard naming a `T` parameter a link of the key, no effect naming a `T` parameter but the key, and a key that is not `New`. |
+| `SymAct.Cut`, `SymAct.Sys.stubE`, `SymAct.Sys.keepsP`, `SymAct.Sys.keyOf`, `SymAct.Sys.foldedC`, `SymAct.Sys.keptOg`, `SymAct.Sys.rawRd`, `SymAct.Sys.ext` | `Lemma6Syntax.lean` | Definition 4 | The data of `Extended::build` from the syntax and a split: the stubs, the parameters `restrict_to` keeps, the folds the split keeps, each fold's conjuncts, the kept conjuncts and the raw reads. |
+| `SymAct.Sys.Inputs`, `SymAct.Sys.inputs_of_closed` | `Lemma6Syntax.lean` | Lemma 5 (c), Definition 3 | The side rule for columns and the code's inputs. A split closed under Definition 3 has the side rule. |
+| `SymAct.Sys.unfolded_keeps`, `SymAct.Sys.rd_split`, `SymAct.Sys.og_cover`, `SymAct.Sys.keptOg_rd`, `SymAct.Sys.foldedC_og`, `SymAct.Sys.foldedC_names`, `SymAct.Sys.og_names`, `SymAct.Sys.eff_bind`, `SymAct.Sys.eff_side`, `SymAct.Sys.eff_inputs` | `Lemma6Syntax.lean` | Lemma 6, "Parameters" | An unfolded `S_a` action drops no parameter: a role that reads its row reads it raw, a `New` row is created in `S_v`, and an `Earlier` row's mark (`Built.earlier_mark`) puts its entity in `S_v` or the inputs. Then `reads`, `cover`, `kept_rd`, `folded_og`, `folded_names`, `other_names`, `eff_names`, `eff_s` and `rise_eff` of `Lemma6Hyp` hold of `ext`. |
+| `SymAct.Sys.lemma6Hyp`, `SymAct.Sys.lemma6_of_syntax`, `SymAct.Sys.a8_of_syntax` | `Lemma6Syntax.lean` | Lemma 6, A8 | Under `Built`, Lemma 5 (a)(b), `Inputs` and step (a), `Lemma6Hyp` holds of `ext`. So do Lemma 6 with the code's stages and Theorem A8 with `recanon`, given (B1)–(B3) and the rise table. |
+| `Act.Ext.Exact`, `SymAct.Sys.holdsB`, `SymAct.Sys.exact_holdsB` | `Lemma6Syntax.lean` | Lemma 6, step (a) | Step (a) for the bit `holdsB`, one per action and slot below a bound `B` on every class's slots: some binding with the key at the slot meets the fold's conditions at the `T_v` valuation. |
+| `ExampleLemma6Syntax.hyp`, `lemma6`, `note_key`, `mark_unfolded`, `open_shop` | `Lemma6SyntaxExample.lean` | none | Desks, shops and orders: a folded `S_a` action keyed by an `S` parameter with a free `T` parameter on a stub, an unfolded `S_a` action whose read makes the desks an input, and a rise with a `Parent` parameter on the stub, which `X` rebinds. `Lemma6Hyp` and Lemma 6 follow from `lemma6Hyp` and `exact_holdsB`, with only `Built`, Lemma 5 (a)(b) and `Inputs` checked on the instance. |
+
+What stays a hypothesis: `lemma5`, Lemma 5 (a)(b), which Definition 3 gives
+(`lemma5ab_of_closed`) and `split_faults` checks; `Inputs`; and step (a), which
+`exact_holdsB` proves for `holdsB`, so what is read from the code is that `Fold::holds` is
+`holdsB`. `Built` is what the builder gives. `bind` holds as `ext` runs `bind_stub_params`,
+`keyOf` keeps only a fold whose key `restrict_to` keeps, and `StubCheck` is not read. `WF` is
+not used.
+
+What the model of the folds leaves out:
+
+- An action with no `T` parameter does not fold: node folds (`node_fold_of`) are not
+  modelled, nor groups of folds that share a bit.
+- The slot model has no copy guards (`copy_target`), which `fold_of` refuses to fold.
+- Which folds `fold_initial` keeps is left open (`Cut.sel`).
+- A `Triggered` parameter's existence counts as read, and as a raw read of an unfolded
+  action.
 
 ## The partition certificate and monotone variables
 
