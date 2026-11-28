@@ -15,9 +15,9 @@ use crate::lifecycle::TransitionSystem;
 /// The clause of Lemma 5 a split fails, or `Split` when its sets are not a split at all.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(in crate::lifecycle) enum Clause {
-    /// `T_v` and `S_v` do not partition the vars, an action that writes is in neither or both
-    /// of `T_a` and `S_a`, an `S_a` action writes nothing, an input is not in `T_v`, an `obs`
-    /// var is not in `S_v`, or a fold is of an action outside `S_a`.
+    /// `S_v` is not exactly the vars outside `T_v`, `S_a` is not exactly the writing actions
+    /// outside `T_a`, an input is not in `T_v`, an `obs` var is not in `S_v`, or a fold is of
+    /// an action outside `S_a`.
     Split,
     /// (a) an `S_a` action writes a `T_v` var.
     A,
@@ -88,6 +88,9 @@ impl TransitionSystem {
                     format!("{} is in both or neither of T and S", var(&v)),
                 );
             }
+        }
+        if t.len() + s.len() != self.vars.len() {
+            fault(Clause::Split, "T and S hold a var the cone does not".into());
         }
         for id in self.action_ids() {
             let (in_t, in_s) = (split.t_actions.contains(&id), split.s_actions.contains(&id));
