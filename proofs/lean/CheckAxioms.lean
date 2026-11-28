@@ -210,3 +210,10 @@ an axiom outside Lean's three standard ones (`propext`, `Classical.choice`, `Quo
 #print axioms RdraIsh.SymOn.quotient_reach_iff
 #print axioms RdraIsh.SymAct.Sys.a18_holds_iff
 #print axioms RdraIsh.ExampleOffW.off_W_counterexample
+#print axioms RdraIsh.Cert.mem_toFin
+#print axioms RdraIsh.Cert.Data.sa_iff
+#print axioms RdraIsh.Cert.Data.check_sound
+#print axioms RdraIsh.Cert.Data.sides_of_check
+#print axioms RdraIsh.Cert.Data.split_of_check
+#print axioms RdraIsh.Cert.Data.fits_model
+#print axioms RdraIsh.Cert.Data.check_lemma5

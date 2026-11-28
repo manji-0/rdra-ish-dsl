@@ -2666,6 +2666,45 @@ fn every_split_passes_its_check() {
     assert!(reducing > 0, "{splits} splits, {reducing} with an S side");
 }
 
+/// Writes the sets of every split `every_split_passes_its_check` walks, one JSON certificate
+/// per line, to the file `RDRA_LEAN_CERTS` names, for the Lean checker of proofs/lean
+/// (`scripts/check-lean-certificates.sh` runs both). Equal certificates are written once.
+#[test]
+#[ignore = "run by scripts/check-lean-certificates.sh"]
+fn dump_lemma5_certificates() {
+    use std::io::Write;
+    let path = std::env::var("RDRA_LEAN_CERTS").expect("RDRA_LEAN_CERTS names the output");
+    let mut out = std::io::BufWriter::new(std::fs::File::create(&path).expect("create"));
+    let mut seen = std::collections::HashSet::new();
+    let (mut splits, mut written, mut reducing) = (0, 0, 0);
+    for (name, model) in &walked_models() {
+        for (label, bounds) in [("states", Bounds::STATES), ("verify", Bounds::VERIFY)] {
+            let ts = TransitionSystem::build(model, bounds, &Scope::ALL).ts;
+            for (cone, seed) in cones_with_seeds(&ts) {
+                let (sys, local) = ts.cone_system(&cone, [seed]);
+                for inputs in [true, false] {
+                    let split = sys.split_with(&local, inputs);
+                    splits += 1;
+                    let mut cert = sys.lemma5_certificate(&local, &split);
+                    if !seen.insert(cert.to_string()) {
+                        continue;
+                    }
+                    cert["name"] = format!("{name} {label} inputs={inputs}").into();
+                    writeln!(out, "{cert}").expect("write");
+                    written += 1;
+                    reducing += usize::from(!split.s.is_empty());
+                }
+            }
+        }
+    }
+    out.flush().expect("flush");
+    eprintln!(
+        "{splits} splits, {written} distinct certificates ({reducing} with an S side) written \
+         to {path}"
+    );
+    assert!(reducing > 0, "a certificate with an S side");
+}
+
 /// The checks of `reduce/hypotheses.rs` (`RiseTable` and the stages of `Lemma6Staged`,
 /// `hloop`, the inner split) pass on the samples, the domain samples, and the engine corpus
 /// cases that build a model: every target and property cone is reduced at `Bounds::STATES`,

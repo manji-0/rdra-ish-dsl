@@ -22,3 +22,5 @@ import RdraIsh.Lemma6
 import RdraIsh.Lemma6Example
 import RdraIsh.SymActions
 import RdraIsh.SymActionsExample
+import RdraIsh.Lemma5Cert
+import RdraIsh.Lemma5Check
