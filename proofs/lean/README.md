@@ -6,7 +6,7 @@
 <!-- derived-from ../../docs/theory/semantics.md#temporal-properties -->
 <!-- derived-from ../../docs/theory/semantics.md#verdicts -->
 
-This directory holds a Lean 4 project. It proves parts of Theorems A8, A15, A18, A20 and A21 of
+This directory holds a Lean 4 project. It proves parts of Theorems A8, A15, A18, A20, A21 and A23 of
 [cones.md](../../docs/theory/cones.md) from their hypotheses, and Lemma 5 from Definition 3.
 The theorems of A8 and the others are stated over abstract transition systems; Lemma 5 is
 stated over a model of the cone by its actions
@@ -43,9 +43,9 @@ the script.
 - paths through a set of states;
 - existentials;
 - a group action given by its laws;
-- finiteness, for A15's pigeonhole steps, given as a `List` that holds every reachable
-  state, with core's list membership lemmas (`List.mem_cons`, `List.mem_flatMap`,
-  `List.mem_map`).
+- finiteness, for A15's and A23's pigeonhole steps, given as a `List` that holds every
+  reachable state (and, for A23, every element of each `G_s`), with core's list membership
+  lemmas (`List.mem_cons`, `List.mem_flatMap`, `List.mem_map`).
 
 All five are a few lines each. Mathlib would add its compiled cache, a download of
 thousands of files, to every CI run that misses the cache. Pinning it would also tie the
@@ -96,6 +96,15 @@ toolchain to Mathlib's releases. The group laws are fields of `Sym`, so
 | `ExampleRise.merged_block`, `rise_changes_input`, `exit_through_block` | `ExampleRise.lean` | none | The instance's partition merges two reachable states `a`, `b` of `X` joined by a silent edge; a reachable `T_a` step changes the input byte and is matched by a rise; the silent exit from `a` crosses its own block through `b`, since `a` has no silent edge into the block of `c`. |
 | `ExampleRise.bisim`, `c_after_flag`, `edges`, `stuck`, `flag_leads_to_c`, `bisim_staged`, `nested_flat` | `ExampleRise.lean` | none | Every hypothesis of `a8_branching`, `a8_holds_iff`, `a8_edges_iff`, `a8_stuck_iff`, `a8_plain_iff`, `a8_staged` (with a rise table and stages) and `a8_nested` (depth zero) is discharged on that instance, with an `S_a` action that reads the input. |
 | `ExampleRise.inner_map` | `ExampleRise.lean` | none | `a8_innerMap` applies to the same cone, its `T_a` step taken as a rise, and the inner map it gives sends two different reachable states to one: `InnerMap` holds of a map that merges states. No instance of a tower of depth one or more is built. |
+| `takes_act`, `enabled_act` | `SymmetryLiveness.lean` | A23, fairness transfer | For `g ∈ G_s`, the step `g(s) → g(s')` takes `g(f)` iff `s → s'` takes `f` (D20 with τ), and `g(f)` is enabled at `g(s)` iff `f` is enabled at `s`. |
+| `ARun.lift`, `project`, `Framed.fair_iff`, `Framed.stops_iff`, `Framed.violates_iff` | `SymmetryLiveness.lean` | A23, N12 | An annotated run of the quotient (stored states `r n`, concrete successors `t n`, permutations `p n ∈ G_{t n}`, `r (n+1) = p n (t n)`) lifts through the accumulated frame `Θ (n+1) = p n · Θ n` to a behaviour of `M`, and a behaviour projects to the canonical run. Through a frame, thread fairness, the stops and the violation for the moved binding are `Fair_P`, `StopsOnly` and `Violates` of the behaviour. |
+| `a23_lift`, `a23_project`, `a23_iff` | `SymmetryLiveness.lean` | A23, on runs | A property holds for every binding under `Fair_P` and a stop rule the group preserves iff no annotated run of the canonical quotient that is thread-fair and stops only where the rule allows violates it for any binding. |
+| `project_lasso`, `a23` | `SymmetryLiveness.lean` | A23 | With the reachable states in a list and every `G_s` finite, the same with annotated lassos on the quotient's side: the projection of a concrete lasso is an annotated lasso. |
+| `ARun.mem_const`, `order_exists`, `lasso_closure` | `SymmetryLiveness.lean` | A23, N12, lasso closure | On a quotient cycle every stored state has the same group, which holds every permutation of the cycle; an element of a finite `G_s` has a power `d > 0` that acts as the identity on states, instances and bindings at once; `d` copies of the cycle, for such a power of its composite, close the lift. |
+| `threadFair_iff_pieces` | `SymmetryLiveness.lean` | A23, thread pieces | On an annotated lasso a thread is periodic, and it is fair iff within one period it takes its instance or meets a stored state where the instance is not enabled. |
+| `restrict_liveHolds_iff`, `a23_on` | `SymmetryLiveness.lean` | A18, A23, reachable states | With commutation only on a set `W` that holds the initial states and is closed under steps and every `G_s` (`SymOn`), `M` restricted to `W` has a `Sym` with `M`'s verdicts, and `a23` holds for it. |
+| `ExampleSymLive.plain_ok`, `ExampleSymLive.quotient_ok`, `ExampleSymLive.one_copy_open`, `ExampleSymLive.two_copies_close` | `SymmetryLivenessExample.lean` | none | Two interchangeable instances, each with a bit its fair action toggles, and the swap: every hypothesis of `a23` is discharged, the plain verdict of `eventually` is proved and `a23` gives the quotient's. The quotient cycle `(F,F) → (F,T) → (F,F)` has the swap as its composite; its lift does not close after one copy and does after two. |
+| `ExampleReachOnly.reach_only_counterexample` | `SymmetryLivenessExample.lean` | none | A system whose steps commute with `G_s` on its reachable states, with a canonical form in the orbit and an invariant the group preserves, where the invariant holds on the plain run and fails on the canonical quotient, which stores an unreachable image. So commutation on reachable states is not enough. |
 
 ## What the hypotheses are
 
@@ -130,7 +139,20 @@ The proofs assume the following hypotheses and do not derive them:
   - (G3).
 
   cones.md derives the commutation from (G1)–(G6). The Lean statement assumes it on every
-  state, where cones.md states it on reachable states.
+  state, where cones.md states it on reachable states. `SymOn` assumes it on a set `W` that
+  holds the initial states and is closed under steps and every `G_s`, which the quotient's
+  stored states need; reachable states alone do not suffice
+  (`ExampleReachOnly.reach_only_counterexample`).
+- **A23's extra hypotheses** (`SymLive`, `LiveEqui`, `a23`).
+  - `G` acts on fair instances and on bindings, with the composition and inverse laws, and
+    moves a label of an instance to a label of the moved instance.
+  - The trigger and the stop rule read the same on `s` and `g(s)` for `g ∈ G_s`, with the
+    binding moved by `g`. For `WF_vars(Next)`'s stop rule, `¬ Moves`, `stop_moves_equi`
+    proves it. The goal reads the same on the states `after b`, a set that holds where the
+    trigger of `b` holds and that every step keeps: the states after a trigger, where (G6)
+    gives it.
+  - The canonical form is `can s = π(s)(s)` with `π(s) ∈ G_s`, any member of the orbit.
+  - For `a23`, the reachable states lie in a list and each `G_s` in a list (`FiniteGroups`).
 - **A15's extra hypotheses** (`a15`).
   - The reachable states of `X` and of `R` lie in lists (`LX`, `LR`). The model's
     bounds make both finite. A complete `R` graph is what the theorem's "`R`'s graph is
@@ -194,7 +216,16 @@ The proofs assume the following hypotheses and do not derive them:
   - Case 4 (`obs = ∅`, `s_cycles` over `monotone_vars`) enters only through the hypothesis
     `hloop`. The proof's (iii), that a variable whose write graph is acyclic changes
     finitely often, is not formalized.
-- **A23** (the annotated quotient, fairness up to symmetry). It is not started.
+- **A23, the rest of the theorem.**
+  - The run's search. `a23` reads the orbit run's verdict as "no thread-fair annotated lasso
+    of the canonical quotient violates the property". `OrbitRun::decide_liveness` accepts a
+    strongly connected component of goal-free pairs when every piece of its thread graph is
+    taken or meets a disabled pair. Lean does not check that an accepted component holds a
+    thread-fair violating annotated lasso, nor that every such lasso lies in an accepted
+    component or reaches a stop (the analogue of N9). `threadFair_iff_pieces` covers one
+    thread round one cycle, not the pieces over a component with several cycles.
+  - The entity-cone findings up to symmetry (`state_model_findings`) and deadlocks are not
+    stated.
 - **A18's BFS depth.** The claim that each class is reached at its least depth is not stated.
 
 The sources hold no `sorry`, no `admit` and no `axiom`, and no statement is left unproved.

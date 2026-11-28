@@ -1365,13 +1365,70 @@ on the plain restricted cone, and `verify` calls no orbit reader for them (`deci
 only `always`). An `always` runs up to symmetry only on a cone the sub-lifecycle reduction
 leaves whole (`cli/src/verify/jobs.rs::PropertyJob::symmetric`: `reduction().is_none()` for
 `LtlKind::Always`); `eventually` and `leads_to` run up to symmetry on any cone whose group moves
-some rows. A cycle whose
-permutations compose to `π` is a concrete path from a state to its `π`-image, closed after at most the
-order of `π` repetitions. The theorem for this reading is not written out here (**A23**: P-sketch; M:
-`Twin::OrbitLiveness`, `Twin::OrbitStateModels`; D: corpus rule 8,
-`core/tests/reduce.rs::an_entity_cone_up_to_symmetry_decides_what_its_plain_run_left_open` (main only)). The
-`Twin::OrbitLiveness` twin compares with the plain run's search and so checks the quotient, not the
-fair-component rule, as its description says.
+some rows.
+
+**Theorem A23 (liveness up to symmetry).** An *annotated run* of the quotient is a sequence of
+stored states `r_n`, concrete successors `t_n` (a step of `r_n`, or `t_n = r_n`, a stutter) and
+permutations `σ_n ∈ G_{t_n}` with `r_{n+1} = σ_n(t_n)`. The binding moves along it by the `σ_n`, and
+so does each fair instance; the instance's sequence is its *thread*. A thread's instance is taken by
+the step `r_n → t_n`, so an orbit self-edge (`t_n ≠ r_n`, `σ_n(t_n) = r_n`) is a move. Assume:
+
+- every step from a state of a set `W` commutes with every `g ∈ G_s` and keeps `g` in `G_t`, where
+  `W` holds the initial states and is closed under steps and under every `G_s` (Theorem A18's
+  commutation, on the images of reachable states and not only on reachable states), and (G3);
+- `g` maps a label of a fair instance to a label of its image;
+- the trigger and the stop rule read the same on `s` and on `g(s)`, with the binding moved by `g`,
+  for `g ∈ G_s`, and so does the goal on every state at or after a state where the trigger holds.
+
+Then a property holds for every binding under `Fair_P` and the stop rule iff no annotated run of
+the canonical quotient violates it for any binding while it is thread-fair and stutters forever
+only where the rule allows. The stop rule of `WfNext`, `¬Moves`, is one the group preserves. With
+finitely many reachable states and every `G_s` finite, the same holds with annotated runs replaced
+by annotated lassos.
+
+*Proof sketch.* A run lifts through the accumulated frame: `c_0` is an initial state with
+`r_0 = θ_0(c_0)`, `c_{n+1} = θ_n⁻¹(t_n)` and `θ_{n+1} = σ_n θ_n`. Then `c` is a behaviour, and each
+step `c_n → c_{n+1}` is the step `r_n → t_n` read through `θ_n⁻¹`. A behaviour projects to the
+canonical run through frames that store each `θ_n(c_{n+1})` as `can`'s member of its orbit: `θ_0`
+takes `c_0` to `can(c_0)`, and `θ_{n+1} = σ_n θ_n` with `σ_n` the permutation that takes
+`θ_n(c_{n+1})` to its canonical form. Each `g ∈ G_s` preserves D20's enabledness and taking, so
+the thread of `θ_0(f)` is fair iff `f` is fair on `c`. On a cycle of the quotient the group is
+constant: a step only enlarges `G_s` (a slot leaves `absent` only), a stored target has the group
+of its concrete successor, and the cycle returns to its start. So the composite `π` of the
+cycle's permutations lies in `G_r`, some power `π^d` with `d > 0` acts as the identity, and `d`
+copies of the cycle close the concrete lasso. On the cycle a thread is periodic. It is fair iff,
+within one period, it takes its instance on some edge or meets a stored state where the instance
+is not enabled. `can` need only pick a member of the orbit, so the theorem holds past
+`BRANCH_CAP` too. Commutation on reachable states alone is not enough: a stored state is an image
+`g(s)` of a reachable `s`, which need not be reachable when `g` was not in the group of an earlier
+state on the path to `s`.
+
+*What the theorem leaves to the search.* `explore/orbit/liveness.rs` does not enumerate lassos. It
+accepts a strongly connected component of the goal-free (state, binding) pairs, reached from a
+failing trigger pair, when the component has a cycle, is expanded, and every piece of its threads
+takes its instance on some edge or meets a pair where it is not enabled. The pieces are the
+components of the thread graph over the whole component. Two implications are not proved: that
+such an accepted component holds a thread-fair violating annotated lasso, and that every
+thread-fair violating annotated lasso lies in a component the rule accepts or reaches a stop. They
+are the analogue of N9 for the annotated quotient. The rule per piece on a single cycle is proved
+(`threadFair_iff_pieces`).
+
+*Evidence for A23.* P-sketch. M:
+- The Lean proof `proofs/lean/RdraIsh/SymmetryLiveness.lean::a23` (`a23_iff` on runs, `a23_on`
+  for commutation on a set `W` as above), with `lasso_closure` and `threadFair_iff_pieces`.
+  - `ExampleSymLive` discharges every hypothesis on two interchangeable instances. Its quotient
+    cycle has the swap as its composite and closes after two copies.
+  - `ExampleReachOnly` is a system with commutation on its reachable states whose canonical
+    quotient reaches a state its plain run does not.
+  - The proof reads the run's search as a search for annotated lassos (above), covers liveness
+    and not the entity-cone findings, and does not read the code.
+- The twins `Twin::OrbitLiveness` and `Twin::OrbitStateModels`. `Twin::OrbitLiveness` compares
+  with the plain run's search, so it checks the quotient, not the fair-component rule, as its
+  description says.
+
+D: corpus rule 8,
+`core/tests/reduce.rs::an_entity_cone_up_to_symmetry_decides_what_its_plain_run_left_open` (main
+only).
 
 **`DeletedRowOwner` (A19).** `Earlier` binds a row by its run mark whatever its existence, so a later step
 of a split use case reads the key of a row an earlier step deleted. If a delete reset the key to its

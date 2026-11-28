@@ -15,3 +15,5 @@ import RdraIsh.ExampleRise
 import RdraIsh.Actions
 import RdraIsh.Split
 import RdraIsh.SplitExample
+import RdraIsh.SymmetryLiveness
+import RdraIsh.SymmetryLivenessExample
