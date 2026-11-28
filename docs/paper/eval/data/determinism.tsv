@@ -1,0 +1,25 @@
+spec	jobs	repeat	wall_s	user_s	same_stdout
+samples/patent-ops	1	0	4.02	3.87	yes
+samples/patent-ops	1	1	3.98	3.85	yes
+samples/patent-ops	2	0	3.4	7.39	yes
+samples/patent-ops	2	1	3.6	7.62	yes
+samples/patent-ops	4	0	3.58	9.06	yes
+samples/patent-ops	4	1	3.4	9.15	yes
+samples/clinic-ops	1	0	11.98	11.44	yes
+samples/clinic-ops	1	1	11.56	11.07	yes
+samples/clinic-ops	2	0	6.43	14.33	yes
+samples/clinic-ops	2	1	6.43	14.73	yes
+samples/clinic-ops	4	0	6.62	15.06	yes
+samples/clinic-ops	4	1	5.45	13.99	yes
+samples/food-permit-ops	1	0	19.53	18.89	yes
+samples/food-permit-ops	1	1	21.09	20.3	yes
+samples/food-permit-ops	2	0	9.88	23.78	yes
+samples/food-permit-ops	2	1	10.77	25.86	yes
+samples/food-permit-ops	4	0	9.83	30.67	yes
+samples/food-permit-ops	4	1	9.55	29.58	yes
+samples/oidc-auth --instance-count 1	1	0	4.9	4.68	yes
+samples/oidc-auth --instance-count 1	1	1	4.36	4.21	yes
+samples/oidc-auth --instance-count 1	2	0	4.01	6.12	yes
+samples/oidc-auth --instance-count 1	2	1	4.02	6.22	yes
+samples/oidc-auth --instance-count 1	4	0	3.76	8.0	yes
+samples/oidc-auth --instance-count 1	4	1	3.87	8.21	yes

@@ -23,5 +23,15 @@ samples/clinic-ops	cone	timeout	timeout	300.23	294.5	287.05	19	120873184	9829000
 samples/clinic-ops	cone+reduce	0	ok	11.3	10.61	7.83	49	5617011	36808559	2238170	136.3	601.2	549	-
 samples/clinic-ops	cone+sym	timeout	timeout	300.27	294.58	282.14	19	120873184	982900038	105791435	6568.5	9.7	7578	-
 samples/clinic-ops	cone+reduce+sym	0	ok	12.75	12.31	9.22	49	5495861	36137155	2238170	136.3	601.2	549	-
-samples/food-permit-ops	cone	timeout	timeout	300.25	295.74	0.0	1	43	66	43	0.0	7.4	7372	-
-samples/food-permit-ops	cone+reduce	0	ok	20.14	19.47	14.51	28	7009703	61565367	4846569	348.3	744.0	744	-
+samples/food-permit-ops	cone	timeout	timeout	300.28	295.59	0.0	1	43	66	43	0.0	7.4	7372	-
+samples/food-permit-ops	cone+reduce	0	ok	20.8	19.97	14.61	28	7009703	61565367	4846569	348.3	744.0	745	-
+samples/food-permit-ops	cone+sym	timeout	timeout	300.26	295.64	0.0	1	43	66	43	0.0	7.4	7372	-
+samples/food-permit-ops	cone+reduce+sym	0	ok	20.58	20.02	14.75	28	6998263	61500058	4846569	348.3	744.0	745	-
+samples/insurance-claim-ops	cone	timeout	timeout	300.17	295.99	260.45	1	93277095	585138452	93277095	5302.1	7.5	5443	-
+samples/insurance-claim-ops	cone+reduce	1	counterexample	43.27	42.26	34.79	19	13499587	69700932	4580087	243.2	793.2	805	-
+samples/insurance-claim-ops	cone+sym	timeout	timeout	300.18	295.65	286.85	1	93277095	585138452	93277095	5302.1	7.5	5355	-
+samples/insurance-claim-ops	cone+reduce+sym	1	counterexample	43.12	42.3	34.99	19	13444059	69476430	4580087	243.2	793.2	805	-
+samples/oidc-auth --instance-count 1	cone	0	ok	0.64	0.63	0.5	20	316826	1183467	30277	1.4	16.0	30	yes
+samples/oidc-auth --instance-count 1	cone+reduce	0	ok	5.07	4.82	2.65	25	1345035	10276879	1028160	67.3	307.9	304	yes
+samples/oidc-auth --instance-count 1	cone+sym	0	ok	0.64	0.63	0.51	20	316826	1183467	30277	1.4	16.0	30	yes
+samples/oidc-auth --instance-count 1	cone+reduce+sym	0	ok	5.05	4.86	2.68	25	1345035	10276879	1028160	67.3	307.9	304	yes

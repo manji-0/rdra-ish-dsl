@@ -26,9 +26,10 @@ permutation. We prove both sound for per-instance weak fairness over a small cal
 mechanize their flat cases in Lean 4. The implementation does not trust the code that computes
 either reduction. Every run checks the hypotheses that depend on computed data and falls back to a
 sound alternative when a check fails, and every printed counterexample is replayed on the unreduced
-system before it prints. On the four largest of nine models, `verify` with the quotient finishes in
-4 to 20 s. Without it, it does not finish within 300 s. BFS on the whole model, with no cone,
-passes 10 million states on every domain model without finishing.
+system before it prints. On four domain models, `verify` with the quotient finishes in 4 to 42 s
+and under 1 GB, and without it, it does not finish within 300 s. BFS on the whole model, with no
+cone, passes 10 million states on every domain model without finishing. The output is the same at
+every thread count.
 
 # 1 Introduction
 
@@ -421,8 +422,32 @@ verdicts.
 
 <!-- table: scripts/paper/eval.py table ablation docs/paper/eval/data/ablation.tsv -->
 
-See [eval/ablation.md](./eval/ablation.md) for the table and its reading. Summary:
-SUMMARY-ABLATION
+Four configurations switch the sub-lifecycle reduction (`RDRA_ISH_NO_REDUCE`) and instance
+symmetry (`--symmetry`) on every cone, at the default bounds (2 instances, Int 0..5; oidc-auth at
+1 instance). A fifth runs BFS on the whole model, with no cone. Each run has a 300 s timeout and
+`--memory 12GiB` ([eval/ablation.md](./eval/ablation.md)).
+
+| Model | No cone (whole model) | Cone | Cone + reduction | Cone + reduction + symmetry |
+|---|---|---|---|---|
+| patent-ops | > 10M states (77 s) | timeout, 5.3 GB | ok, 4.0 s, 163 MB | ok, 3.7 s, 163 MB |
+| clinic-ops | timeout (400 s) | timeout, 7.4 GB | ok, 10.6 s, 549 MB | ok, 12.3 s, 549 MB |
+| food-permit-ops | > 10M states (86 s) | timeout, 7.4 GB | ok, 20.0 s, 745 MB | ok, 20.0 s, 745 MB |
+| insurance-claim-ops | > 10M states (102 s) | timeout, 5.4 GB | cex, 42.3 s, 805 MB | cex, 42.3 s, 805 MB |
+| oidc-auth (n=1) | > 10M states (98 s) | ok, 0.6 s, 30 MB | ok, 4.8 s, 304 MB | ok, 4.9 s, 304 MB |
+| ec-site | > 20M states (83 s) | ok, 711 states | ok, 711 states | ok, 665 states |
+
+*cex*: the counterexample the sample's header expects (`Deadlock_ClaimCase_status_assessed`).
+
+The cone is necessary: no domain model finishes whole, while ec-site's cones together hold 711
+states against more than 20 million for its whole model. The reduction is necessary on four of the
+five domain models: the cones alone run out of the 300 s budget after 5 to 8 GB, and the reduced
+cones finish in at most 42 s and under 1 GB. The reduction can also cost. On oidc-auth the
+extended system `X` (1.03M states, its inputs free) is larger than every cone (30k states at most),
+the reduction is abandoned, and the run takes 4.8 s instead of 0.6 s. A budget for exploring `X`,
+relative to the cone, would avoid this. At two instances symmetry removes 0 to 16% of the states.
+The orbits have at most two members and the group applies to some cones only, so the gain at two
+instances is small. Section 7.2 measures it at larger counts. No configuration changes a verdict:
+every finished run of a model prints the same result and the same failing checks.
 
 ## 7.2 Scaling in the number of instances (RQ2)
 
@@ -442,13 +467,29 @@ these models, not a small-scope theorem ([eval/minimal.md](./eval/minimal.md)).
 
 ## 7.4 Determinism (RQ4)
 
-See [eval/determinism.md](./eval/determinism.md). Summary:
-SUMMARY-DETERMINISM
+The native checker claims that any number of threads computes the one-thread run (claim N4).
+We ran `verify` on patent-ops, clinic-ops, food-permit-ops and oidc-auth at 1, 2 and 4 threads,
+twice each. All 24 runs printed the same standard output as the first run of their model, byte for
+byte: every verdict, every state count and every trace. Wall time fell from 11.8 s to 6.0 s
+(clinic-ops) and from 20.3 s to 9.7 s (food-permit-ops) between 1 and 4 threads, almost all of it
+between 1 and 2 ([eval/determinism.md](./eval/determinism.md)). TLC's multi-worker mode makes no
+such promise about its state numbering or its counterexample.
 
 ## 7.5 Agreement with TLC (RQ5)
 
-See [eval/tlc-baseline.md](./eval/tlc-baseline.md). Summary:
-SUMMARY-TLC
+CI runs TLC 1.8.0 beside the native checker on every pull request
+([eval/tlc-baseline.md](./eval/tlc-baseline.md)). On main at the paper's commit, eight sample runs
+with TLC matched their expected verdicts with no disagreement between the engines. So did 45
+random models, each checked reduced, unreduced and with TLC, and the 91 corpus cases, whose headers
+state the verdict of each engine. `engine_equivalence` asserts that TLC's distinct states and graph
+equal the native checker's on every compared unreduced cone, so the *Cone* column above is also
+TLC's state count. Two limits apply. TLC checks the printed module of each cone, which for a
+reduced safety cone is the reduced system, so agreement there does not test the reduction
+independently. Its independent test is the comparison of reduced and unreduced runs on the samples
+and the random models. TLC's symmetry sets cannot be used soundly on this encoding: slots are
+ordered integers, and creation takes the lowest absent one. The CI logs record verdicts and total
+times, not per-cone state counts or separate times for the two engines, so we report no time ratio
+against TLC.
 
 ## 7.6 What found the defects? (RQ6)
 
