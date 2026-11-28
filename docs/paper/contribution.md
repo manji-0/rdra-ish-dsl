@@ -23,9 +23,11 @@ quotient**. Symmetry is the second contribution. Three facts decide the order:
   patent-ops at 2 instances, `verify` finishes in about 4 s with the reduction and does not
   finish in 300 s without it ([eval/ablation.md](./eval/ablation.md)).
 - Instance symmetry is experimental and off by default (`--symmetry never`). The only symmetry
-  factor on record with exact counts on both sides is 3.0× to 5.5× on patent-ops
-  ([evidence/measurements.md](./evidence/measurements.md), S7). A paper that leads with symmetry
-  would need the default changed and a larger evaluation first.
+  factor on record with exact counts on both sides is 3.0× to 5.5× on cones of patent-ops
+  ([evidence/measurements.md](./evidence/measurements.md), S7). End to end, symmetry saves 1.6% to
+  55% of the states and never shrinks the largest run of a domain model
+  ([eval/scaling.md](./eval/scaling.md)). A paper that leads with symmetry would need the default
+  changed and a larger gain first.
 - Both reductions have Lean proofs for their flat cases (A8, A15, A18, A23). The quotient also has
   a Lean-verified checker for its run-time certificate (`Sweep.stable_of_cert`,
   `Lemma5Check.check_sound`), which makes the "certificate and fallback" contribution concrete.

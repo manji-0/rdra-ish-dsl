@@ -451,8 +451,21 @@ every finished run of a model prints the same result and the same failing checks
 
 ## 7.2 Scaling in the number of instances (RQ2)
 
-See [eval/scaling.md](./eval/scaling.md). Summary:
-SUMMARY-SCALING
+We ran `verify` at 1 to 4 instances per entity, with symmetry off and on, with the reduction on
+([eval/scaling.md](./eval/scaling.md)). States grow by one to three orders of magnitude per added
+instance: ec-site from 44 to 1.46M states (n=1 to 4), patent-ops from 1,204 to 2.0M (n=1 to 2),
+clinic-ops from 1,063 to 5.6M. At three instances patent-ops does not finish in 900 s, and
+clinic-ops outgrows the machine's 15 GiB and is killed. The tool's memory limit bounds the BFS
+stores, not the process.
+
+Symmetry saves 1.6% to 55% of all states end to end, the most on personal-info at four instances
+(4,878 to 2,200). It never shrinks the largest run of ec-site, patent-ops or clinic-ops. On a reduced
+cone the group acts only on the rows of `T`, and the extended system `X` runs plain unless it
+reaches the memory limit. So the largest runs are ones the group leaves alone. The per-cone factors
+on record for patent-ops at three instances (3.0×, 5.2× and 5.5×, plain states over orbits on
+complete runs) are on cones that no end-to-end run here reached within its budget. On these models
+the cone and the reduction carry the performance. Symmetry's contribution is that liveness can be
+checked on a quotient at all (Theorem 5), which TLC's symmetry sets do not allow.
 
 ## 7.3 How many instances find the known counterexamples? (RQ3)
 

@@ -1,0 +1,3 @@
+spec	config	status	result	wall_s	user_s	bfs_cpu_s	runs	states	edges	largest	peak_store_mb	peak_live_mb	rss_mb	same_verdicts
+samples/patent-ops	n=3 sym=never memory=4GiB	timeout	timeout	900.21	883.96	474.34	15	85913758	501896547	68021867	3818.8	1897.2	4768	-
+samples/patent-ops	n=3 sym=always memory=4GiB	timeout	timeout	900.16	884.65	475.38	15	85913758	501896547	68021867	3818.8	1897.2	4768	-
