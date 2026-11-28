@@ -490,19 +490,30 @@ such promise about its state numbering or its counterexample.
 
 ## 7.5 Agreement with TLC (RQ5)
 
-CI runs TLC 1.8.0 beside the native checker on every pull request
-([eval/tlc-baseline.md](./eval/tlc-baseline.md)). On main at the paper's commit, eight sample runs
-with TLC matched their expected verdicts with no disagreement between the engines. So did 45
-random models, each checked reduced, unreduced and with TLC, and the 91 corpus cases, whose headers
-state the verdict of each engine. `engine_equivalence` asserts that TLC's distinct states and graph
-equal the native checker's on every compared unreduced cone, so the *Cone* column above is also
-TLC's state count. Two limits apply. TLC checks the printed module of each cone, which for a
-reduced safety cone is the reduced system, so agreement there does not test the reduction
-independently. Its independent test is the comparison of reduced and unreduced runs on the samples
-and the random models. TLC's symmetry sets cannot be used soundly on this encoding: slots are
-ordered integers, and creation takes the lowest absent one. The CI logs record verdicts and total
-times, not per-cone state counts or separate times for the two engines, so we report no time ratio
-against TLC.
+We ran `verify --with-tlc` locally on eight models with TLC 1.7.4
+([eval/tlc-baseline.md](./eval/tlc-baseline.md)). On all 50 cones and whole-model property runs that
+both engines decided, they report the same verdict and the same number of states. TLC's 36
+entity-cone state models agree as well. The one difference is the deadlock on insurance-claim-ops,
+which the native checker reports and TLC's one-sided deadlock check does not (claim T6). CI runs
+the same comparison with TLC 1.8.0 on every pull request, and on 45 random models checked
+reduced, unreduced and with TLC, with no disagreement.
+
+| Model | Cones | States (both) | TLC, summed (s) | `verify` alone, wall (s) |
+|---|--:|--:|--:|--:|
+| patent-ops | 9 | 1,684,427 | 55.5 | 1.6 |
+| clinic-ops | 11 | 135,583 | 33.9 | 4.9 |
+| food-permit-ops | 8 | 47,200 | 23.9 | 7.2 |
+| insurance-claim-ops | 10 | 2,116,505 | 211.6 | 16.0 |
+| oidc-auth (n=1) | 8 | 111,376 | 19.5 | 3.2 |
+
+TLC's summed time includes a JVM start of about 0.7 s per cone. The native wall time covers the
+whole run, cones and everything else. Two limits apply. TLC checks the module that `verify` prints
+for each cone, which for a reduced cone is the reduced system, so this agreement tests the printer
+and the two engines, not the reduction. The reduction's independent tests are the
+reduced-against-unreduced comparisons of Section 7.1 and of CI's random models. TLC's symmetry
+sets cannot be used soundly on this encoding: slots are ordered integers, and creation takes the
+lowest absent one. So there is no "TLC with symmetry" baseline. We wrote no Alloy or Apalache
+encoding.
 
 ## 7.6 What found the defects? (RQ6)
 

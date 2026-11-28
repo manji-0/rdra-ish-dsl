@@ -200,3 +200,152 @@ rdra-ish prints the TLA+ itself; the user writes none. Lines (`wc -l`) at `9e4a1
 | `crates/rdra-ish-cli/src/tlc_batch.rs` | 377 | batch JVM for the tests |
 
 The CLI files may hold inline tests; their counts are whole files.
+
+## Local run with TLC: per-cone states, verdicts and times
+
+The CI logs above hold no per-cone numbers. This section adds them from a local run. TLC 1.7.4
+comes from nixpkgs (`nix shell nixpkgs#tlaplus`; the flake's 1.8.0 build needs GitHub access that
+this machine lacks). docs/theory lists 1.7.4 as a supported version. `scripts/paper/tlc-local.py`
+runs `verify SPEC --with-tlc --memory 12GiB` and `verify SPEC` without TLC, both at the default
+`RDRA_JOBS` on the 4-core machine. It pairs every native cone line with TLC's line for the same
+cone. Data: [data/tlc-local.tsv](./data/tlc-local.tsv). Main at `9e4a123`.
+
+**Agreement.** Both engines decided 50 cones and whole-model property runs. On all 50 they report
+the same verdict and the same number of states. TLC also ran 36 entity-cone state models
+(412,613 states in all), which check deadlocks and witnesses, and found what the native checker
+found. The one difference in the `result` lines is expected. On insurance-claim-ops the native
+checker reports the sample's expected deadlock (`Deadlock_ClaimCase_status_assessed`), while
+`tlc_result` is `ok`. TLC's deadlock check is the other reading of D25 (a state with no successor),
+and claim T6 records it as one-sided.
+
+**What the state counts compare.** Every cone that TLC checks is the module that `verify` prints
+for it: a reduced cone is printed reduced, with the quotient tables, and an orbit run is not
+printed. So equal counts confirm that the two engines read the printed system alike. They do not
+test the reduction, whose independent tests are the reduced-against-unreduced comparisons
+([ablation.md](./ablation.md); `reduction-diff.py` in CI). Without the reduction, the native
+checker does not finish four of the domain models in 300 s. TLC would explore at least the same
+unreduced cones, since `engine_equivalence` asserts equal graphs on unreduced cones.
+
+**Time.** TLC's time is the sum of its per-cone times, as `verify` prints them. Each includes a JVM
+start of about 0.7 s. `verify` runs TLC jobs beside the native checker, so the wall time of
+`verify --with-tlc` is less than the summed TLC time.
+
+| Model | Cones compared | States (both engines) | TLC time, summed (s) | `verify --with-tlc` wall (s) | `verify` wall, native only (s) |
+|---|--:|--:|--:|--:|--:|
+| ec-site | 1 | 82 | 0.7 | 2.2 | 0.01 |
+| personal-info | 2 | 26 | 1.6 | 2.1 | 0.01 |
+| incremental-order | 1 | 9 | 0.7 | 2.0 | 0.01 |
+| patent-ops | 9 | 1,684,427 | 55.5 | 25.0 | 1.6 |
+| clinic-ops | 11 | 135,583 | 33.9 | 23.6 | 4.9 |
+| food-permit-ops | 8 | 47,200 | 23.9 | 23.0 | 7.2 |
+| insurance-claim-ops | 10 | 2,116,505 | 211.6 | 88.8 | 16.0 |
+| oidc-auth (1 instance) | 8 | 111,376 | 19.5 | 38.2 | 3.2 |
+
+On the domain models, `verify` with TLC beside it takes 3 to 16 times the wall time of the native
+run alone. On patent-ops, TLC spends 55.5 s on cones that the native checker decides, with
+everything else, in 1.6 s. The native run's wall time also covers the entity cones, the
+sub-lifecycle runs and the whole-model property runs, so per-cone native time is lower still. A
+per-state comparison would need per-cone native times, which `verify` does not print. The native
+checker stores states exactly and runs several cones at once, each on several threads (`RDRA_JOBS`
+defaults to the core count). TLC runs with fingerprints and 1 worker per cone (2 for the
+whole-model runs), as its lines print.
+
+**TLC with symmetry sets.** Not measured, and not sound here. The printed modules use ordered integer
+slots (`1..InstanceCount`) and create in the lowest absent slot (`FirstAbsent`). A `SYMMETRY`
+declaration over those slots would merge states that the creation step tells apart. The corpus
+case `presence_first_absent_asymmetry` shows a verdict that changes, and TLC's documentation
+warns that liveness checking under symmetry can miss violations.
+
+**Alloy, Apalache.** Not run. An encoding of these models in Alloy 6 or Apalache would have to be
+written by hand. The TLA+ printer alone is 2,632 lines of Rust, which bounds the effort from below.
+
+### Table
+
+| Model | Cone | Native | Native states | TLC | TLC states | TLC time (s) |
+|---|---|---|--:|---|--:|--:|
+| samples/ec-site | Cone_Unique_Payment_Order | ok | 82 | ok | 82 | 0.7 |
+| samples/ec-site | StateModel_Order | - | - | state model | 82 | - |
+| samples/personal-info | Cone_Unique_PersonalInfo_UserAccount | ok | 1 | ok | 1 | 0.8 |
+| samples/personal-info | Cone_Unique_PasswordCredential_UserAccount | ok | 25 | ok | 25 | 0.8 |
+| samples/personal-info | StateModel_UserAccount | - | - | state model | 16 | - |
+| samples/incremental-order/step-7-business-rules/src | Cone_Forbidden_Store_0 | ok | 9 | ok | 9 | 0.7 |
+| samples/incremental-order/step-7-business-rules/src | StateModel_Store | - | - | state model | 9 | - |
+| samples/patent-ops | Cone_Forbidden_DraftingOrder_0 | ok | 745 | ok | 745 | 1.1 |
+| samples/patent-ops | Cone_Forbidden_PatentApplication_1 | ok | 47593 | ok | 47593 | 5.2 |
+| samples/patent-ops | Cone_Forbidden_InventionDisclosure_2 | ok | 931 | ok | 931 | 1.1 |
+| samples/patent-ops | Cone_Forbidden_OfficeAction_3 | ok | 1341707 | ok | 1341707 | 22.8 |
+| samples/patent-ops | Cone_Forbidden_Patent_4 | ok | 202569 | ok | 202569 | 10.1 |
+| samples/patent-ops | Cone_Inv_InventorReward_3 | ok | 87 | ok | 87 | 1.0 |
+| samples/patent-ops | Cone_Unique_PatentApplication_DraftingOrder | ok | 761 | ok | 761 | 1.2 |
+| samples/patent-ops | Cone_Unique_Patent_PatentApplication | ok | 15017 | ok | 15017 | 2.3 |
+| samples/patent-ops | Cone_GrantEnds | ok | 75017 | ok | 75017 | 10.7 |
+| samples/patent-ops | StateModel_DraftingOrder | - | - | state model | 745 | - |
+| samples/patent-ops | StateModel_InventionDisclosure | - | - | state model | 931 | - |
+| samples/patent-ops | StateModel_InventorReward | - | - | state model | 87 | - |
+| samples/clinic-ops | Cone_Forbidden_ClaimStatement_0 | ok | 223 | ok | 223 | 1.3 |
+| samples/clinic-ops | Cone_Inv_Appointment_0 | ok | 15374 | ok | 15374 | 4.7 |
+| samples/clinic-ops | Cone_Inv_Appointment_1 | ok | 15374 | ok | 15374 | 4.0 |
+| samples/clinic-ops | Cone_Inv_Encounter_2 | ok | 85154 | ok | 85154 | 9.8 |
+| samples/clinic-ops | Cone_Inv_ClinicalOrder_3 | ok | 250 | ok | 250 | 1.8 |
+| samples/clinic-ops | Cone_Inv_Prescription_4 | ok | 450 | ok | 450 | 2.0 |
+| samples/clinic-ops | Cone_Inv_ClaimStatement_5 | ok | 223 | ok | 223 | 1.3 |
+| samples/clinic-ops | Cone_Unique_PatientProfile_PatientAccount | ok | 3 | ok | 3 | 1.3 |
+| samples/clinic-ops | Cone_Unique_Encounter_Appointment | ok | 18499 | ok | 18499 | 4.8 |
+| samples/clinic-ops | Cone_Unique_AccountBalance_PatientAccount | ok | 1 | ok | 1 | 1.1 |
+| samples/clinic-ops | Cone_Unique_FollowUpMessage_CarePlan | ok | 32 | ok | 32 | 1.8 |
+| samples/clinic-ops | StateModel_CarePlan | - | - | state model | 381 | - |
+| samples/clinic-ops | StateModel_ClaimStatement | - | - | state model | 315 | - |
+| samples/clinic-ops | StateModel_ClinicalOrder | - | - | state model | 250 | - |
+| samples/clinic-ops | StateModel_Encounter | - | - | state model | 85154 | - |
+| samples/clinic-ops | StateModel_IntakePacket | - | - | state model | 245 | - |
+| samples/clinic-ops | StateModel_PaymentTransaction | - | - | state model | 78752 | - |
+| samples/clinic-ops | StateModel_Prescription | - | - | state model | 1690 | - |
+| samples/food-permit-ops | Cone_Forbidden_Disposition_0 | ok | 174 | ok | 174 | 1.7 |
+| samples/food-permit-ops | Cone_Forbidden_BusinessPermit_4 | ok | 243 | ok | 243 | 1.5 |
+| samples/food-permit-ops | Cone_Inv_Disposition_0 | ok | 23034 | ok | 23034 | 4.8 |
+| samples/food-permit-ops | Cone_Inv_PermitApplication_1 | ok | 5885 | ok | 5885 | 3.8 |
+| samples/food-permit-ops | Cone_Inv_PermitApplication_2 | ok | 6125 | ok | 6125 | 3.3 |
+| samples/food-permit-ops | Cone_MultiForbidden_BusinessPermit_1 | ok | 613 | ok | 613 | 1.1 |
+| samples/food-permit-ops | Cone_AfterAssert_SuspendBusiness_0 | ok | 10883 | ok | 10883 | 5.6 |
+| samples/food-permit-ops | Cone_HygieneManagerEventuallyAppointed | ok | 243 | ok | 243 | 2.1 |
+| samples/food-permit-ops | StateModel_BusinessNotification | - | - | state model | 43 | - |
+| samples/food-permit-ops | StateModel_ChangeNotice | - | - | state model | 3032 | - |
+| samples/food-permit-ops | StateModel_Consultation | - | - | state model | 157 | - |
+| samples/food-permit-ops | StateModel_Inspection | - | - | state model | 23601 | - |
+| samples/food-permit-ops | StateModel_MonitoringPlan | - | - | state model | 7 | - |
+| samples/food-permit-ops | StateModel_SiteVisit | - | - | state model | 55 | - |
+| samples/food-permit-ops | StateModel_SuccessionNotice | - | - | state model | 1640 | - |
+| samples/insurance-claim-ops | Cone_Forbidden_Complaint_2 | ok | 483 | ok | 483 | 1.5 |
+| samples/insurance-claim-ops | Cone_Forbidden_ClaimCase_3 | ok | 63823 | ok | 63823 | 8.9 |
+| samples/insurance-claim-ops | Cone_Forbidden_Claim_4 | ok | 633787 | ok | 633787 | 55.6 |
+| samples/insurance-claim-ops | Cone_Forbidden_RepairEstimate_5 | ok | 441 | ok | 441 | 1.6 |
+| samples/insurance-claim-ops | Cone_MultiForbidden_JibaisekiSurvey_2 | ok | 65 | ok | 65 | 1.5 |
+| samples/insurance-claim-ops | Cone_MultiForbidden_Payment_3 | ok | 783427 | ok | 783427 | 59.2 |
+| samples/insurance-claim-ops | Cone_MultiForbidden_RepairEstimate_4 | ok | 65 | ok | 65 | 1.3 |
+| samples/insurance-claim-ops | Cone_MultiForbidden_Subrogation_7 | ok | 255 | ok | 255 | 2.8 |
+| samples/insurance-claim-ops | Cone_ClaimEventuallyDecided | ok | 633787 | ok | 633787 | 76.4 |
+| samples/insurance-claim-ops | Cone_SubrogationEnds | ok | 372 | ok | 372 | 2.8 |
+| samples/insurance-claim-ops | StateModel_Complaint | - | - | state model | 39205 | - |
+| samples/insurance-claim-ops | StateModel_JibaisekiSurvey | - | - | state model | 189 | - |
+| samples/insurance-claim-ops | StateModel_RepairEstimate | - | - | state model | 441 | - |
+| samples/insurance-claim-ops | StateModel_Subrogation | - | - | state model | 372 | - |
+| samples/oidc-auth --instance-count 1 | Cone_Forbidden_AuthorizationRequest_0 | ok | 8 | ok | 8 | 0.9 |
+| samples/oidc-auth --instance-count 1 | Cone_Forbidden_Interaction_1 | ok | 27013 | ok | 27013 | 3.7 |
+| samples/oidc-auth --instance-count 1 | Cone_Forbidden_BackchannelRequest_3 | ok | 35 | ok | 35 | 0.9 |
+| samples/oidc-auth --instance-count 1 | Cone_MultiForbidden_LogoutNotice_4 | ok | 10 | ok | 10 | 0.9 |
+| samples/oidc-auth --instance-count 1 | Cone_Quantifier_Grant_0 | ok | 30277 | ok | 30277 | 4.6 |
+| samples/oidc-auth --instance-count 1 | Cone_Quantifier_DeviceAuthorization_1 | ok | 7 | ok | 7 | 0.7 |
+| samples/oidc-auth --instance-count 1 | Cone_Unique_Grant_AuthorizationRequest | ok | 27013 | ok | 27013 | 3.9 |
+| samples/oidc-auth --instance-count 1 | Cone_Unique_AuthorizationCode_Grant | ok | 27013 | ok | 27013 | 3.9 |
+| samples/oidc-auth --instance-count 1 | StateModel_AccessToken | - | - | state model | 30277 | - |
+| samples/oidc-auth --instance-count 1 | StateModel_AuthorizationCode | - | - | state model | 30277 | - |
+| samples/oidc-auth --instance-count 1 | StateModel_AuthorizationRequest | - | - | state model | 27013 | - |
+| samples/oidc-auth --instance-count 1 | StateModel_BackchannelRequest | - | - | state model | 35 | - |
+| samples/oidc-auth --instance-count 1 | StateModel_Client | - | - | state model | 5 | - |
+| samples/oidc-auth --instance-count 1 | StateModel_Consent | - | - | state model | 27013 | - |
+| samples/oidc-auth --instance-count 1 | StateModel_DeviceAuthorization | - | - | state model | 15 | - |
+| samples/oidc-auth --instance-count 1 | StateModel_Grant | - | - | state model | 30277 | - |
+| samples/oidc-auth --instance-count 1 | StateModel_LogoutNotice | - | - | state model | 14 | - |
+| samples/oidc-auth --instance-count 1 | StateModel_OpSession | - | - | state model | 7 | - |
+| samples/oidc-auth --instance-count 1 | StateModel_RefreshToken | - | - | state model | 30277 | - |
+| samples/oidc-auth --instance-count 1 | StateModel_SigningKey | - | - | state model | 4 | - |

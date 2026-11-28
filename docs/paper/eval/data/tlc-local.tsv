@@ -1,0 +1,87 @@
+spec	cone	native_verdict	native_states	tlc_verdict	tlc_states	tlc_s	run_wall_s	native_only_wall_s	result	tlc_result
+samples/ec-site	Cone_Unique_Payment_Order	ok	82	ok	82	0.7	2.2	0.01	ok	ok
+samples/ec-site	StateModel_Order	-	-	state model	82	-	2.2	0.01	ok	ok
+samples/personal-info	Cone_Unique_PersonalInfo_UserAccount	ok	1	ok	1	0.8	2.14	0.01	ok	ok
+samples/personal-info	Cone_Unique_PasswordCredential_UserAccount	ok	25	ok	25	0.8	2.14	0.01	ok	ok
+samples/personal-info	StateModel_UserAccount	-	-	state model	16	-	2.14	0.01	ok	ok
+samples/incremental-order/step-7-business-rules/src	Cone_Forbidden_Store_0	ok	9	ok	9	0.7	2.02	0.01	ok	ok
+samples/incremental-order/step-7-business-rules/src	StateModel_Store	-	-	state model	9	-	2.02	0.01	ok	ok
+samples/patent-ops	Cone_Forbidden_DraftingOrder_0	ok	745	ok	745	1.1	24.99	1.55	ok	ok
+samples/patent-ops	Cone_Forbidden_PatentApplication_1	ok	47593	ok	47593	5.2	24.99	1.55	ok	ok
+samples/patent-ops	Cone_Forbidden_InventionDisclosure_2	ok	931	ok	931	1.1	24.99	1.55	ok	ok
+samples/patent-ops	Cone_Forbidden_OfficeAction_3	ok	1341707	ok	1341707	22.8	24.99	1.55	ok	ok
+samples/patent-ops	Cone_Forbidden_Patent_4	ok	202569	ok	202569	10.1	24.99	1.55	ok	ok
+samples/patent-ops	Cone_Inv_InventorReward_3	ok	87	ok	87	1.0	24.99	1.55	ok	ok
+samples/patent-ops	Cone_Unique_PatentApplication_DraftingOrder	ok	761	ok	761	1.2	24.99	1.55	ok	ok
+samples/patent-ops	Cone_Unique_Patent_PatentApplication	ok	15017	ok	15017	2.3	24.99	1.55	ok	ok
+samples/patent-ops	Cone_GrantEnds	ok	75017	ok	75017	10.7	24.99	1.55	ok	ok
+samples/patent-ops	StateModel_DraftingOrder	-	-	state model	745	-	24.99	1.55	ok	ok
+samples/patent-ops	StateModel_InventionDisclosure	-	-	state model	931	-	24.99	1.55	ok	ok
+samples/patent-ops	StateModel_InventorReward	-	-	state model	87	-	24.99	1.55	ok	ok
+samples/clinic-ops	Cone_Forbidden_ClaimStatement_0	ok	223	ok	223	1.3	23.6	4.91	ok	ok
+samples/clinic-ops	Cone_Inv_Appointment_0	ok	15374	ok	15374	4.7	23.6	4.91	ok	ok
+samples/clinic-ops	Cone_Inv_Appointment_1	ok	15374	ok	15374	4.0	23.6	4.91	ok	ok
+samples/clinic-ops	Cone_Inv_Encounter_2	ok	85154	ok	85154	9.8	23.6	4.91	ok	ok
+samples/clinic-ops	Cone_Inv_ClinicalOrder_3	ok	250	ok	250	1.8	23.6	4.91	ok	ok
+samples/clinic-ops	Cone_Inv_Prescription_4	ok	450	ok	450	2.0	23.6	4.91	ok	ok
+samples/clinic-ops	Cone_Inv_ClaimStatement_5	ok	223	ok	223	1.3	23.6	4.91	ok	ok
+samples/clinic-ops	Cone_Unique_PatientProfile_PatientAccount	ok	3	ok	3	1.3	23.6	4.91	ok	ok
+samples/clinic-ops	Cone_Unique_Encounter_Appointment	ok	18499	ok	18499	4.8	23.6	4.91	ok	ok
+samples/clinic-ops	Cone_Unique_AccountBalance_PatientAccount	ok	1	ok	1	1.1	23.6	4.91	ok	ok
+samples/clinic-ops	Cone_Unique_FollowUpMessage_CarePlan	ok	32	ok	32	1.8	23.6	4.91	ok	ok
+samples/clinic-ops	StateModel_CarePlan	-	-	state model	381	-	23.6	4.91	ok	ok
+samples/clinic-ops	StateModel_ClaimStatement	-	-	state model	315	-	23.6	4.91	ok	ok
+samples/clinic-ops	StateModel_ClinicalOrder	-	-	state model	250	-	23.6	4.91	ok	ok
+samples/clinic-ops	StateModel_Encounter	-	-	state model	85154	-	23.6	4.91	ok	ok
+samples/clinic-ops	StateModel_IntakePacket	-	-	state model	245	-	23.6	4.91	ok	ok
+samples/clinic-ops	StateModel_PaymentTransaction	-	-	state model	78752	-	23.6	4.91	ok	ok
+samples/clinic-ops	StateModel_Prescription	-	-	state model	1690	-	23.6	4.91	ok	ok
+samples/food-permit-ops	Cone_Forbidden_Disposition_0	ok	174	ok	174	1.7	23.01	7.17	ok	ok
+samples/food-permit-ops	Cone_Forbidden_BusinessPermit_4	ok	243	ok	243	1.5	23.01	7.17	ok	ok
+samples/food-permit-ops	Cone_Inv_Disposition_0	ok	23034	ok	23034	4.8	23.01	7.17	ok	ok
+samples/food-permit-ops	Cone_Inv_PermitApplication_1	ok	5885	ok	5885	3.8	23.01	7.17	ok	ok
+samples/food-permit-ops	Cone_Inv_PermitApplication_2	ok	6125	ok	6125	3.3	23.01	7.17	ok	ok
+samples/food-permit-ops	Cone_MultiForbidden_BusinessPermit_1	ok	613	ok	613	1.1	23.01	7.17	ok	ok
+samples/food-permit-ops	Cone_AfterAssert_SuspendBusiness_0	ok	10883	ok	10883	5.6	23.01	7.17	ok	ok
+samples/food-permit-ops	Cone_HygieneManagerEventuallyAppointed	ok	243	ok	243	2.1	23.01	7.17	ok	ok
+samples/food-permit-ops	StateModel_BusinessNotification	-	-	state model	43	-	23.01	7.17	ok	ok
+samples/food-permit-ops	StateModel_ChangeNotice	-	-	state model	3032	-	23.01	7.17	ok	ok
+samples/food-permit-ops	StateModel_Consultation	-	-	state model	157	-	23.01	7.17	ok	ok
+samples/food-permit-ops	StateModel_Inspection	-	-	state model	23601	-	23.01	7.17	ok	ok
+samples/food-permit-ops	StateModel_MonitoringPlan	-	-	state model	7	-	23.01	7.17	ok	ok
+samples/food-permit-ops	StateModel_SiteVisit	-	-	state model	55	-	23.01	7.17	ok	ok
+samples/food-permit-ops	StateModel_SuccessionNotice	-	-	state model	1640	-	23.01	7.17	ok	ok
+samples/insurance-claim-ops	Cone_Forbidden_Complaint_2	ok	483	ok	483	1.5	88.82	15.95	counterexample	ok
+samples/insurance-claim-ops	Cone_Forbidden_ClaimCase_3	ok	63823	ok	63823	8.9	88.82	15.95	counterexample	ok
+samples/insurance-claim-ops	Cone_Forbidden_Claim_4	ok	633787	ok	633787	55.6	88.82	15.95	counterexample	ok
+samples/insurance-claim-ops	Cone_Forbidden_RepairEstimate_5	ok	441	ok	441	1.6	88.82	15.95	counterexample	ok
+samples/insurance-claim-ops	Cone_MultiForbidden_JibaisekiSurvey_2	ok	65	ok	65	1.5	88.82	15.95	counterexample	ok
+samples/insurance-claim-ops	Cone_MultiForbidden_Payment_3	ok	783427	ok	783427	59.2	88.82	15.95	counterexample	ok
+samples/insurance-claim-ops	Cone_MultiForbidden_RepairEstimate_4	ok	65	ok	65	1.3	88.82	15.95	counterexample	ok
+samples/insurance-claim-ops	Cone_MultiForbidden_Subrogation_7	ok	255	ok	255	2.8	88.82	15.95	counterexample	ok
+samples/insurance-claim-ops	Cone_ClaimEventuallyDecided	ok	633787	ok	633787	76.4	88.82	15.95	counterexample	ok
+samples/insurance-claim-ops	Cone_SubrogationEnds	ok	372	ok	372	2.8	88.82	15.95	counterexample	ok
+samples/insurance-claim-ops	StateModel_Complaint	-	-	state model	39205	-	88.82	15.95	counterexample	ok
+samples/insurance-claim-ops	StateModel_JibaisekiSurvey	-	-	state model	189	-	88.82	15.95	counterexample	ok
+samples/insurance-claim-ops	StateModel_RepairEstimate	-	-	state model	441	-	88.82	15.95	counterexample	ok
+samples/insurance-claim-ops	StateModel_Subrogation	-	-	state model	372	-	88.82	15.95	counterexample	ok
+samples/oidc-auth --instance-count 1	Cone_Forbidden_AuthorizationRequest_0	ok	8	ok	8	0.9	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	Cone_Forbidden_Interaction_1	ok	27013	ok	27013	3.7	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	Cone_Forbidden_BackchannelRequest_3	ok	35	ok	35	0.9	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	Cone_MultiForbidden_LogoutNotice_4	ok	10	ok	10	0.9	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	Cone_Quantifier_Grant_0	ok	30277	ok	30277	4.6	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	Cone_Quantifier_DeviceAuthorization_1	ok	7	ok	7	0.7	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	Cone_Unique_Grant_AuthorizationRequest	ok	27013	ok	27013	3.9	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	Cone_Unique_AuthorizationCode_Grant	ok	27013	ok	27013	3.9	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	StateModel_AccessToken	-	-	state model	30277	-	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	StateModel_AuthorizationCode	-	-	state model	30277	-	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	StateModel_AuthorizationRequest	-	-	state model	27013	-	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	StateModel_BackchannelRequest	-	-	state model	35	-	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	StateModel_Client	-	-	state model	5	-	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	StateModel_Consent	-	-	state model	27013	-	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	StateModel_DeviceAuthorization	-	-	state model	15	-	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	StateModel_Grant	-	-	state model	30277	-	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	StateModel_LogoutNotice	-	-	state model	14	-	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	StateModel_OpSession	-	-	state model	7	-	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	StateModel_RefreshToken	-	-	state model	30277	-	38.17	3.21	ok	ok
+samples/oidc-auth --instance-count 1	StateModel_SigningKey	-	-	state model	4	-	38.17	3.21	ok	ok
