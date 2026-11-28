@@ -961,7 +961,7 @@ each of its variants a fair action whose enabledness reads its mark (event-order
   a clean build ([Reproductions](#reproductions)).
 - **Read at the pin for the N16 table and the lift's mechanics:** `reduce/lift.rs::lift`
   (every lifted step checked by `is_move`, since #529 every look-up, and since #541 the S-path
-  search, `reduce/partition.rs::Succ::shortest_path`), `::lift_cycle` and
+  search, `reduce/partition.rs::Succ::shortest_path`), `reduce/lift.rs::lift_cycle` and
   `::lift_stop` (a failed lift is `Spurious::Fails`), `explore/graph.rs::ComponentRun::lifted_path`,
   `explore/mod.rs::ComponentRun::trace_violations`, `explore/properties.rs::ComponentRun::decide_property`,
   `explore/orbit.rs::lift_path`, `::replays` and `OrbitRun::decide_always`, the safety lift of
