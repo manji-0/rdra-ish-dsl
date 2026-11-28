@@ -2225,8 +2225,10 @@ fn symmetry_always_decides_a_cone_the_memory_limit_stopped_at_any_jobs() {
 
 /// Under `--memory`, an entity cone whose plain run stops runs again up to instance symmetry
 /// under `always`, and its state models are decided on that run (#212 phase 4): fewer
-/// findings stay open than under `never`, every error `never` reports is reported, and the
-/// output is the same at every `RDRA_JOBS`.
+/// findings stay open than under `never`, and every error `never` reports is reported.
+/// Thread equality of a symmetry decision under the memory limit is
+/// `symmetry_always_decides_a_cone_the_memory_limit_stopped_at_any_jobs`, and of the BFS
+/// itself `a_run_up_to_symmetry_is_the_same_on_any_number_of_threads`.
 #[test]
 fn symmetry_always_decides_entity_cones_the_memory_limit_stopped_at_any_jobs() {
     let tmp = scratch("verify_cli_symmetry_entity_memory");
@@ -2265,7 +2267,6 @@ fn symmetry_always_decides_entity_cones_the_memory_limit_stopped_at_any_jobs() {
         open(&never)
     );
     assert_eq!(errors(&always), errors(&never), "the same errors");
-    assert_eq!(run("always", "8"), always, "RDRA_JOBS=8");
     let _ = std::fs::remove_dir_all(&tmp);
 }
 

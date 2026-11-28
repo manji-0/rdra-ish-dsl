@@ -23,12 +23,14 @@
 
 mod codegen_cases;
 
+use std::collections::HashSet;
+
 use codegen_cases::{
     check_passes, column_var, enum_name, explore, matching, pick, row_slots, samples, type_name,
     Explored, Rows,
 };
 use rdra_ish_core::lifecycle::{
-    ActionOrigin, Domain, GuardWhy, ParamRole, StateSlice, Value, VarKind,
+    ActId, ActionOrigin, Domain, GuardWhy, ParamRole, StateSlice, Value, VarKind,
 };
 use rdra_ish_emit::codegen::ir::{Adapt, Assigned, Lit, OutKind};
 
@@ -350,8 +352,17 @@ fn functions_agree_with_the_transition_system() {
         }
 
         // Converse: a function over one existing row allows no move BFS lacks.
+        // A complete run can hold far more edges than states, so the lookup is a set
+        // built once, not a walk of every edge for every candidate row.
         if !run.complete {
             continue;
+        }
+        let mut taken: HashSet<(u32, ActId, u8)> = HashSet::new();
+        for edge in run.edges() {
+            let (a, p) = run.step(edge);
+            if p.len() == 1 {
+                taken.insert((edge.from, a, p[0]));
+            }
         }
         for f in &domain.fns {
             let Some((act, action)) = ts
@@ -399,12 +410,7 @@ fn functions_agree_with_the_transition_system() {
                         continue;
                     }
                     checked_rows += 1;
-                    let moved = run.edges().iter().any(|edge| {
-                        edge.from as usize == at && {
-                            let (a, p) = run.step(&edge);
-                            a == act && p == [slot as u8]
-                        }
-                    });
+                    let moved = taken.contains(&(at as u32, act, slot as u8));
                     if !moved {
                         failures.push(format!(
                             "{sample}: {} allows a run on {entity}#{slot} in a state where BFS makes none",
