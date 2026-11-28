@@ -13,7 +13,7 @@ expected failing check it records the least count whose run reports `error[<chec
 length of the printed counterexample at that count. Data: [data/minimal.tsv](./data/minimal.tsv).
 Main at `9e4a123`.
 
-**Result.** 130 expected counterexamples:
+**Result.** 132 expected counterexamples:
 
 | Least uniform instance count | Counterexamples |
 |---|--:|

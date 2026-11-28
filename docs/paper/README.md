@@ -30,7 +30,7 @@ count, determinism, tables), [scripts/paper/defect-summary.py](../../scripts/pap
 | T1 thesis and venue | Done: the sub-lifecycle quotient leads, symmetry second; TACAS, then CAV | [contribution.md](./contribution.md#t1-the-thesis-and-the-venue) |
 | T2 contribution statement and example | Done: two corpus cases that a divergence-blind quotient and full-slot symmetry get wrong | [contribution.md](./contribution.md#the-example-that-existing-tools-get-wrong) |
 | T3 bug-finding record | Done: 74 defects, 30 wrong verdicts shown; Lean, reference interpreter, mutation, certificates and twins found none first | [evidence/defects.md](./evidence/defects.md) |
-| T4 minimal-instance data | Done: 106 of 130 known counterexamples at n=1, 24 at n=2, none needs n=3 uniformly | [eval/minimal.md](./eval/minimal.md) |
+| T4 minimal-instance data | Done: 106 of 132 known counterexamples at n=1, 24 at n=2, none needs n=3 uniformly | [eval/minimal.md](./eval/minimal.md) |
 | T5 reuse of measurements | Done: about 80 earlier figures, most to re-measure | [evidence/measurements.md](./evidence/measurements.md) |
 | T6 ablation | Done | [eval/ablation.md](./eval/ablation.md) |
 | T7 scaling | Done | [eval/scaling.md](./eval/scaling.md) |

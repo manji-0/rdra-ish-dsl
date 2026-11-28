@@ -210,8 +210,9 @@ behaviour of `C` can step forever inside one block, where its image in `R` stops
 mark lets the image stop exactly there.
 
 **Certificates and fallback.** Admissibility (S1–S5), stability (B1–B3), the *can loop* marks, and
-the rise table that `R`'s moves read are checked by every build on the computed data. A failed check
-makes the tool decide the cone unreduced and print a warning. The theorems need only these
+the rise table that `R`'s moves read are checked by every build on the computed data. A failed
+split, loop-mark or rise check makes the tool decide the cone unreduced and print a warning. A
+partition that fails its check is replaced by the sweeps' partition, with a warning. The theorems need only these
 properties, not the algorithms that compute the split and the partition.
 
 ### 3.3 Instance symmetry
@@ -297,13 +298,16 @@ The translation is validated in four ways:
    admissibility (S1–S5, `reduce/lemma5.rs::split_faults`), the partition's stability (B1–B3,
    `partition/reference.rs::stable`), the *can loop* marks (`reduce/hypotheses.rs::loop_faults`),
    the rise table and the layout of `X` (`rise_faults`, `layout_faults`), and the stub binding of
-   `X` (`extended.rs::StubCheck`). On a failure it decides the cone unreduced. The certificates
-   are executable checkers whose soundness for the hypotheses is proved in Lean
-   (`Lemma5Check.lean::check_sound`, `Sweep.stable_of_cert`). `scripts/check-lean-certificates.sh`
-   and `scripts/check-lean-partitions.sh` run the Lean-compiled checkers on every split and every
-   flat partition of the samples and the corpus.
-2. **Self-certifying counterexamples.** Every printed counterexample is replayed through the step
-   relation of the model's system before it prints. A trace that does not replay is a `tool_error`.
+   `X` (`extended.rs::StubCheck`). On a failed partition check it uses the sweeps' partition; on
+   any other failure it decides the cone unreduced. The run-time checks are Rust. Lean proves sound
+   a model of the partition check (`Sweep.stable_of_cert`) and two separate checkers
+   (`Lemma5Check.lean::check_sound`, `PartitionCheck.lean::PCert.stable_of_check`), which
+   `scripts/check-lean-certificates.sh` and `scripts/check-lean-partitions.sh` run on the dumped
+   top-level splits and flat partitions of the samples and the corpus. Nested runs, runs up to a
+   subgroup and capped runs are not dumped.
+2. **Self-certifying counterexamples.** Every printed counterexample is lifted to the unreduced
+   cone and replayed through the step relation of the system the tool built before it prints. A
+   trace that does not replay is a `tool_error`. Replay cannot catch a fault in the builder itself.
 3. **One syntax for the Lean slot model and LC.** The action model of Lemmas 5 and 6 is read off
    the slot model of Theorem 4, and `Local`, `shape` and `new_writes` are theorems of that model
    (`SymActModel.lean`). That the code's actions are this syntax is read from the code.

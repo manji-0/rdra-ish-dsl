@@ -23,11 +23,12 @@ partition, and marks blocks that can loop silently so that the quotient stays so
 `WF(Next)`. *Instance symmetry* uses a state-dependent group that permutes only the slots that are
 not absent and relabels foreign keys, and it carries fair instances along each quotient edge's
 permutation. We prove both sound for per-instance weak fairness over a small calculus, and we
-mechanize the flat cases in Lean 4. The implementation trusts neither reduction's code. Every run
-checks the hypotheses that depend on computed data, decides a cone unreduced when a check fails,
-and replays every counterexample on the original model before printing it. On nine models, the
-quotient turns runs that do not finish in 300 s into runs of a few seconds, and the verdicts match
-the unreduced runs and TLC.
+mechanize their flat cases in Lean 4. The implementation does not trust the code that computes
+either reduction. Every run checks the hypotheses that depend on computed data and falls back to a
+sound alternative when a check fails, and every printed counterexample is replayed on the unreduced
+system before it prints. On the four largest of nine models, `verify` with the quotient finishes in
+4 to 20 s. Without it, it does not finish within 300 s. BFS on the whole model, with no cone,
+passes 10 million states on every domain model without finishing.
 
 # 1 Introduction
 
@@ -68,7 +69,7 @@ searches the quotient answers `ok`, and that answer is wrong (Section 2).
 TLA+ specifications that allocate the first free slot, creation takes the *lowest absent* slot.
 A permutation that moves an absent slot does not commute with creation. In the corpus case
 `presence_first_absent_asymmetry`, only the second order can ever be a rush order, so a checker
-that assumes the slots interchangeable misses a liveness violation (Section 2). TLC's symmetry
+that decides one binding and assumes the others alike misses a liveness violation (Section 2). TLC's symmetry
 sets have a second problem: TLC's documentation warns that liveness checking under symmetry can
 miss violations or report spurious ones.
 
@@ -82,22 +83,27 @@ miss violations or report spurious ones.
    that, with a *can loop* mark on every block with a silent cycle, a fair-cycle search on the
    reduced cone is sound for `WF(Next)` (Theorem 3).
 2. *A state-dependent symmetry group* (Section 5). `G_s` permutes only the slots that are not
-   absent in `s` and relabels foreign keys. Under six syntactic hypotheses, the orbit relation is
+   absent in `s` and relabels foreign keys. Under five syntactic conditions and the semantics of
+   delete (G1–G6), the orbit relation is
    a bisimulation on the states whose absent rows hold base values (Theorem 4). Quotient edges
    carry permutations, fair instances move along them, and the fair-cycle search on the annotated
    quotient decides `eventually` and `leads_to` exactly (Theorem 5).
 3. *Certificates and fallback* (Section 6). The proofs need facts about data the tool computes:
-   the split, the partition, the loop marks, the rise table. Every run checks these facts and
-   decides the cone unreduced if a check fails. The checkers of the split and the partition are
-   proved sound in Lean. Every printed counterexample is lifted through both reductions and
-   replayed on the original model.
+   the split, the partition, the loop marks, the rise table, the symmetry hypotheses. Every run
+   checks these facts. A failed split, loop-mark, rise or binding check makes the tool decide the
+   cone unreduced. A partition that fails its check is replaced by a fallback partition. A class
+   that fails the symmetry scan is left out of the group. Lean proves sound a model of the
+   partition check and two checkers that scripts run on the dumped splits and flat partitions.
+   Every printed counterexample is lifted to the unreduced cone and replayed on the built system.
 4. *Evaluation* (Section 7). An ablation of each reduction on nine models, scaling in the number
    of instances, determinism across thread counts, the smallest instance count at which each of
-   130 known counterexamples appears, and agreement with TLC.
+   132 known counterexamples appears, and verdict agreement with TLC.
 
 The theorems are stated over LC, a calculus of entities, slots, owners and guarded actions
 (Section 3). The flat cases of Theorems 2–5 and the fair-cycle search are mechanized in Lean 4
-(about 14k lines, no Mathlib, no `sorry`; Appendix A). The link from the Rust implementation to
+(about 14k lines, no Mathlib, no `sorry`; Appendix A). Two steps are argued on paper: the cases of
+(G6) outside the Lean model's guard form, and the invariance of the tool's property forms under
+`G_s` (Theorem 5 takes it as a hypothesis). The link from the Rust implementation to
 LC is validated (Section 6), not proved. We say so wherever it matters.
 
 # 2 Two examples
@@ -126,19 +132,22 @@ The property is checked under `WF(Next)`. On the cone, the behaviour that submit
 runs `Unlatch`, `Relatch`, `Unlatch`, … forever never unlocks the key. It changes the state
 infinitely often, so it satisfies `WF(Next)`, and the job never starts: a counterexample. The
 gate is an independent sub-lifecycle of the job's cone: the job reads only `Gate.status == open`.
-A stable partition groups the sub-lifecycle's states by what the job observes, so the states of a
-shut gate with the latch set and with it cleared fall into one block. In the quotient that block
-has a silent move towards the open gate, and no loop. A `WF(Next)` search on the quotient therefore never stops in it, and answers `ok`.
+The sub-lifecycle holds the gate and its key. A stable partition groups its states by what the
+job observes, so the states of a shut gate, whatever its latch and its key, fall into one block.
+In the quotient that block has a silent move towards the open gate, and no loop. A `WF(Next)`
+search on the quotient alone therefore never stops in it, and answers `ok`.
 Theorem 3 fixes this with the *can loop* mark: a block whose silent edges between different
 states contain a cycle may be a place where the quotient's behaviour stops. With the mark, the
-search reports the lasso, which the tool lifts to the 3-step prefix and the latch loop above and
-replays on the cone.
+search reports the lasso. The tool lifts it to a one-step prefix (`Submit`) and the two-step
+latch loop (`Unlatch`, `Relatch`), and replays it on the cone. The reduced cone has 54 states, and the
+unreduced cone (1,784 states) gives the same verdict.
 
 **Slots that are not interchangeable.**
 
 ```
 entity Order { status: Enum(open, done)  rush: Bool }
 entity Gate  { state: Enum(closed, open) }
+Build:     creates Gate
 Place:     creates Order
 PlaceRush: creates Order with rush := true   when Gate.state == open
 Finish:    Order.status open -> done          when rush == false
@@ -149,20 +158,23 @@ property RushFinishes  eventually(Order.status == done).fair(Finish)
 The gate opens only after some order is done, and a rush order needs the open gate. So the first
 order is never a rush order. Creation takes the lowest absent slot, so the first order is always
 `Order#1`, and only `Order#2` can be a rush order, which never finishes. At two instances the
-property fails, and only for `Order#2`. Swapping the two order slots in a state where only
-`Order#1` exists gives a state where `Order#2` exists and `Order#1` is absent. No run reaches that
-state: 4 of the 41 reachable states have such a swap. A group that moves absent slots is
-therefore no symmetry of the system. `G_s` fixes absent slots, so in a state with one order it is
-trivial, and in a state with two orders it may swap them. Their histories are already fixed by
-then. The run up to `G_s` finds the counterexample at `Order#2` and lifts it.
+property fails, and only for `Order#2`. The system has 41 reachable states. In each one in which
+only `Order#1` exists, swapping the two order slots gives a state in which `Order#2` exists
+and `Order#1` is absent, and no run reaches it. A group that moves absent slots is therefore no
+symmetry of the system. `G_s` fixes absent slots, so in a state with one order it is trivial, and
+in a state with two orders it may swap them. The representative of an orbit need not be
+reachable: the swap of a state with `Order#1` done and a rush `Order#2` is unreachable but in the
+same `G_s`-orbit, which Theorem 4 allows. A run up to `G_s` (forced on this small cone, as the
+corpus does) finds the counterexample at `Order#2` and lifts it.
 
 # 3 The calculus LC
 
 LC keeps from rdra-ish what the reductions need: entities with bounded slots, finite-domain
 columns, owners (foreign keys), and guarded actions with per-instance weak fairness. The full
-definitions are in the technical report. The language constructs that LC omits (raised events,
-split use cases, copies, the clock) are columns and guards of LC, or are handled by the cone
-before a reduction applies.
+definitions are in the technical report. Most constructs that LC omits (raised events, split use
+cases, the clock) map to LC columns and guards. Copies between columns, cones that leave an event
+mark out, guard folds and nested reductions need arguments of their own, which the technical
+report gives.
 
 **Signature and states.** A signature has entities `E`, columns `c ∈ Col(E)` with finite domains
 `D_c` and base values, and owners `o ∈ Own(E)` with a parent entity `par(o)`, each mandatory or
@@ -208,7 +220,7 @@ effects write form an acyclic graph apart from self-loops. The split is *admissi
 - (S2) every `T_a` action writes only `T_v` and reads `S_v` only in `obs`;
 - (S3) every `S_a` action reads only `S_v ∪ inputs`;
 - (S4) every input is monotone;
-- (S5) the seeds read `S_v` only in `obs`, and every fair action is in `T_a`.
+- (S5) the seeds read `S_v` only in `obs`, and every fair or kept action is in `T_a`.
 
 The tool computes the least admissible split that keeps a chosen anchor variable in `T_v`, over
 all anchors, and keeps the one with the fewest `T` variables. The theorems need only
@@ -238,7 +250,7 @@ stuck states for changes of `T_v`, and on every liveness property over `T_v ∪ 
 in `T_a` under `Fair_P`.*
 
 *Proof sketch.* Lemma 6 of the technical report relates `C` and `X`: an `S_a` step of `C` is a
-silent edge of `X` and back, and a `T_a` step is a sequence of rises, one per changed input. `T_a`
+silent edge of `X` and back, and a `T_a` step that changes the inputs is a rise. `T_a`
 steps read `S_v` only through `obs`, which (B1) fixes on a block, so they match exactly. An `S_a`
 step either stays in its block (a stutter of `R`) or enters a block `B'`, and (B2) gives a matching
 class move from the representative. Conversely a class move lifts, by (B2) and Lemma 6, to a path
@@ -257,14 +269,17 @@ block contain a cycle. The search on `R` uses the stop rule "no fair instance is
 no move leaves the state or its block can loop".
 
 **Theorem 3 (`WF(Next)` on the reduced cone).** *Under the hypotheses of Theorem 2, if `X` and `R`
-are finite and every block with a silent cycle is marked, and the fair-cycle search on `R` with the
-looping stop rule finds no violation, then `C` satisfies the property under `WfNext`.*
+are finite, every block with a silent cycle is marked, and the fair-cycle search on the complete
+graph of `R` with the looping stop rule finds no violation, then `C` satisfies the property under
+`WfNext`.*
 
 *Proof sketch.* Take a violating behaviour `σ` of `C` under `WfNext` and its image in `R`. If the
 image changes infinitely often, it eventually stays in a strongly connected set of goal-free states
 in which every fair instance is either taken or disabled somewhere, a fair component that the
 search finds. If the image is eventually constant but `σ` is not, `σ` steps forever inside one
-block. Its fair instances are then disabled (they are `T_a`, and `obs` is constant). The
+block. The enabledness of its fair instances is then constant (they are `T_a` actions, and `T_v`
+and `obs` are constant), and one that is enabled would be taken under `Fair_P` and change `T_v`,
+so all are disabled. The
 state-changing steps of `σ` form an infinite walk in the block's finite silent graph, so the
 graph has a cycle, the block is marked, and the image may stop there. If `σ` stutters forever at
 `(t, s)`, `WF(Next)` says no step leaves `(t, s)`. A move of `R` from the image would lift to one
@@ -301,6 +316,11 @@ value.
 - (G6) no guard reads the owner of the row being created, before the step, when that owner's parent
   class moves.
 
+Theorem 4 also uses two facts of the builder, which the scan does not check: every `new` parameter
+is created by its action, and a parameter bound by a split use case's run mark carries the mark's
+guard. The proof also reads the model as well-typed: a term reads, and an effect writes, a column
+of its own entity.
+
 The tool checks (G1)–(G4) and (G6) syntactically and fixes every class that fails one. (G5) is part
 of the semantics. Fixing more classes only shrinks the group (`Sym.sub` in Lean), so leaving out a
 class costs reduction, never soundness.
@@ -324,17 +344,22 @@ commutation on reachable states is not enough.
 plain quotient graph does not suffice. Each stored edge keeps the permutation `σ` that took the
 concrete successor to the stored one. A binding, and each fair instance, moves along a path by
 these permutations: its *thread*. The search runs on pairs (stored state, binding). A component of
-pairs is fair when every thread enabled throughout is taken or disabled somewhere within it. An
+pairs is fair when it has a cycle and every thread, followed around it, is taken on one of its edges
+or is disabled at one of its pairs. An
 *orbit self-edge* (a step whose successor is a different state in the same orbit) counts as a move.
 
 **Theorem 5 (liveness up to symmetry).** *Assume Theorem 4's commutation on `W`, that the group acts
 on fair instances compatibly with action labels, that the trigger and the stop rule are invariant
-under `G_s`, and that the goal is invariant after a trigger. Then a property holds for every binding
-under `Fair_P` (or `WfNext`) iff no thread-fair annotated lasso of the canonical quotient violates it
-for any binding. A violating annotated lasso lifts to a violating lasso of `T` by unrolling its
+under `G_s`, that the goal is invariant after a trigger, that the canonical form is a member of the
+orbit chosen as a function of the state, and that the reachable states and every `G_s` are finite.
+Then a property holds for every binding under `Fair_P` (or `WfNext`) iff no annotated lasso of the
+canonical quotient that is thread-fair and stops only where the stop rule allows violates it for
+any binding. A violating annotated lasso lifts to a violating lasso of `T` by unrolling its
 cycle `d` times, where `d` is the order of the cycle's composite permutation.*
 
-This is the Emerson–Sistla annotated quotient for a state-dependent group, with weak fairness per
+The invariance of the trigger and the goal is argued on paper for the tool's property forms. The
+Lean model has no property syntax and takes it as a hypothesis. This is the Emerson–Sistla
+annotated quotient for a state-dependent group, with weak fairness per
 action instance. The group's dependence on the state matters in two places: frames compose only
 because `G_{g(s)} = G_s` and steps keep `g ∈ G_t`, and the lifted lasso closes only after `d` copies.
 Liveness runs up to `G_s` are used for `eventually` and `leads_to`. The tool runs `stable`,
@@ -344,20 +369,28 @@ Liveness runs up to `G_s` are used for `eventually` and `leads_to`. The tool run
 
 The theorems have hypotheses about data the implementation computes, and the implementation is
 Rust, not LC. We do not prove the implementation correct. Instead, every run checks the hypotheses
-that depend on computed data, and the tool replays its own counterexamples.
+that depend on computed data, and the tool replays its own counterexamples. The table gives each
+check and what a failure does. The run-time checks are Rust code. Lean proves sound a model of the
+partition check (`Sweep.stable_of_cert`), and two separate checkers (`Lemma5Check.check_sound`,
+`PCert.stable_of_check`) that scripts run on the dumped top-level splits and flat partitions of the
+samples and the corpus. The checks are literal on a flat `X`. For a nested `X`, or one run up to a
+subgroup, they read the stored graph, and part of the argument stays on paper. When the
+sub-lifecycle has no observed variable, `X` is not explored in a release build, and its loop
+condition is checked only in test builds.
 
-| Hypothesis | Run-time check | On failure | Checker proved sound in Lean |
+| Hypothesis | Run-time check | On failure | Lean counterpart |
 |---|---|---|---|
 | Split admissible (S1–S5) | recompute `Rd`, `Wr` and monotonicity from the actions and check each condition on the split | cone decided unreduced, warning | `Lemma5Check.check_sound` |
-| Partition stable (B1–B3) | sweep the explored `X`: block-local silent reachability and rise targets | fall back to the sweeps' partition | `Sweep.stable_of_cert` |
+| Partition stable (B1–B3) | sweep the explored `X`: block-local silent reachability and rise targets | fall back to the sweeps' partition, warning | `Sweep.stable_of_cert` (model of the check); `PCert.stable_of_check` (offline checker) |
 | *can loop* covers every silent cycle | peel the silent edges inside unmarked blocks; a remaining state lies on a cycle | cone decided unreduced | — |
 | Rise table, layout of `X` | each rise of a representative is one stage; inputs laid out as `R` reads them | cone decided unreduced | — |
 | Bindings in `X` | no parameter of `X` that needs a present row sits on an entity `X` does not hold | cone decided unreduced | — |
 | (G1)–(G4), (G6) | syntactic scan of every guard and effect | class fixed (left out of `G_s`) | — |
-| Any counterexample | lift through class moves and permutations; replay on the model's step relation; check fairness of a lasso | `tool_error` (never printed as a counterexample); a reduced liveness candidate that fails goes to the unreduced cone | — |
+| Any counterexample | lift to the unreduced cone through class moves and permutations; replay on the built system's step relation; check the fairness of a lasso | `tool_error` (never printed as a counterexample); a reduced liveness candidate that fails goes to the unreduced cone | — |
 
-Two scripts run the Lean-compiled checkers on every split and every flat partition of the samples
-and the corpus.
+Replay is against the system the tool built, so it cannot catch a fault in the builder itself.
+The step from the cone to the whole model rests on Theorem 1. A counterexample of a run up to
+symmetry on a reduced cone is never printed: plain runs decide that cone again.
 
 What remains read from the code rather than checked: that the code's actions are LC syntax (the
 Lean slot model shares its syntax), eight facts about which guards the restriction to `X` keeps and
@@ -398,7 +431,7 @@ SUMMARY-SCALING
 
 ## 7.3 How many instances find the known counterexamples? (RQ3)
 
-Across the 91 corpus cases and the failing sample headers, 130 expected counterexamples are
+Across the 91 corpus cases and the failing sample headers, 132 expected counterexamples are
 known. 106 of them appear at one instance per entity, and 24 first appear at two. The remaining
 two need per-entity counts above the uniform bound of three (`--instances Loan=4`) or a memory cap
 that the header sets. No counterexample needs three uniform instances where two do not suffice.
@@ -421,7 +454,8 @@ SUMMARY-TLC
 
 The project's history records 74 defects in the verification pipeline
 ([evidence/defects.md](./evidence/defects.md)). 30 of them printed a wrong verdict on some model. 19
-were found while writing or auditing the paper proofs behind this work, 13 of them wrong verdicts,
+were found while writing or auditing the theory documents (including the `--prove` mode, outside
+this paper), 13 of them wrong verdicts,
 and 6 of those a wrong `ok` or `proved` that the native checker and TLC agreed on or that no
 comparison reached. Differential
 testing against TLC and the engine corpus found 7. The Lean proofs, the reference interpreter, the
@@ -487,7 +521,8 @@ state.
 # Appendix A: the Lean development
 
 `proofs/lean/` (Lean 4.36.0, core only, no Mathlib). `scripts/check-lean-proofs.sh` builds it and
-fails on any `sorry`, `admit` or `axiom` and on any theorem that depends on an axiom outside
+fails on any `sorry`, `admit` or `axiom` in the sources, and on any theorem listed in
+`CheckAxioms.lean` that depends on an axiom outside
 `propext`, `Classical.choice` and `Quot.sound`. CI runs it. The theorem map:
 
 | Paper | Lean |
@@ -497,5 +532,5 @@ fails on any `sorry`, `admit` or `axiom` and on any theorem that depends on an a
 | Theorem 4 | `SymActions.symOn`, `Symmetry.a18_dbsb`, `quotient_covers`, `quotient_sound`, `Sym.sub` |
 | Theorem 5 | `SymmetryLiveness.a23`, `a23_on`, `lasso_closure`; search `SearchSym.oAccepts_on_iff` |
 | Fair-cycle search | `Search.accepts_iff`, `liveHolds_iff_not_accepts` |
-| Checkers | `Lemma5Check.check_sound`, `Sweep.stable_of_cert` |
+| Checks | `Lemma5Check.check_sound` (offline split checker), `PCert.stable_of_check` (offline partition checker), `Sweep.stable_of_cert` (model of the run-time partition check) |
 | Necessity of `W` | `SymActionsExample.off_W_counterexample`, `ExampleReachOnly.reach_only_counterexample` |

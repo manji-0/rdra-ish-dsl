@@ -21,3 +21,7 @@ samples/patent-ops	cone+sym	timeout	timeout	300.21	295.61	0.44	6	329978	2208525	
 samples/patent-ops	cone+reduce+sym	0	ok	3.79	3.65	3.09	19	1942129	9247470	1341707	64.1	149.8	163	-
 samples/clinic-ops	cone	timeout	timeout	300.23	294.5	287.05	19	120873184	982900038	105791435	6568.5	9.7	7435	-
 samples/clinic-ops	cone+reduce	0	ok	11.3	10.61	7.83	49	5617011	36808559	2238170	136.3	601.2	549	-
+samples/clinic-ops	cone+sym	timeout	timeout	300.27	294.58	282.14	19	120873184	982900038	105791435	6568.5	9.7	7578	-
+samples/clinic-ops	cone+reduce+sym	0	ok	12.75	12.31	9.22	49	5495861	36137155	2238170	136.3	601.2	549	-
+samples/food-permit-ops	cone	timeout	timeout	300.25	295.74	0.0	1	43	66	43	0.0	7.4	7372	-
+samples/food-permit-ops	cone+reduce	0	ok	20.14	19.47	14.51	28	7009703	61565367	4846569	348.3	744.0	744	-

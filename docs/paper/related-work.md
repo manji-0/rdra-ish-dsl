@@ -28,8 +28,8 @@ The comparison uses the following facts about rdra-ish. Each cites its claim in
 - **The group depends on the state (A18).** In a state `s`, `G_s` permutes the slots of an
   entity class that are not absent in `s`. Absent slots stay fixed, because creation takes
   the lowest absent slot (`FirstAbsent`). A permutation of all slots would not commute with
-  that creation step: in the corpus case `presence_first_absent_asymmetry`, 4 of the 41
-  reachable states have a swap that no run reaches. An owner (foreign-key) value on a
+  that creation step: in the corpus case `presence_first_absent_asymmetry`, every reachable
+  state in which only the first order exists has a full-slot swap that no run reaches. An owner (foreign-key) value on a
   present or deleted row is relabelled by the parent class's permutation, and a deleted row
   keeps its keys (G5). A syntactic scan leaves out a class when the model breaks one of the
   hypotheses (G1)–(G6), and leaving a class out loses only reduction (A20). The

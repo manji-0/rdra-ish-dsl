@@ -1,1 +1,9 @@
 samples/patent-ops	2	47	58	>10000000	false	76962
+samples/clinic-ops	2	-	-	timeout 400 s	false	400000
+samples/food-permit-ops	2	49	51	>10000000	false	85816
+samples/insurance-claim-ops	2	50	59	>10000000	false	102180
+samples/oidc-auth	1	78	61	>10000000	false	97863
+samples/ec-site	2	26	11	>20000000	false	82578
+samples/personal-info	2	19	15	209	true	0
+samples/api-contract	2	1	1	1	true	0
+samples/incremental-order/step-7-business-rules/src	2	5	3	36	true	0

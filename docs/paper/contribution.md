@@ -7,8 +7,8 @@ This note records the decisions of roadmap items T1 and T2 of issue #594. It des
 
 **Thesis.** *Two reductions make explicit-state checking of fair liveness feasible on
 data-carrying lifecycle models. Each one is sound for per-instance weak fairness, each one is
-checked against its hypotheses on every run, and each one falls back to the unreduced run when a
-check fails.* The two reductions are:
+checked against its hypotheses on every run, and each one falls back to a sound alternative (the
+unreduced cone, a fallback partition, or a smaller group) when a check fails.* The two reductions are:
 
 1. the quotient of an independent sub-lifecycle by divergence-blind stuttering bisimulation,
    with a *can loop* mark per class that keeps the quotient sound for `WF(Next)`; and
@@ -69,10 +69,12 @@ in [docs/theory/README.md](../theory/README.md#known-limitations):
 > state-dependent group `G_s` that permutes only the non-absent slots and relabels foreign keys.
 > A quotient edge carries the permutation that produced it, and fair instances are tracked along
 > these permutations, so the search for fair cycles decides `eventually` and `leads_to` exactly.
-> The flat cases of both theorems are mechanized in Lean 4. Neither reduction trusts the code
+> The flat cases of both theorems are mechanized in Lean 4, with two steps of the symmetry proofs
+> argued on paper. Neither reduction trusts the code
 > that computes it. Every run checks the split, the partition, the loop marks and the symmetry
-> hypotheses, and decides the cone unreduced when a check fails. Every printed counterexample is
-> lifted through both reductions and replayed on the original model before it prints.
+> hypotheses. A failed check makes it decide the cone unreduced, use a fallback partition, or leave
+> a class out of the group. Every printed counterexample is lifted to the unreduced cone and
+> replayed on the built system before it prints.
 >
 > We implemented both reductions in rdra-ish, an explicit-state checker for a requirements DSL.
 > We evaluate them on nine sample models and a corpus of 91 adversarial cases, reporting an
@@ -88,8 +90,8 @@ in [docs/theory/README.md](../theory/README.md#known-limitations):
    hypotheses (G1–G6). We show that it is a bisimulation on the states whose absent rows hold base
    values (Theorem 4), and that fair liveness transfers to an annotated quotient (Theorem 5).
 3. Certificates and fallback: executable checks of every hypothesis that depends on computed
-   data, checkers proved sound in Lean, and replay of every counterexample through both
-   reductions.
+   data, a Lean model of the partition check and Lean-verified offline checkers, and replay of
+   every printed counterexample on the unreduced cone.
 4. An implementation and an evaluation: an ablation per reduction, scaling, determinism across
    thread counts, and agreement with TLC on the same printed systems.
 
@@ -114,12 +116,11 @@ stop in the block and reports the counterexample that TLC reports on the unreduc
 once some order is done, a rush order needs the gate open, and `Finish` skips rush orders. So
 the first order created is never a rush order. Creation takes the lowest absent slot, so the first
 order is always `Order#1`, and only `Order#2` can be a rush order that never finishes. A checker
-that decides one binding and assumes the others alike, or that permutes all slots of `Order`,
-answers `ok` for `eventually(Order.status == done).fair(Finish)`. The correct verdict is a
+that decides one binding and assumes the others alike answers `ok` for `eventually(Order.status == done).fair(Finish)`. The correct verdict is a
 counterexample. In the run up to `G_s`, a permutation never moves an absent slot, so the
-asymmetry of creation is kept, and the counterexample is found and lifted. The related-work note
-records that 4 of the 41 reachable states of this model have a swap that no run reaches
-([related-work.md](./related-work.md)).
+asymmetry of creation is kept, and the counterexample is found and lifted. Of the 41 reachable
+states, every one in which only `Order#1` exists has a full-slot swap that no run reaches, so a
+group that moves absent slots is no symmetry of this system.
 
 **What existing tools do with them.**
 
