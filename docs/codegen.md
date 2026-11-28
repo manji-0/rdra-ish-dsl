@@ -204,7 +204,7 @@ its actions has:
 - **Events.** It raises or handles a counted event (`triggers(..).counted(k)`); two events
   order one step; an event guard has another form than an equality on a row the step takes;
   it raises an event without marking its row; or it raises an event or keeps a run mark on
-  an entity with no one-column key.
+  an entity with no one-column key, or on a created row with no id input.
 - **Keys and links.** A key over several columns; a key between rows an earlier step wrote
   (their marks carry ids, not keys); a link guard on a column that is not a key, on a created
   row, or with no `links` line.
@@ -215,13 +215,20 @@ its actions has:
   row that is not an argument, between columns of different types, or from a column that
   may be null into one that may not.
 - **Conditions.** A condition on what a later step of the use case writes, or on a second
-  lifecycle column or a created row's own key after the use case; a condition atom or a
-  guard of a form the generator does not print.
+  lifecycle column or a created row's own key after the use case; an ordering comparison on
+  a column that is not a plain (non-null) `Int`; a condition atom or a guard of a form the
+  generator does not print.
 - **Size.** More than 16 combinations of its rows' source states, or more than 16 choices
   among its arms.
+- **No reachable source.** The verified model never runs it from any combination of source
+  states.
 
-A `@derived` column the function cannot compute (an arithmetic expression, `now`, an input,
-another derived column) does not stop the function: it becomes an input, and the function's
+The rest name a part of the model the generated types do not hold (an entity with no
+generated type, a column with no field, a variable that is not a column); the header names
+which.
+
+A `@derived` column the function cannot compute (for example an arithmetic expression, one
+that reads `now`, an input, or another derived column) does not stop the function: it becomes an input, and the function's
 doc says why.
 
 ### Obligations

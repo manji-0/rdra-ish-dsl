@@ -327,8 +327,8 @@ error[CodeObligationUnowned_Unique_Order_note]: no code owns the obligation Uniq
   Go the probe's package. An `OK` at `build` says nothing of a binary, a handler, or a file
   the probe does not reach.
 - Each trace runs on a fresh store: the harness calls `new` once per trace, which
-  on the clinic-ops sample at the default `conformance_states` is hundreds of thousands of
-  times (the counts are in [Costs](./codegen.md#costs)), and `seed` empties the store before
+  on the clinic-ops sample at the default `conformance_states` is more than a hundred
+  thousand times (the counts are in [Costs](./codegen.md#costs)), and `seed` empties the store before
   it stores the trace's rows. Make `new` cheap: share one database and let `seed` clear it, rather than
   open or migrate one per call. Migrations, and data an earlier version of the service
   stored, are outside what the check runs.
@@ -2177,7 +2177,8 @@ still forges one); a Go interface with an unexported method only those capabilit
 made valid only by `Issue<Actor>Capability()`. Go cannot forbid the zero value or a nil
 caller; `Valid()` and `CallerValid(by)` report them. Whether the code that calls `issue`
 authenticated the actor is not checked. The contracts name rows by their key, so they need
-every entity to have a one-column primary key that is not `Bool`. For another model the
+every entity to have a one-column primary key that is not `Bool`. When the conformance port
+cannot be built for the model (chiefly for that key; the `--conformance` error names why), the
 output has no contracts, entry points, callers, or conformance port (the functions, rule
 checks and dispatchers stay), `check --code` has no contract to check the service against,
 and `--conformance` fails with `codegen: no conformance harness for this model: <why>`.
