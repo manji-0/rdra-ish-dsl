@@ -242,3 +242,49 @@ fn no_counterexample_certificate_fires_on_the_walked_models() {
         "{counts}"
     );
 }
+
+/// Outside a planted test, a debug build stops at a fault of the free triggers with `shadow:`.
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic(expected = "shadow: annotate:")]
+fn a_free_trigger_fault_panics_in_a_debug_build() {
+    let ts = doc();
+    let mut t = real_trace(&ts);
+    ts.certify_free_triggers(&ts.target_cone(Target::Invariant(0)), &mut t);
+}
+
+/// Outside a planted test, a debug build stops at an exact cone that leaves a mark out.
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic(expected = "shadow: exact_target_cone:")]
+fn an_exact_cone_fault_panics_in_a_debug_build() {
+    let ts = doc();
+    let rule = Target::Invariant(0);
+    ts.certified_exact(rule, false, ts.target_cone(rule));
+}
+
+/// Outside a planted test, a debug build stops at an exact cone's unvouched counterexample.
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic(expected = "shadow: recheck_on:")]
+fn an_unvouched_exact_counterexample_panics_in_a_debug_build() {
+    let ts = doc();
+    let Recheck::Violated(mut d) = ts.recheck(Target::Invariant(0), false, caps()) else {
+        panic!("a violation");
+    };
+    let t = d.diag.trace_mut().unwrap();
+    t.free_triggers = vec![("Finalize".to_string(), "EvReviewed".to_string())];
+    ts.unvouched_fault(Target::Invariant(0), &d, false);
+}
+
+/// Outside a planted test, a debug build stops at a lifted start that is no initial state.
+#[test]
+#[cfg(debug_assertions)]
+#[should_panic(expected = "shadow: lift:")]
+fn a_lifted_start_fault_panics_in_a_debug_build() {
+    let ts = doc();
+    let mut s = ts.initial_states().remove(0);
+    let e = &ts.entities[0];
+    s.set(&ts, e.exists, 0, crate::lifecycle::Value::PRESENT);
+    let _ = crate::lifecycle::vouch::lifted_start(&ts, &mut s);
+}
