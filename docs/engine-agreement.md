@@ -400,12 +400,19 @@ differ by design.
   diverges.
 - A seed past the per-run timeout is listed, never dropped. A run that prints
   `error[LassoFault]`, or with `--with-tlc` `error[EngineDisagreement]`, is listed under
-  `disagreed`.
+  `disagreed`. So is a reduced run that warns that an extended sub-lifecycle failed its stub
+  check, since it then decides that cone unreduced and the verdicts agree.
 - `selfcheck` runs the comparison on the saved output pairs in `scripts/reduction-diff-fixtures`.
+- `--stubs` draws each seed's model from a second generator, `gen_stubs`, whose cones reduce
+  with a param on a stub: a folded S action's `Triggered` param, and a rise's `Parent`,
+  `Existing` or `Triggered` param (`bind_stub_params`). The first generator draws these
+  shapes rarely. The summary counts the seeds that reach each shape, a nested reduction, and
+  S up to `H`, from the reduced run's `reduction-shape:` lines.
 
 CI runs `selfcheck`, then the quick seeds of `scripts/reduction-diff-pr-seeds.txt` without TLC on
-a pull request, and quick seeds with `--with-tlc` on main, all with `--fail-on-timeout`. Larger
-sweeps run locally:
+a pull request, and quick seeds with `--with-tlc` on main, all with `--fail-on-timeout`. It also
+runs 95 quick `--stubs` seeds without TLC on both, and 30 of them in the `shadow` job under
+`--symmetry always` and `RDRA_ISH_FORCE_S_UP_TO_H`. Larger sweeps run locally:
 
 ```sh
 cargo build --release -p rdra-ish-cli
