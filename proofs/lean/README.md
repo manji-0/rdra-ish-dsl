@@ -21,8 +21,10 @@ read off that slot model, and `Local`, a hypothesis of both lemmas, is derived f
 [native.md](../../docs/theory/native.md#the-check), the liveness search by fair components,
 and the same search on the pairs of a run up to symmetry are stated over abstract
 transition systems too ([The liveness searches](#the-liveness-searches)). None of them reads
-the Rust code. One executable, `lemma5-check`, checks the sets the code computes against
-Lemma 5 ([Checking the code's sets with Lean](#checking-the-codes-sets-with-lean)).
+the Rust code. Two executables check what the code computes
+([Checking the code's sets with Lean](#checking-the-codes-sets-with-lean)): `lemma5-check`
+checks the sets of each split against Lemma 5, and `partition-check` checks each partition
+of a flat run of `X` against (B1)–(B3) and the run against the shape of `X`.
 
 ## Building
 
@@ -252,7 +254,10 @@ The proofs assume the following hypotheses and do not derive them:
     That the run the check reads is `X`'s reachable graph (`Sweep.Complete`), that the
     depth-first marking of `partition/reference.rs::stuttering_blocks` computes
     `Sweep.Marked`, and that the fallback partition of `partition/reference.rs::quotient_blocks`, used without the check,
-    meets `Sweep.Cert` when the sweeps stop are read from the code.
+    meets `Sweep.Cert` when the sweeps stop are read from the code. On the flat runs of the
+    samples, the domain samples and the corpus, `partition-check` checks the partition the
+    code uses, whichever of the two it is, and the shape of the run
+    ([below](#the-partitions-and-the-shape-of-x)).
 - **A8, the rest of the theorem.** The proofs leave out these parts:
   - The rises carry no `stands`. Consequences 2 to 4 read only the `T_a` labels of `C` and
     `R`, and `R`'s `T` move reads a rise only through the input bytes it ends at.
@@ -490,9 +495,11 @@ with the inputs of `S` on and off (the walk of `every_split_passes_its_check`):
 
 The dump has about 500 distinct certificates, about half of them with an `S` side, at most
 34 variables and 46 actions each, about 200 KB in all. Once the Rust test binary and the
-Lean project are built, the script takes about 3 seconds, and `lemma5-check` itself takes
-0.03 s of CPU. A cold run adds the build of rdra-ish-core's test binary. CI does not run
-the script.
+Lean project are built, this part takes about 3 seconds, and `lemma5-check` itself takes
+0.03 s of CPU. A cold run adds the build of rdra-ish-core's test binary. The script then runs
+`scripts/check-lean-partitions.sh`
+([below](#the-partitions-and-the-shape-of-x)). CI's `formal-verify` job runs both, with the
+`ci-checked` test binary it has already built.
 
 | Lean (`RdraIsh.`) | File | Claim | Statement |
 |---|---|---|---|
@@ -520,35 +527,96 @@ An accepted dump does not establish these:
   input.
 - **The tools.** The Lean compiler, `Lean.Json` and the Rust dump are trusted.
 
-### The same pattern for (B1)–(B3) and the shape of `X`
+### The partitions and the shape of `X`
 
-No checker exists for these. The pattern carries over as follows.
+<!-- constrained-by #the-partition-certificate-and-monotone-variables -->
 
-- **The data.** The certificate would carry what `partition/reference.rs::stable` reads: the
-  number of states of `X`, its silent edges and its rises as pairs of state numbers, the
-  initial labels (`Partition::initial`, each state's `obs` and inputs, numbered), and the
-  blocks. It would add the representative of each block. For (B1) to be checked rather than
-  read from the numbering, and for `Extended`, it would also give each state's `obs` values,
-  `S` values and input bytes, so that a check can test that a block agrees on `obs` and the
-  input bytes, a silent edge keeps the input bytes, and a rise keeps `S`.
-- **The checker.** It would test four things: that the blocks refine the labels (B1); that
-  one sweep with every block a splitter splits nothing (B2); that the states of a block
-  enter the same set of blocks by a rise (B3); and that each representative lies in its
-  block.
-- **The Lean statement.** The targets are `Reduction.lean`'s `Stable` and `Extended`, over
-  the system whose states are `Fin n` and whose steps are the listed edges, with `Reach`
-  being reachability from the listed initial states.
-- **The bridge.** The unverified step becomes "the dumped graph is `X`'s reachable graph",
-  where for Lemma 5 it is "the dumped sets are the cone's reads and writes".
-- **The cost.** The certificate grows with the states of `X`, not with its variables and
-  actions. The largest quotient `verify` computes on the samples has about 2.2 million
-  states, so a certificate takes megabytes, and the checker needs arrays rather than the
-  lists `check` uses. The step from the check to `Stable` is proved
-  ([below](#the-partition-certificate-and-monotone-variables)): `Sweep.stable_of_cert` takes
-  the check over a numbered run, `Sweep.check_sound` proves a Boolean checker over lists sound
-  for it, and `Sweep.b2_of_marking` reduces (B2) for any marking a faster checker computes to
-  three facts: it lies inside `Sweep.Marked`, it is closed under the two rules, and it is all
-  or none on each block.
+```sh
+scripts/check-lean-partitions.sh
+```
+
+The script checks every partition `Classes::of_graph` computes on a flat run of `X` (no
+inner reduction, not up to `H`) while the cones of the samples, the domain samples and the
+engine corpus cases that build a model are reduced, at `Bounds::STATES` and
+`Bounds::VERIFY`. That is the walk of `every_quotient_passes_the_checks_of_its_hypotheses`,
+with its cap of 50,000 states on a run of `X`.
+
+1. The ignored Rust test `dump_partition_certificates` turns on a record that only a test
+   build compiles (`partition/dump.rs`), called from `Classes::of_graph` once the partition
+   is certified (or replaced by the sweeps' partition). It writes one record per distinct
+   run, in lines of numbers:
+   - each state's `obs` value, its `S` value (every variable of `X` outside the inputs) and
+     its input bytes, each value numbered as it first shows;
+   - each state's class, numbered as `of_graph` numbers the classes;
+   - each class's representative (`Classes::reps`);
+   - the initial states, the silent edges and the rises (`split_edges`).
+
+   It counts the runs it leaves out, by reason: a run of an `X` under its own inner
+   reduction, whose states are inner classes; a run up to `H`, whose states are orbits; a
+   partition that is the identity, which `of_graph` turns down before it numbers classes; a
+   run a cap stopped, which is never partitioned; an unobserved `S`, which is never explored;
+   and a run past `RDRA_LEAN_RUNS_CAP` states (200,000 by default).
+2. `lake build` checks the soundness proof below and builds the executable
+   `partition-check` (`PartitionCheckMain.lean`). It runs `PCert.Data.check`
+   (`RdraIsh/PartitionCert.lean`) on each record, over arrays, and fails unless it accepts
+   all of them. `check` computes a witness and tests it with `validate`. The witness code is
+   not trusted, because the theorems hold for any witness `validate` accepts. The parts are:
+   - **well-formed**: each class number and each state number in range;
+   - **rep**: each class's representative lies in the class;
+   - **b1**: each state has its representative's `obs` value and input bytes;
+   - **b2**: each silent edge between two classes enters an exit listed for its source's
+     class, and each state reaches each exit of its class through the class, by a successor
+     of lower rank for each state and exit;
+   - **b3**: the classes each state enters by a rise, each listed class witnessed by a rise
+     and each rise by a listed class, are its representative's;
+   - **silent keeps inputs** and **rise keeps S**: the shape of `X`;
+   - **reach**: every state has an edge from a state of lower rank, or is initial.
+3. Eight faults are planted in copies of the dump, one per part. Each must be rejected, and
+   the rejection must name its part:
+   - a state given an `obs` value of its own (b1);
+   - two classes with the same `obs` and input bytes merged where the merge splits (b2);
+   - a rise added into a class the rest of its class does not enter (b3);
+   - a representative moved into another class (rep);
+   - a silent edge sent to a state with other input bytes;
+   - a rise sent to a state of the same class with another `S`;
+   - the initial states dropped (reach);
+   - a class number out of range (well-formed).
+
+The walk partitions 174 flat runs, 56 of them distinct, 57,488 states in all, the largest
+15,374. It leaves out 75 nested runs, 24 identity partitions, 47 runs stopped at the cap
+and 6 unobserved sub-lifecycles; no run is up to `H` or past the dump's cap. The dump is
+about 3.7 MB, three quarters of it silent edges. `partition-check` takes 0.14 s of CPU on
+it. The dump takes about 50 s in a debug test build and about 2.5 s, with the Lemma 5 dump,
+in a `ci-checked` one.
+
+| Lean (`RdraIsh.`) | File | Claim | Statement |
+|---|---|---|---|
+| `PCert.cert_of_validate` | `PartitionCheck.lean` | A8, (B1)–(B3) | For any witness that `validate` accepts, the record's partition passes `Sweep.Cert` on the run `Data.run`, whose labels are the `obs` value and the input bytes. |
+| `PCert.marked_of_exit`, `PCert.b2_of_check` | `PartitionCheck.lean` | A8, (B2) | A state whose class lists the splitter as an exit is `Sweep.Marked`, by induction on the rank of its successor. The marking "the class lists the splitter" is closed and all or none on each class, so `Sweep.b2_of_marking` gives the certificate's (B2). |
+| `PCert.enters_rep` | `PartitionCheck.lean` | A8, (B3) | Each state enters by a rise exactly the classes its representative enters. |
+| `PCert.reach_of_check`, `PCert.complete_of_check` | `PartitionCheck.lean` | A8, `Sweep.Complete` | Given `Graph` and `Faithful`, every numbered state of an accepted record is reachable, and the record's run is `Sweep.Complete`. |
+| `PCert.stable_of_check` | `PartitionCheck.lean` | A8, (B1)–(B3) | Given `Graph` and `Faithful`, an accepted record's partition is `Stable`, with the dumped representatives. |
+| `PCert.extended_of_check`, `PCert.reach_onReach` | `PartitionCheck.lean` | A8, the shape of `X` | Given `Graph` and `Faithful`, the steps of `X` from its reachable states (`onReach`, which has the reachable states of `X`) are `Extended`: a silent edge keeps the input bytes, a rise keeps `S`. |
+| `PCert.wf_of` | `PartitionCheck.lean` | none | The bounds the well-formed part checks. |
+
+An accepted dump does not establish these:
+
+- **`PCert.Graph`.** That the numbering is a bijection onto a set that holds every
+  reachable state of `X`, that the silent edges and the rises are exactly those of `X` from
+  reachable states, and that the listed initial states are initial, are read from the dump
+  code and the explorer: the dump writes the run's states in the order the run holds them,
+  and `split_edges` of the run's graph. That every numbered state is reachable is checked
+  (reach).
+- **`PCert.Faithful`.** That equal numbers in a record mean equal `obs` values, `S` values
+  and input bytes is read from the dump code, which numbers each projection as it first
+  shows.
+- **The runs left out.** Nested runs, runs up to `H`, runs past a cap, and every run outside
+  this walk, user runs among them, are not checked. The shape is checked on the reachable
+  part of `X` only: a step from a state no run reaches is not seen.
+- **The tools.** The Lean compiler and the Rust dump are trusted. `check` is ordinary
+  compiled code that the kernel never evaluates on the dump. `PartitionCheckMain.lean`
+  imports `PartitionCert.lean`, and `PartitionCheck.lean` proves the theorems of the `check`
+  defined there.
 
 ## Definition 4 and Lemma 6 over actions
 
@@ -837,7 +905,9 @@ in its own block of a marked state, self-loops dropped) are every state of a blo
   `monotone_vars` of the extended system. On an explored `X`, `of_graph` leaves every class
   unmarked when `s_cycles` is false, and `a15_monotone` applies as stated. For `obs = ∅`
   the code's one class covers every input byte, which is not (B1).
-- **What `check` does not do.** It checks no part of `Extended`, takes each block's first
-  state as its representative rather than reading one, and runs over lists; a checker over
-  arrays would reuse `Sweep.b2_of_marking` for its own marking. That `check` accepts every
-  partition that passes `Cert` is not proved.
+- **What `check` does not do.** `Sweep.check` checks no part of `Extended`, takes each
+  block's first state as its representative rather than reading one, and runs over lists.
+  `PCert.Data.check` ([above](#the-partitions-and-the-shape-of-x)) runs over arrays, reads
+  the dumped representatives, checks `Extended` on the reachable part of `X`, and reaches
+  (B2) through `Sweep.b2_of_marking`. That either accepts every partition that passes
+  `Cert` is not proved.

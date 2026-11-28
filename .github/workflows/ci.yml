@@ -257,6 +257,24 @@ jobs:
           cargo test --profile ci-checked -p rdra-ish-core --lib reduced_domain_cones_step_by_a_true_fold_bit_only_where_the_cone_steps
           cargo test --profile ci-checked -p rdra-ish-core --lib case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0
           cargo test --profile ci-checked -p rdra-ish-core --lib reduced_cones_step_as_their_cones_step
+      - id: elan
+        # The `lean` job's cache: elan and the toolchain proofs/lean/lean-toolchain pins.
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: elan-4.3.0-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('proofs/lean/lean-toolchain') }}
+      - name: Install elan
+        if: steps.elan.outputs.cache-hit != 'true'
+        run: curl -sSfL https://raw.githubusercontent.com/leanprover/elan/v4.3.0/elan-init.sh | sh -s -- -y --default-toolchain none
+      - name: The code's Lemma 5 sets, partitions and runs of X pass the Lean checkers
+        # proofs/lean/README.md, "Checking the code's sets with Lean": the ignored core tests
+        # dump every top-level split and every flat run of X the reduction partitions on the
+        # samples, the domain samples and the corpus (about 3 s with the test binary the step
+        # above built), `lake build` checks the checkers' soundness proofs and builds them, and
+        # every planted fault must be rejected with its part named. About 4 MB of dump and
+        # well under a minute once the toolchain is cached.
+        run: PATH="$HOME/.elan/bin:$PATH" scripts/check-lean-certificates.sh --profile ci-checked
+        timeout-minutes: 10
       - name: Each group rule has a witness, and the cost caps keep the verdict
         # The witnesses run in the debug test step too, but for the one that enumerates up
         # to BRANCH_CAP arrangements a state, which takes minutes there. The snapshot of the
