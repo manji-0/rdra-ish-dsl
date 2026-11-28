@@ -284,22 +284,22 @@ binding. `SearchSym.lean` does the same for the search a run up to symmetry make
 a stored state and a binding, and relates it to N9's search on `M` and to `a23`. Each
 definition is the predicate the code computes; the table names where.
 
-| Lean (`RdraIsh.`) | Code (`crates/rdra-ish-core/src/lifecycle/explore/`) |
-|---|---|
-| `LTS.Enabled`, `LTS.Moves` | `liveness.rs:252-290` (`fair_steps`: the edges with `from ≠ to`) |
-| `LTS.NEdge`, `LTS.SameComp` | `liveness.rs:307-316` (`in_n`, `inside`, the adjacency, `components`) |
-| `LTS.FairComp` | `liveness.rs:317-349` (`size ≥ 2`, `always`, `taken`, `fair_cycle`) |
-| `LTS.IsStop` | `liveness.rs:350-365` (`stops` under `Plain`, `WfNext`, `Looping`) |
-| `LTS.Accepts` | `liveness.rs:366-381` (`toward`, the backward walk from the ends) and `:237-242` (the start) |
-| `REdge`, `pn`, `tn` | `orbit/liveness.rs:716-718` (`is_real`), `:212-217` (`target`), `:131-151` and `:228-231` (`imap`, `moved`) |
-| `PN`, `PEdge`, `SameP` | `orbit/liveness.rs:257-290` (`in_n`, the adjacency of real edges, `components`) |
-| `Candidate` | `orbit/liveness.rs:281-302` (`self_loop`, `candidate`) |
-| `En`, `TEdgeE`, `CoveredE`, `ThreadsCovered` | `orbit/liveness.rs:152-180` (enabled instances per stored state) and `:353-438` (`threads_covered`) |
-| `PStop`, `OAccepts` | `orbit/liveness.rs:304-340` (`stops`, `toward`, `start`) |
+| Lean (`RdraIsh.`) | File | Code (`crates/rdra-ish-core/src/lifecycle/explore/`) |
+|---|---|---|
+| `LTS.Enabled`, `LTS.Moves` | `Behaviour.lean` | `liveness.rs::ComponentRun::fair_steps`: an instance is enabled where an edge to another state takes it |
+| `LTS.NEdge`, `LTS.SameComp` | `Search.lean` | `liveness.rs::ComponentRun::avoid`: the goal-free states, the edges between two of them, and the components of that graph |
+| `LTS.FairComp` | `Search.lean` | `liveness.rs::ComponentRun::avoid`: a component of two or more states in which every instance enabled at all of its states is taken by an edge inside it |
+| `LTS.IsStop` | `Search.lean` | `liveness.rs::ComponentRun::avoid`, `liveness.rs::StopRule`: the stops under `Plain`, `WfNext` and `Looping` |
+| `LTS.Accepts` | `Search.lean` | `liveness.rs::ComponentRun::avoid` (the backward walk from the stops and fair components) and `liveness.rs::ComponentRun::liveness_search` (the start) |
+| `REdge`, `pn`, `tn` | `SearchSym.lean` | `orbit/liveness.rs::OrbitRun::is_real`, `orbit/liveness.rs::Product::target`, `orbit/liveness.rs::Product::moved` |
+| `PN`, `PEdge`, `SameP` | `SearchSym.lean` | `orbit/liveness.rs::Product::search`: the goal-free pairs, the real edges between two of them, and the components of that graph |
+| `Candidate` | `SearchSym.lean` | `orbit/liveness.rs::Product::search`: a component of two or more pairs, or one pair with a real edge to itself |
+| `En`, `TEdgeE`, `CoveredE`, `ThreadsCovered` | `SearchSym.lean` | `orbit/liveness.rs::Product::enabled`, `orbit/liveness.rs::Product::threads_covered` |
+| `PStop`, `OAccepts` | `SearchSym.lean` | `orbit/liveness.rs::Product::search`: the stop pairs, the backward walk and the start |
 
-The code's mark of a node into which an edge comes from a pair where no enabled instance
-moves to it (`orbit/liveness.rs:419-426`) is the third case of `CoveredE`; the move of an
-instance is a bijection, so this is the pair where the instance's preimage is not enabled.
+In `orbit/liveness.rs::Product::threads_covered`, the mark of a node into which an edge comes
+from a pair where no enabled instance moves to it is the third case of `CoveredE`; the move of
+an instance is a bijection, so this is the pair where the instance's preimage is not enabled.
 
 Not modelled:
 
