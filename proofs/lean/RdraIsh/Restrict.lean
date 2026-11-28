@@ -262,6 +262,13 @@ def FoldConds (a : A) (F : Fold V Val K) (b : Binding) (σ : V → Val) : Prop :
     p.role.needsPresent = true → D.rows.present (σ (D.ex p.entity)) (b.slot j)) ∧
   ∀ g ∈ F.folded, g.holds b σ
 
+/-- What a fold reads (`Fold::reads`): the folded guards' reads and the existences of its `T`
+parameters. -/
+def foldReads (a : A) (F : Fold V Val K) (v : V) : Prop :=
+  (∃ g ∈ F.folded, v ∈ g.rd) ∨
+    ∃ (j : Nat) (p : Param E), (M.params a)[j]? = some p ∧ D.tv (D.ex p.entity) = true ∧
+      v = D.ex p.entity
+
 end Ext
 
 /-- Two valuations agree on a set of variables. -/
@@ -280,7 +287,7 @@ def coneW (M : Model V E A Val) (tv : V → Bool) (ta : A → Bool) :
 about what an action's conjuncts and effects read or name, or about what a fold bit computes:
 
 - `local_`, `lemma5`: the locality of `Rd` and `Wr` (`Local`) and Lemma 5 (a)(b);
-- `reads`: Lemma 5 (c), with the folded reads those of the folded guards;
+- `reads`: Lemma 5 (c), with the folded reads those of `Fold::reads` (`foldReads`);
 - `shape`: an action's guard is its role conjuncts followed by the conjuncts `og`;
 - `new_writes`: a `new` parameter comes with its `Create`, which writes its entity's existence;
 - `kept_rd`: a conjunct `X` keeps reads only `S_v ∪ inputs`;
@@ -302,7 +309,7 @@ structure Lemma6Hyp {M : Model V E A Val} [DecidableEq K] (D : Ext M K) (obs : V
   local_ : Local M
   lemma5 : Lemma5ab M D.tv D.ta obs
   reads : ∀ a, Sa M D.ta a → ∀ v ∈ M.rd a,
-    D.tv v = false ∨ D.inputs v = true ∨ ∃ F, D.fold a = some F ∧ ∃ g ∈ F.folded, v ∈ g.rd
+    D.tv v = false ∨ D.inputs v = true ∨ ∃ F, D.fold a = some F ∧ D.foldReads a F v
   shape : ∀ a, M.guards a = roleConjs D.rows D.ex 0 (M.params a) ++ D.og a
   new_writes : ∀ a (j : Nat) (p : Param E), (M.params a)[j]? = some p → p.role = .new → D.ex p.entity ∈ M.wr a
   kept_rd : ∀ a g, D.kept a g → ∀ v ∈ g.rd, D.tv v = false ∨ D.inputs v = true

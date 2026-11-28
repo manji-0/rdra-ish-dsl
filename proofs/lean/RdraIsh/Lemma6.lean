@@ -52,6 +52,19 @@ theorem Rows.cand_of_not_reads (R : Rows Val) {r : Role} (h : r.readsRow = false
     (c : Nat) : R.cand r v c := by
   cases r <;> simp_all [Role.readsRow, Rows.cand]
 
+omit [DecidableEq K] in
+/-- A role conjunct depends only on what it reads: the half of `Local.conj_local` an instance
+owes for the role conjuncts. -/
+theorem roleConj_local (R : Rows Val) (ex : E → V) (j : Nat) (p : Param E) (b : Binding)
+    {σ τ : V → Val} (h : Agree (roleConj R ex j p).rd σ τ) :
+    (roleConj R ex j p).holds b σ → (roleConj R ex j p).holds b τ := by
+  cases hr : p.role.readsRow
+  · intro _; exact R.cand_of_not_reads hr _ _
+  · intro hh
+    have := h (ex p.entity) (by simp [roleConj, hr])
+    simp only [roleConj] at hh ⊢
+    rw [← this]; exact hh
+
 namespace Ext
 
 variable (D)
