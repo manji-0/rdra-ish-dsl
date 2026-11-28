@@ -843,7 +843,16 @@ reduced cone keeps: `drop_unreadable_checks` (A14).
 *Evidence.* P-sketch (Lemma 6 is argued, not proved; (B1)–(B3) are checked at run time on each
 partition the reduction uses, R). M: `Twin::Partition` (worklist against
 sweeps), `Twin::ClassMoves`, `Twin::FoldHolds`, the `shadow_assert!` that a steady action leaves the
-inputs. D: `core/tests/reduce.rs::reduced_cones_decide_what_the_cones_decide`,
+inputs. M also: the Lean proof in `proofs/lean/` proves the theorem and its four
+consequences from Lemma 5 (a)(b), Lemma 6, the shape of `X` and (B1)–(B3) as hypotheses:
+`ReductionLabels.lean::a8_branching` (the relation is a divergence-blind branching
+bisimulation that keeps every `T_a` label, with its binding), `a8_edges_iff` (consequence 2),
+`a8_stuck_iff` (consequence 3), `Plain.lean::a8_plain_iff` (consequence 4, for
+`□(trig ⇒ ◇goal)` under `Fair_P` over infinite behaviours), `Stages.lean::a8_staged` (point
+5 with `recanon` over the stages), and `Nested.lean::a8_nested` (a nested `X`, by induction
+on depth). It does not derive Lemma 6 from the code, and in the nested case its outer
+representative is a reachable state of `X`, where the code's is an inner representative.
+D: `core/tests/reduce.rs::reduced_cones_decide_what_the_cones_decide`,
 `::reduced_domain_cones_decide_what_the_cones_decide`, `::a_violation_behind_the_sub_lifecycle_lifts_to_a_longer_real_trace`;
 `scripts/reduction-diff.py`; `cli/tests/engine_equivalence.rs` on reduced cones.
 
