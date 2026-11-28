@@ -182,7 +182,9 @@ The proofs assume the following hypotheses and do not derive them:
 - **Definition 4's shape of `X`** (`Extended`). A silent edge keeps the input bytes, and a
   rise keeps `S`. `Ext.extended` proves it of the `X` of `Restrict.lean`.
 - **(B1)–(B3)** (`Stable`), on the reachable states of `X`, with
-  `rep(B x) ∈ Reach(X) ∩ B x`.
+  `rep(B x) ∈ Reach(X) ∩ B x`. `Sweep.stable_of_cert` derives it from the run-time
+  certificate, `partition/reference.rs::stable`, on a complete run of a flat `X`
+  ([below](#the-partition-certificate-and-monotone-variables)).
 - **A18's commutation** (`Sym`). This covers:
   - every `g ∈ G_s` maps a step `s → t` to the step `g(s) → g(t)`, and `g ∈ G_t`;
   - `G_{g(s)} = G_s`;
@@ -216,6 +218,8 @@ The proofs assume the following hypotheses and do not derive them:
     flat `X` not run up to `H`, and the same check on the stored graph otherwise. When `obs = ∅` a release build
     does not explore `X`, so there `s_cycles` is checked only in tests, on a plain run of `X`
     under the test's own caps; a run past them is skipped (`partition.rs::unobserved_loops`).
+    When `s_cycles` is false, `Mono.no_silentCycle` derives `hloop` with no class marked
+    from the monotone cells of `S` ([below](#the-partition-certificate-and-monotone-variables)).
 - **The searches** (`Accepts`, `OAccepts`; [below](#the-liveness-searches)).
   - The searched graph is the system's step relation on its reachable states: a complete
     run (N1), so `En`, `Moves` and `Tk` are those of `M`.
@@ -242,11 +246,13 @@ The proofs assume the following hypotheses and do not derive them:
     ([below](#theorem-a18-over-slots)). That the model's `act`, hypotheses and effects are
     `Group::apply`, `breaks::scan` and `each_successor`, and that its read and write sets
     are those of `action_reads` and `effect_writes`, is read from the code, not derived.
-  - (B1)–(B3) are certified at run time on each partition (claim A8, R). That certificate
-    is the nearest link from the code to `Stable`, but it is not `Stable` itself. The code
-    checks that one sweep with every block as a splitter splits nothing, while `Stable.b2`
-    is the path form of (B2). cones.md argues the step between the two, and Lean does not
-    check it.
+  - (B1)–(B3) are certified at run time on each partition (claim A8, R).
+    `Sweep.stable_of_cert` proves that a partition that passes the certificate is `Stable`,
+    over a model of the check ([below](#the-partition-certificate-and-monotone-variables)).
+    That the run the check reads is `X`'s reachable graph (`Sweep.Complete`), that the
+    depth-first marking of `partition/reference.rs::stuttering_blocks` computes
+    `Sweep.Marked`, and that the fallback partition of `partition/reference.rs::quotient_blocks`, used without the check,
+    meets `Sweep.Cert` when the sweeps stop are read from the code.
 - **A8, the rest of the theorem.** The proofs leave out these parts:
   - The rises carry no `stands`. Consequences 2 to 4 read only the `T_a` labels of `C` and
     `R`, and `R`'s `T` move reads a rise only through the input bytes it ends at.
@@ -292,9 +298,16 @@ The proofs assume the following hypotheses and do not derive them:
   - The nested case. Definition 5's cases 2 (an inner class that can loop) and 3 (an orbit
     self-edge of `S` up to `H`), and the proof's (ii), need the inner reduction, which
     Reduction.lean does not model.
-  - Case 4 (`obs = ∅`, `s_cycles` over `monotone_vars`) enters only through the hypothesis
-    `hloop`. The proof's (iii), that a variable whose write graph is acyclic changes
-    finitely often, is not formalized.
+  - Case 4 (`obs = ∅`, `s_cycles` over `monotone_vars`). The proof's (iii) is proved:
+    `Mono.finite_changes_of_behaviour` (a cell whose steps follow an acyclic write graph
+    changes finitely often), and `Mono.no_silentCycle` and `Mono.a15_monotone` (when every
+    cell of `S` is monotone along the silent edges, `hloop` holds with no class marked).
+    `Mono.Sys.succ_covers` shows that the steps of `each_successor` follow the graph
+    `monotone_vars` builds, under the pre-state facts `Mono.Sys.Pre`, which the guards are
+    read to give ([below](#the-partition-certificate-and-monotone-variables)). The code's
+    unobserved `S` is one class for all input bytes, which is not (B1); `a15_monotone` holds
+    for any partition, and the reading of the code's `R` as the reduced cone of the
+    partition by input bytes, whose classes are a function of `T`, is not proved.
 - **A23, the rest of the theorem.**
   - The run's search is the abstract one of
     [The liveness searches](#the-liveness-searches): `not_oAccepts_iff_lassos` and
@@ -430,7 +443,10 @@ keeps `T` small.
     creates and deletes write an existence, from absent to present to deleted. With inputs
     off, `mono` is constant `false` and the condition is empty.
 - **`mono`** is a parameter. Lemma 5 (d) reads it only through `ex_mono` and the closure.
-  The write-edge acyclicity that `monotone_vars` computes is not modelled.
+  `Monotone.lean` models the write graph `monotone_vars` computes (`Mono.Sys.Monotone`),
+  separately from `Act.Model`. Over it, an existence that only creates and deletes write is
+  monotone (`Mono.Sys.existence_monotone`), which is the fact `ex_mono` asks of the code;
+  the two models are not joined, so `ex_mono` stays a hypothesis here.
 - **The labels.** `Act.cone` labels a step `.inl` when its action is in `T_a`, and `.inr`
   otherwise. So the `.inr` side holds the `S_a` actions and the actions that write nothing
   and are not kept, which neither set contains. Those stutter (`Local.idle`). Lemma 6 counts
@@ -527,10 +543,12 @@ No checker exists for these. The pattern carries over as follows.
 - **The cost.** The certificate grows with the states of `X`, not with its variables and
   actions. The largest quotient `verify` computes on the samples has about 2.2 million
   states, so a certificate takes megabytes, and the checker needs arrays rather than the
-  lists `check` uses. Proving (B2) sound needs reasoning about paths: a sweep that splits
-  nothing gives `SilentExit` for every state of a block, by induction on the path inside the
-  block. That is more work than the set lemmas of `check_sound`. (B1) and (B3) are about as
-  hard as Lemma 5.
+  lists `check` uses. The step from the check to `Stable` is proved
+  ([below](#the-partition-certificate-and-monotone-variables)): `Sweep.stable_of_cert` takes
+  the check over a numbered run, `Sweep.check_sound` proves a Boolean checker over lists sound
+  for it, and `Sweep.b2_of_marking` reduces (B2) for any marking a faster checker computes to
+  three facts: it lies inside `Sweep.Marked`, it is closed under the two rules, and it is all
+  or none on each block.
 
 ## Definition 4 and Lemma 6 over actions
 
@@ -751,3 +769,75 @@ Lemmas 5 and 6 assume. What stays outside:
   `FoldData` and `mono` for Lemma 5 (c)–(e).
 - `Local` is proved for the slot model as it stands, with the differences from
   `each_successor` that [Theorem A18 over slots](#theorem-a18-over-slots) lists.
+
+## The partition certificate and monotone variables
+
+<!-- constrained-by #what-is-not-covered -->
+
+`Sweep.lean` and `SweepExample.lean` model the check that `Classes::of_graph` runs on each
+partition before the reduction uses it, `partition/reference.rs::stable`, and prove that it
+gives `Stable`. `Monotone.lean` and `MonotoneExample.lean` model the write graph of
+`reduce/split.rs::TransitionSystem::monotone_vars` and prove what the reduction uses of it:
+the proof's (iii) in Theorem A15, and case 4 of Definition 5 with no class marked.
+
+The run (`Sweep.ExplRun`) is what the check reads: `n` states by number, the silent edges
+and the rises as pairs of numbers (`reduce/partition.rs::split_edges`), and each state's
+label (`Partition::initial`). `Sweep.Complete` says it is `X`'s reachable graph and that a
+label fixes `obs` and the input bytes. The check (`Sweep.Cert`) has three parts: a block lies
+in one label (B1); for every splitter, the states the sweep of `partition/reference.rs::stuttering_blocks` marks
+(`Sweep.Marked`: outside the splitter with a silent edge into it, or a silent predecessor
+in its own block of a marked state, self-loops dropped) are every state of a block or none
+(B2); every state enters by a rise the blocks its block's first state enters (B3).
+`Sweep.check` is a Boolean checker over the same lists, for a checker of a dumped partition.
+
+| Lean (`RdraIsh.`) | File | Claim | Statement |
+|---|---|---|---|
+| `Sweep.marked_iff` | `Sweep.lean` | A8, (B2) | On a complete run, a reachable state is marked for a splitter iff it leaves its block into the splitter by a silent path through its block and one more silent edge (`SilentExit`). |
+| `Sweep.stable_of_cert` | `Sweep.lean` | A8, (B1)–(B3) | On a complete run, a partition that passes the certificate is `Stable`, with each block's first state as its representative, the one `of_graph` takes. |
+| `Sweep.cert_of_stable` | `Sweep.lean` | A8, (B1)–(B3) | On a complete run whose labels are exactly the values of `obs` and the input bytes, a `Stable` partition passes the certificate. |
+| `Sweep.b2_of_marking` | `Sweep.lean` | A8, (B2) | Any marking per splitter that lies inside `Marked`, is closed under its two rules and is all or none on each block gives the certificate's (B2). A checker's own marking needs only those three facts. |
+| `Sweep.marked_of_marks`, `Sweep.check_sound`, `Sweep.stable_of_check` | `Sweep.lean` | A8, (B1)–(B3) | The marking by rounds lies inside `Marked`. A partition that `check` accepts passes the certificate, so on a complete run it is `Stable`. |
+| `ExampleSweep.accepts`, `accepted_cert`, `rejects`, `not_cert` | `SweepExample.lean` | none | On three states with one silent edge, `check` accepts the identity partition and rejects a block that one state leaves and the other does not, which fails the certificate too. |
+| `Mono.chain_of_change`, `Mono.finite_changes` | `Monotone.lean` | A15, (iii) | A sequence whose steps keep a value or follow an edge of a graph goes, across a change, from one value to another by a chain of edges. If the graph is acyclic and the values lie in a list, it changes value finitely often. |
+| `Mono.finite_changes_of_behaviour`, `Mono.settles` | `Monotone.lean` | A15, (iii) | A cell of a state whose steps from reachable states follow an acyclic graph changes finitely often along every behaviour; if finitely many such cells fix the state, every behaviour is constant from some index on. |
+| `Mono.no_silentCycle`, `Mono.a15_monotone` | `Monotone.lean` | A15, Definition 5 case 4 | If the cells of `S` fix it and each follows an acyclic graph along the silent edges, no block of any partition holds a silent cycle, so `a15` holds with `canLoop := fun _ => False`: `s_cycles` false. |
+| `Mono.Sys.succ_covers`, `Mono.Sys.monotone_finite_changes` | `Monotone.lean` | A10, A15 | A successor of `each_successor` from a pre-state that meets `Pre` keeps each cell of a variable that is not cyclic or moves it along an edge of the graph `monotone_vars` builds. So a variable it marks monotone changes finitely often, slot by slot, along every behaviour of the system. |
+| `Mono.Sys.existence_monotone` | `Monotone.lean` | Lemma 5 (d) | An existence that only creates and deletes write, and that is not cyclic, is monotone. |
+| `ExampleMono.no_cycle`, `ExampleMono.eventually_flag` | `MonotoneExample.lean` | none | A cone whose `S` variable only rises: every hypothesis of `a15_monotone` is discharged and `eventually flag` holds under `Fair_P ∧ WF_vars(Next)` from a run with no class marked. |
+| `ExampleMonoSys.level_monotone`, `ExampleMonoSys.ex_monotone`, `ExampleMonoSys.steps_covered` | `MonotoneExample.lean` | none | A system with a create and a transition `0 → 1 → 2`: its column and its existence are `Monotone`, and a create step and a raise step meet `Pre`, so `succ_covers` applies to them. |
+
+### What these hypotheses are
+
+- **`Sweep.Complete`**: the run is `X`'s reachable graph, numbered, with its silent edges
+  and rises exactly, and a label fixes `obs` and the input bytes. That is the flat case, a
+  run of `X` with no inner reduction and not up to `H`; otherwise the check reads the stored
+  graph.
+- **The marking.** `Sweep.Marked` is the least set closed under the sweep's two rules. That
+  the depth-first marking of `partition/reference.rs::stuttering_blocks` computes it, and that `partition/reference.rs::same_partition` of
+  the sweep's result holds iff the sweep split nothing (a split adds a block, and a sweep
+  that splits nothing never changes the blocks its splitters see), are read from the code.
+  `stable` renumbers the blocks by first appearance, which is injective.
+- **`Mono.Sys`, `Mono.Sys.Succ`**: the effects (`Effect`) and the edges `monotone_vars`
+  adds for each, and `each_successor`: the creates, assignments, single-arm transitions and
+  ticks in order, then the deletes, then the open choices, a choice of a deleted row dropped.
+  `Acyclic` is the graph with no cycle but self-loops; that the depth-first search of
+  `reduce/split.rs::acyclic` decides it is read from the code.
+- **`Mono.Sys.Pre`**, of the pre-state of every reachable step, from the guards and roles:
+  a created row is absent and every cell an assignment or a choice of the creating action
+  writes on it is at base (their `froms` are the base value only; the create's `New`
+  parameter binds only an absent slot, `ParamRole::binds_exists`, and `SymActions.lean`'s
+  `W`, the states whose absent rows hold base values, is the same invariant), a deleted row is
+  present (the delete's `Existing` parameter binds only a present slot), each cell an
+  assignment or a choice writes holds a value of its domain (`froms` elsewhere are the whole
+  domain), a slot an assignment names lies among its entity's slots, and the clock ticks
+  only below `int_max` (the `Tick` action's guard). With `Pre`, every case of
+  `monotone_vars` is sound for the steps; no case computes an edge set the proof cannot use.
+- **The cells of `S`** (`Mono.no_silentCycle`): `S` is fixed by the cells of the variables
+  of `X` that are not inputs, which is what `partition.rs::s_cycles` reads, through
+  `monotone_vars` of the extended system. On an explored `X`, `of_graph` leaves every class
+  unmarked when `s_cycles` is false, and `a15_monotone` applies as stated. For `obs = ∅`
+  the code's one class covers every input byte, which is not (B1).
+- **What `check` does not do.** It checks no part of `Extended`, takes each block's first
+  state as its representative rather than reading one, and runs over lists; a checker over
+  arrays would reuse `Sweep.b2_of_marking` for its own marking. That `check` accepts every
+  partition that passes `Cert` is not proved.

@@ -25,7 +25,9 @@ search's verdict in place of `ReducedRunOk`.
 **Definition 5, case 1.** `SilentCycle X B c`: from a reachable state of block `c` the silent
 edges of `X` between two different states of `c` contain a cycle. The hypothesis `hloop`
 asks that every such block can loop. `divergence` must establish it (its depth-first search
-finds a back edge iff such a cycle exists); for `obs = ∅` `s_cycles` must imply it (case 4).
+finds a back edge iff such a cycle exists); for `obs = ∅` `s_cycles` must imply it (case 4),
+which `Monotone.lean` proves when every non-input variable of `X` is monotone
+(`no_silentCycle`, `a15_monotone`).
 Cases 2 and 3 (inner classes, an orbit self-edge of `S` up to `H`) belong to the nested case,
 which Reduction.lean does not model.
 
