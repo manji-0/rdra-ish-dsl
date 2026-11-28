@@ -674,7 +674,11 @@ unchanged, a `T` step that changes the inputs moving the block by one rise per s
 replaced by class moves (`Classes::moves`).
 
 For a state `(t, s)` of `C` write `x(t, s) = (s, inp(t), bits(t))`, the extended state it
-corresponds to, where `bits(t)` is `Reduction::push_bits`.
+corresponds to, where `bits(t)` is `Reduction::push_bits`. `X` may also hold *stubs*: a parent in
+`T` of an owner variable in `S_v` whose existence is not in `S_v ∪ inputs` is kept by `restrict_to`
+as an entity of its existence alone, which no action of `X` writes. `x(t, s)` gives each stub the
+value of `X`'s first initial state (`Reduction::key` appends that tail), so a stub reads nothing of
+`t`.
 
 **Lemma 6 (the extended system covers the cone).** For every `(t, s) ∈ Reach(C)`: `x(t, s) ∈ X_n`
 (up to the inner reduction's canonical form); `(t, s) → (t, s')` is an `S_a` step of `C` iff
@@ -687,24 +691,52 @@ bytes is matched by a sequence of rises from `x(t, s)` through the stages to `x(
 those are kept by `restrict_to` with havoc off, so it has the same successors on `S_v` in `C` at
 `(t, s)` and in `X` at `x(t, s)` provided each folded guard equals its bit at `bits(t)`. A
 `T_a` action that writes an input keeps in `X` only its guards on `S_v` and inputs, which hold where
-they hold in `C`; it writes the raw inputs, and each changed bit slot then has a free flip. Two steps
+they hold in `C`; it writes the raw inputs, and each changed bit slot then has a free flip.
+
+Parameters. A step binds each parameter to a slot, and the two systems must admit the same
+bindings. `restrict_to` drops a `T` parameter on an entity it neither keeps nor stubs, with the
+guards that name it; a `T` parameter on a stub it keeps with its role. A stub is absent in every
+state of `X`, so `Extended::build` binds every kept parameter on a stub whose role needs a present
+row (`Existing`, `Parent`, `Triggered`) to any slot (`bind_stub_params`, P67). Such a parameter
+belongs to one of two kinds of action:
+
+- A folded `S_a` action, where the parameter is one of the fold's `T` parameters. The bit at the
+  key holds iff some binding of the `T` parameters is on rows present where their roles need it and
+  satisfies every folded guard, and no effect names a `T` parameter but the key (`fold_of`). So at
+  `x(t, s)` with the bit true every binding of the other `T` parameters gives the same successor on
+  `S_v`, which a binding of `C` at `(t, s)` also gives, and every binding of `C` has its
+  counterpart in `X`.
+- A rise. It keeps in `X` only its guards on `S_v` and inputs, so binding the parameter freely keeps
+  every `T` step's rise (the direction the lemma needs) and adds only rises that `T_a` guards
+  already left unconstrained.
+
+An unfolded `S_a` action has no parameter on a stub: its raw reads hold the existence of every
+entity it binds (`raw_reads`; for a `Triggered` parameter, the existence of its mark's entity
+through `existences`), so that entity is an input. A `shadow` build asserts it. Two steps
 are named and not derived here: that `Fold::holds` computes the folded guard exactly (the
 `Twin::FoldHolds` twin compares it with `reduce/fold/reference.rs`, an implementation of the same
 definition), and that a fold's key binding (`Extended::cone_params` binds a dropped `T` parameter to
 slot 0) loses no successor. ∎
 
-*Evidence (P31; its fold evidence fixed in #516 and #521).* The fold equivalence is checked against the cone's own step
+*Evidence (P31, P67).* The `S_a` half is checked against the cone's own step
 relation, in both directions, on every reachable state of every complete reduced cone that folds
 (`core/tests/reduce.rs`). `::reduced_domain_cones_hold_each_fold_bit_where_its_action_runs`: the
 bit holds at the slot every move of a folded action binds its key to (for a node fold, the row its
-link names), so the bit drops no step. `::reduced_domain_cones_step_by_a_true_fold_bit_only_where_the_cone_steps`:
+link names), and every move of an `S_a` action, folded or not, is a silent step of `X` from
+`x(t, s)` to the same state by an action the step stands for, so `X` drops no step. `::reduced_domain_cones_step_by_a_true_fold_bit_only_where_the_cone_steps`:
 from the state's projection `x(t, s)` (`Reduction::key`), every silent step of `X` is a move of `C`
 to the same state, by an action the step stands for, with the params it binds outside the folded
 `T` params, so a true bit adds no step. Both run on the domain samples' 71 folds at 1 and 2
 instances, about 3,100 moves each, none of which binds a key past slot 0;
 `::case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0` runs both on the case fold at 2
 and 3 instances, where about 1,700 of 2,800 moves bind slot 1 or 2. A bit planted false at slot 1
-fails the first, and one planted true at a present row 1 fails the second. This is evidence on
+fails the first, and one planted true at a present row 1 fails the second.
+`::a_triggered_param_on_a_stub_binds_in_the_extended_sub_lifecycle` runs both on a fold with a
+`Triggered` parameter beside its key on a stub, at 1 and 2 instances, and checks that the reduced
+cone decides what the cone decides; `::a_rise_with_a_param_on_a_stub_is_a_rise_of_the_extended_sub_lifecycle`
+checks the same for a rise with a `Parent` parameter on a stub. Corpus cases
+`cone_triggered_param_on_a_stub` and `cone_rise_param_on_a_stub` hold BFS and TLC to the cone's
+counterexample on both. This is evidence on
 these models and bounds, not a proof of Lemma 6; cone-soundness.md, "Proof obligation", states
 the lemma in points 2, 3, and 5 (#475).
 
@@ -713,7 +745,10 @@ the lemma in points 2, 3, and 5 (#475).
 Then `~` is a divergence-blind stuttering bisimulation between `C` and `R` that preserves `T_v`,
 `obs`, and the action label of every `T_a` step. Consequently `C` and `R` agree on:
 
-1. which valuations of `T_v ∪ obs` are reachable (invariants, `always`, witnesses, vacuity);
+1. which valuations of `T_v ∪ obs` are reachable (invariants, `always`, witnesses, vacuity). The
+   inclusion of `C`'s in `R`'s, which every `ok` of an invariant reads, needs every `S_a` step of
+   `C` to be a silent edge of `X`, including the steps whose parameters lie on a stub (Lemma 6,
+   "Parameters");
 2. which `T_a` action labels an edge from a state with given `T_v ∪ obs` values (`NeverRuns`, arms
    taken, `after` assertions on `T_a` actions);
 3. whether from every reached state some path takes an edge that changes given `T_v` values
@@ -1222,9 +1257,9 @@ the row; a fixed or closed one carries its pull request.
 | A5 | Theorem A5 | sketch for parts 1 and 3 (read on the reduced cone: A8, A15); full for part 2 | D, unit tests | P1 (fixed, #477, #509), P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
 | A6 | Proposition A6 | sketch for `always`, `eventually`, `leads_to` (A8); full for `stable`, `unchanged`, `precedes` | D | P1 (fixed, #477, #509), P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
 | A7 | Theorem A7 | full | D | |
-| A8 | Theorem A8 | sketch: Lemma 6 argued; (B1)–(B3) certified at run time | R, M, D | P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
+| A8 | Theorem A8 | sketch: Lemma 6 argued; (B1)–(B3) certified at run time | R, M, D | P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521), P67 (fixed, #547) |
 | A9 | — | none; no verdict rests on it since #480 | M (≤ 2,500,000 states), D | P7 (fixed, #480) |
-| A10, A11 | Lemma 6, point 5 | sketch (A11: that a count is never node-folded is read from `fold.rs::strip_links`) | M, D | P31 (partly fixed; fold evidence #516, #521) |
+| A10, A11 | Lemma 6, point 5 | sketch (A11: that a count is never node-folded is read from `fold.rs::strip_links`) | M, D | P31 (partly fixed; fold evidence #516, #521), P67 (fixed, #547) |
 | A12, A13, A14 | by reading | full (by construction) | D (A12, A13) | |
 | A15 | Theorem A15 | full relative to A8's hypotheses | R, D | P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
 | A16 | lift | none | R (every lifted step and look-up, every build), D | P20 (fixed, #518, #522, #529, #531, #541) |
