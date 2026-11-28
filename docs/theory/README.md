@@ -234,7 +234,8 @@ not a bound on what exists.
 - **A5.** Rests on Lemma 6, which is argued, not proved (A8).
 - **A6.** Rests on Lemma 6 (A8).
 - **A8.** Lemma 6, which ties the extended sub-lifecycle to the cone, is argued, not proved;
-  the tests check what it assumes on the models and bounds they run.
+  the tests check what it assumes on the models and bounds they run. TLC checks the reduction
+  step by step on the corpus's reduced cones only, one way (`C ⇒ R`), without fairness.
 - **A10.** Rests on Lemma 6 (A8).
 - **A11.** The fold equivalence is tested on the models and bounds of the fold tests only;
   Lemma 6 is argued (A8).

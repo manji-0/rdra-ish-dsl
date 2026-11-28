@@ -63,7 +63,10 @@ impl std::str::FromStr for Symmetry {
 /// `Reduced:<reason>` (`Reduced:S var`), a reason the extended sub-lifecycle fixes an
 /// entity for as `Observed:<reason>` (`Observed:obs`), and `bind_stub_params`, which leaves
 /// every param on a stub of the extended sub-lifecycle as it is, so that its check fails and
-/// the cone is decided unreduced (`reduce/extended.rs`). A test-only switch that plants a bug
+/// the cone is decided unreduced (`reduce/extended.rs`), and `bind_stub_params_unchecked`,
+/// which leaves them so and skips that check too, so that the cone is reduced by an
+/// extended sub-lifecycle that drops their steps. A
+/// test-only switch that plants a bug
 /// per rule, so that a witness can show the rule is needed (`witnesses`, and engine_corpus
 /// under `shadow`); a unit test sets it per thread. A release build drops nothing.
 #[cfg_attr(not(any(test, feature = "shadow")), allow(unused_variables))]
