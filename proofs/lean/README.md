@@ -351,7 +351,8 @@ The model (`Ext`, `Ext.ext`):
 
 | Lean (`RdraIsh.`) | File | Claim | Statement |
 |---|---|---|---|
-| `Act.mem_roleConjs`, `Act.mem_roleConjs_inv`, `Act.roleConj_local` | `Restrict.lean`, `Lemma6.lean` | none | The role conjuncts of a parameter list are those of its positions, and each depends only on what it reads. |
+| `Act.mem_roleConjs` | `Restrict.lean` | none | The role conjunct of each position of a parameter list is among the list's role conjuncts. |
+| `Act.mem_roleConjs_inv`, `Act.roleConj_local` | `Lemma6.lean` | none | Every role conjunct of a parameter list is that of one of its positions, and each depends only on what it reads. |
 | `Act.Ext.unfolded_side` | `Lemma6.lean` | Lemma 6, "Parameters", the unfolded table | Every parameter of an unfolded `S_a` action whose role reads its row is on `S` or an input: the row's existence is in `Rd ∪ Wr`, so in `S_v ∪ inputs` by Lemma 5 (a)(c). This derives the table's stub and dropped cells. |
 | `Act.Ext.xrole_cand`, `Act.Ext.xguard_of_guard`, `Act.Ext.eff_x` | `Lemma6.lean` | Lemma 6, (P1)–(P4) | The role `X` gives a parameter admits the slot the cone binds it to; a guard of the cone at `(t, s)` is the guard of `X` at `x(t, s)` for the same binding; an `S_a` action writes the same `S_v` values at both. |
 | `Act.Ext.s_fwd`, `Act.Ext.s_back` | `Lemma6.lean` | Lemma 6, the `S_a` half | An `S_a` step of the cone is a silent edge of `X` by the same action and binding. A silent edge of `X` from `x(t, s)` is an `S_a` step of the cone by the same action, at a binding equal to the edge's outside the fold's free `T` parameters (`stands`), whose slots come from step (a). |
@@ -383,10 +384,10 @@ Each field is a fact about one action, read from the code:
   `t` iff some binding with the key at `c` puts each `T` parameter whose role needs a
   present row on one and makes every folded guard true. It is stated for every slot number,
   where the code has bits only for the key entity's slots.
-- `folded_names`: the folded guards name only `T` parameters and the key (`fold_of`'s
-  `s_keys`).
+- `folded_names`: the folded guards name only `T` parameters and the key (`fold_of` lets
+  them name at most one `S` parameter, which is then the key).
 - `other_names`, `eff_names`: no other conjunct and no effect names a `T` parameter but the
-  key (`fold_of`'s link guards and `touched_t`).
+  key (`fold_of`'s link guards, and the one `T` parameter an effect may reference).
 - `eff_s`: a folded action's effect on its writes reads only `S_v ∪ inputs`. For an unfolded
   action, `Local` and Lemma 5 (c) give it.
 - `bind`: `bind_stub_params` runs.
