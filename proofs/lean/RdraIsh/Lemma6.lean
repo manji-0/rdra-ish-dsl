@@ -509,6 +509,16 @@ theorem extended : RdraIsh.Extended D.ext where
     · exact (Prod.mk.inj hs.2).1
 
 omit [DecidableEq K] in
+/-- `Lemma6Hyp.reads` is Lemma 5 (c), with the inputs and the folds' reads (`foldReads`) as
+`Lemma5`'s sets: `lemma5_of_closed` gives it from `FoldData`. -/
+theorem reads_of_lemma5 {mono : V → Bool} {keep : A → Bool} {seeds : List (List V)}
+    (h5 : Lemma5 M mono keep seeds D.tv D.ta obs (fun v => D.inputs v = true)
+      (fun a v => ∃ F, D.fold a = some F ∧ D.foldReads a F v)) :
+    ∀ a, Sa M D.ta a → ∀ v ∈ M.rd a,
+      D.tv v = false ∨ D.inputs v = true ∨ ∃ F, D.fold a = some F ∧ D.foldReads a F v :=
+  h5.c
+
+omit [DecidableEq K] in
 theorem stands_refl (l : SaL D.ta) : D.stands l l.1 := ⟨rfl, fun _ _ => rfl, rfl⟩
 
 /-- **Lemma 6 with the binding relation** (`ReductionLabels.lean`'s `Lemma6By`), for the cone

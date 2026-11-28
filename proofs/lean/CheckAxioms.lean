@@ -195,3 +195,5 @@ an axiom outside Lean's three standard ones (`propext`, `Classical.choice`, `Quo
 #print axioms RdraIsh.ExampleLemma6.rise_from_init
 #print axioms RdraIsh.ExampleLemma6.fold_step
 #print axioms RdraIsh.ExampleLemma6.stub_bug
+#print axioms RdraIsh.ExampleLemma6.mark_step
+#print axioms RdraIsh.Act.Ext.reads_of_lemma5

@@ -3,23 +3,27 @@ import RdraIsh.Lemma6
 /-!
 # A concrete instance of `Lemma6Hyp`, with a fold, stub parameters and a rise
 
-Four variables over `Nat` and two entities:
+Five variables over `Nat` and three entities:
 
 - `ds`, the existence of a desk (`T`, an input), `sh`, the existence of a shop (`T`, a stub:
-  `X` does not hold it), `tf`, a `T` flag no `S_a` action reads raw, and `st`, an `S`
-  variable;
+  `X` does not hold it), `tf`, a `T` flag no `S_a` action reads raw, `st`, an `S` variable,
+  and `so`, the existence of an order (`S`);
 - `note` (`S_a`, folded) binds an `Existing` desk (the fold's key, on an input) and an
   `Existing` shop (a free `T` parameter on a stub), needs `tf = 1`, and sets `st`. Its fold
   bit holds when the desk, the shop and the flag are all `1`;
+- `mark` (`S_a`, unfolded) binds an `Existing` desk (on an input) and an `Existing` order (on
+  `S`), needs `ds = 1` (a conjunct `X` keeps), and sets `st`;
 - `open_` (`T_a`, a rise) binds a `Parent` shop (on a stub) and sets `ds`;
 - `setf` (`T_a`, a bit writer) sets `tf`.
 
 `hyp` discharges `Lemma6Hyp` for `D true`, so `lemma6` (Lemma 6 with the code's stages) is a
-theorem here. `rise_from_init` is a reachable `T_a` step that changes the raw inputs, and
-`fold_step` a reachable `S_a` step matched by a silent edge of `X` whose bit is true.
-`stub_bug` is the stub-parameter bug: with `bind_stub_params` off (`D false`), `X` keeps the
-shop parameter's `Parent` role, which `X`'s constant absent shop never meets, so the rise of
-`open_` is missing and the `C ⇒ X` half of Lemma 6 fails.
+theorem here. `rise_from_init` is a reachable `T_a` step that changes the raw inputs,
+`fold_step` a reachable step of `note` matched by a silent edge of `X` whose bit is true, and
+`mark_step` a reachable step of `mark` taken to `X` and back. `stub_bug` is the stub-parameter
+bug: with `bind_stub_params` off (`D false`), `X` keeps the shop parameter's `Parent` role,
+which `X`'s constant absent shop never meets, so the rise of `open_` is missing and the
+`C ⇒ X` half of Lemma 6 fails. The instance has no parameter on a dropped entity and no `new`
+or `earlier` parameter.
 -/
 
 namespace RdraIsh.ExampleLemma6
@@ -27,13 +31,13 @@ namespace RdraIsh.ExampleLemma6
 open RdraIsh.Act
 open LTS
 
-inductive Var | ds | sh | tf | st
+inductive Var | ds | sh | tf | st | so
   deriving DecidableEq
 
-inductive Ent | desk | shop
+inductive Ent | desk | shop | order
   deriving DecidableEq
 
-inductive Act | note | open_ | setf
+inductive Act | note | open_ | setf | mark
   deriving DecidableEq
 
 def rows : Rows Nat where
@@ -43,24 +47,30 @@ def rows : Rows Nat where
 def ex : Ent → Var
   | .desk => .ds
   | .shop => .sh
+  | .order => .so
 
 def params : Act → List (Param Ent)
   | .note => [⟨.desk, .existing⟩, ⟨.shop, .existing⟩]
   | .open_ => [⟨.shop, .parent⟩]
   | .setf => []
+  | .mark => [⟨.desk, .existing⟩, ⟨.order, .existing⟩]
 
 /-- `note`'s folded guard. -/
 def tfg : Conj Var Nat := ⟨[.tf], fun _ σ => σ .tf = 1⟩
 
+/-- `mark`'s kept guard, on the input `ds`. -/
+def kd : Conj Var Nat := ⟨[.ds], fun _ σ => σ .ds = 1⟩
+
 def og : Act → List (Conj Var Nat)
   | .note => [tfg]
+  | .mark => [kd]
   | _ => []
 
 def set1 (x : Var) (σ : Var → Nat) : Var → Nat := fun v => if v = x then 1 else σ v
 
 def M : Model Var Ent Act Nat where
-  vars := [.ds, .sh, .tf, .st]
-  acts := [.note, .open_, .setf]
+  vars := [.ds, .sh, .tf, .st, .so]
+  acts := [.note, .open_, .setf, .mark]
   vars_all v := by cases v <;> simp
   acts_all a := by cases a <;> simp
   own _ := none
@@ -72,22 +82,27 @@ def M : Model Var Ent Act Nat where
     | .note => [.ds, .sh, .tf]
     | .open_ => [.sh]
     | .setf => []
+    | .mark => [.ds, .so]
   wr
     | .note => [.st]
     | .open_ => [.ds]
     | .setf => [.tf]
+    | .mark => [.st]
   eff
     | .note => fun _ => set1 .st
     | .open_ => fun _ => set1 .ds
     | .setf => fun _ => set1 .tf
-  init σ := σ .ds = 0 ∧ σ .sh = 1 ∧ σ .tf = 0 ∧ σ .st = 0
+    | .mark => fun _ => set1 .st
+  init σ := σ .ds = 0 ∧ σ .sh = 1 ∧ σ .tf = 0 ∧ σ .st = 0 ∧ σ .so = 1
 
 def tv : Var → Bool
   | .st => false
+  | .so => false
   | _ => true
 
 def ta : Act → Bool
   | .note => false
+  | .mark => false
   | _ => true
 
 def inputs : Var → Bool
@@ -96,7 +111,7 @@ def inputs : Var → Bool
 
 def stub : Ent → Bool
   | .shop => true
-  | .desk => false
+  | _ => false
 
 def F : Fold Var Nat Unit := ⟨0, [tfg], fun _ => ()⟩
 
@@ -118,7 +133,7 @@ def D (bs : Bool) : Ext M Unit where
   stub := stub
   rows := rows
   og := og
-  kept _ _ := False
+  kept a g := a = .mark ∧ g = kd
   fold := fold
   keys := [()]
   keys_all _ := List.mem_singleton.mpr rfl
@@ -131,9 +146,9 @@ def obs : Var → Prop := fun _ => False
 theorem local_ : Local M where
   conj_rd := by
     intro a g hg v hv
-    cases a <;> simp [M, params, og, roleConjs, roleConj, Role.readsRow, ex, tfg] at hg <;>
+    cases a <;> simp [M, params, og, roleConjs, roleConj, Role.readsRow, ex, tfg, kd] at hg <;>
       rcases hg with rfl | rfl | rfl <;>
-      simp at hv <;> subst hv <;> simp [M]
+      simp at hv <;> (try subst hv) <;> simp [M]
   conj_local := by
     intro a g hg b σ τ hag h
     cases a <;> simp [M, params, og, roleConjs] at hg
@@ -143,6 +158,11 @@ theorem local_ : Local M where
       · show τ .tf = 1
         rw [← hag .tf (by simp [tfg])]; exact h
     · subst hg; exact roleConj_local _ _ _ _ _ hag h
+    · rcases hg with rfl | rfl | rfl
+      · exact roleConj_local _ _ _ _ _ hag h
+      · exact roleConj_local _ _ _ _ _ hag h
+      · show τ .ds = 1
+        rw [← hag .ds (by simp [kd])]; exact h
   eff_frame := by
     intro a b σ v hv
     cases a <;> cases v <;> simp [M, set1] at hv ⊢
@@ -153,7 +173,7 @@ theorem local_ : Local M where
 theorem lemma5 : Lemma5ab M tv ta obs where
   a a ha v hv := by
     cases a <;> simp [Sa, ta] at ha
-    simp [M] at hv; subst hv; rfl
+    all_goals simp [M] at hv; subst hv; rfl
   b_wr a ha v hv := by
     cases a <;> simp [ta] at ha <;> simp [M] at hv <;> subst hv <;> rfl
   b_rd a ha v hv hs := by
@@ -177,20 +197,24 @@ theorem hyp : Lemma6Hyp (D true) obs where
   local_ := local_
   lemma5 := lemma5
   reads a ha v hv := by
-    cases a <;> simp [Sa, D, ta] at ha
-    simp [M] at hv
-    rcases hv with rfl | rfl | rfl
-    · exact .inr (.inl rfl)
-    · exact .inr (.inr ⟨F, rfl, .inr ⟨1, ⟨.shop, .existing⟩, rfl, rfl, rfl⟩⟩)
-    · exact .inr (.inr ⟨F, rfl, .inl ⟨tfg, by simp [F], by simp [tfg]⟩⟩)
+    cases a <;> simp [Sa, D, ta] at ha <;> simp [M] at hv
+    · rcases hv with rfl | rfl | rfl
+      · exact .inr (.inl rfl)
+      · exact .inr (.inr ⟨F, rfl, .inr ⟨1, ⟨.shop, .existing⟩, rfl, rfl, rfl⟩⟩)
+      · exact .inr (.inr ⟨F, rfl, .inl ⟨tfg, by simp [F], by simp [tfg]⟩⟩)
+    · rcases hv with rfl | rfl
+      · exact .inr (.inl rfl)
+      · exact .inl rfl
   shape _ := rfl
   new_writes a j p hp hn := by
     cases a <;> rcases j with _ | _ | j <;> simp [M, params] at hp <;> subst hp <;> cases hn
-  kept_rd _ _ h := h.elim
+  kept_rd a g h v hv := by
+    obtain ⟨rfl, rfl⟩ := h
+    simp [kd] at hv; subst hv; exact .inr rfl
   cover a ha g hg := by
-    cases a <;> simp [Sa, D, ta] at ha
-    simp [D, og] at hg; subst hg
-    exact .inr ⟨F, rfl, by simp [F]⟩
+    cases a <;> simp [Sa, D, ta] at ha <;> simp [D, og] at hg <;> subst hg
+    · exact .inr ⟨F, rfl, by simp [F]⟩
+    · exact .inl ⟨rfl, rfl⟩
   rise_eff a b σ τ _ hag v hv := by
     cases v <;> simp [D, inputs] at hv
     cases a <;> simp [M, set1]
@@ -233,9 +257,9 @@ theorem lemma6 :
     Lemma6Staged (coneW M tv ta) (D true).ext (D true).inp (D true).stages :=
   Ext.lemma6_staged hyp
 
-/-- The initial state: every variable `0` but the shop, which is present. -/
+/-- The initial state: every variable `0` but the shop and the order, which are present. -/
 def t0 : TV tv (Val := Nat) := fun v => if v.1 = .sh then 1 else 0
-def s0 : SV tv (Val := Nat) := fun _ => 0
+def s0 : SV tv (Val := Nat) := fun v => if v.1 = .so then 1 else 0
 /-- After `open_`: the desk is present too. -/
 def t1 : TV tv (Val := Nat) := fun v => if v.1 = .sh ∨ v.1 = .ds then 1 else 0
 /-- After `setf`: the flag is set too. -/
@@ -289,9 +313,29 @@ theorem fold_step :
     · simp [M, params, og, roleConjs, lnote] at hg
       rcases hg with rfl | rfl | rfl <;>
         simp [roleConj, Rows.cand, rows, ex, tfg, join, tv, t2]
-    · funext v; cases v <;> simp [M, set1, join, tv, t2, s1, lnote]
+    · funext v; cases v <;> simp [M, set1, join, tv, t2, s0, s1, lnote]
   exact ⟨Reach.step (Reach.step init0 step_open) step_setf, hst,
     Ext.s_fwd hyp hst, by simp [Ext.inp, D, bitOf, t2]⟩
+
+/-- `mark`'s binding: the desk and the order at slot `0`. -/
+def lmark : SaL ta := ⟨(.mark, bind0), rfl⟩
+
+/-- A reachable `S_a` step of the unfolded `mark`, whose desk parameter is on an input and
+whose order parameter is on `S`, and whose guard on `ds` is kept: the silent edge of `X` by
+the same action and binding, and back from that edge to a step of the cone (`s_back`). -/
+theorem mark_step :
+    (coneW M tv ta).Reach (t1, s0) ∧
+      (coneW M tv ta).step (t1, s0) (.inr lmark) (t1, s1) ∧
+      (D true).ext.step (s0, (D true).inp t1) (.inl lmark.1) (s1, (D true).inp t1) ∧
+      ∃ l, (D true).stands l lmark.1 ∧ (coneW M tv ta).step (t1, s0) (.inr l) (t1, s1) := by
+  have hst : (coneW M tv ta).step (t1, s0) (.inr lmark) (t1, s1) := by
+    refine ⟨by simp [M, lmark], fun g hg => ?_, ?_⟩
+    · simp [M, params, og, roleConjs, lmark] at hg
+      rcases hg with rfl | rfl | rfl <;>
+        simp [roleConj, Rows.cand, rows, ex, kd, join, tv, t1, s0]
+    · funext v; cases v <;> simp [M, set1, join, tv, t1, s0, s1, lmark]
+  have hx := Ext.s_fwd hyp hst
+  exact ⟨Reach.step init0 step_open, hst, hx, Ext.s_back hyp hx⟩
 
 /-- With `bind_stub_params` off, a rise of `X = (D false).ext` never changes the desk, since
 `open_`'s shop parameter keeps its `Parent` role and the shop is absent in `X`. -/
@@ -313,6 +357,7 @@ theorem no_rise_without_bind {x y : (D false).XS} (h : RiseStar (D false).ext x 
         simp [Rows.cand, D, rows, Ext.xval, ex, tv, inputs] at this
       · obtain ⟨v, hv, hi⟩ := hw
         simp [M] at hv; subst hv; simp [D, inputs] at hi
+      · simp [D, ta] at hta
     · obtain ⟨_, rfl⟩ := hs
       exact hx
 
