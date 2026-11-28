@@ -77,8 +77,10 @@ def matched (C : LTS (T × S) (Ta ⊕ Sa)) (X : LTS (S × I) (XSa ⊕ Ra)) (inp 
   step p a q := q.1 = p.1 ∧ C.step p (.inr a) q ∧
     ∃ b, stands a b ∧ X.step (p.2, inp p.1) (.inl b) (q.2, inp p.1)
 
+universe u₁ u₂ u₃
+
 /-- A path of one system is a path of another whose steps include the first's. -/
-theorem LTS.PathWithin.map {σ α β : Type} {M : LTS σ α} {N : LTS σ β} {inv : σ → Prop}
+theorem LTS.PathWithin.map {σ : Type u₁} {α : Type u₂} {β : Type u₃} {M : LTS σ α} {N : LTS σ β} {inv : σ → Prop}
     (f : ∀ s t, inv s → M.Next s t → N.Next s t) {s t : σ} (p : M.PathWithin inv s t) :
     N.PathWithin inv s t := by
   induction p with

@@ -5,3 +5,4 @@ import RdraIsh.Example
 import RdraIsh.Symmetry
 import RdraIsh.Branching
 import RdraIsh.ReductionLabels
+import RdraIsh.Stages
