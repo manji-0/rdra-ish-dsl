@@ -216,6 +216,8 @@ impl TransitionSystem {
             }
             out.push(group);
         }
+        // The lifted start is an initial state of the unreduced cone, in every build.
+        crate::lifecycle::vouch::lifted_start(self, &mut out_start)?;
         Ok((out_start, out))
     }
 }

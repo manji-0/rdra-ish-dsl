@@ -1,7 +1,8 @@
 # Replacing "read from the code" with certificates: inventory and plan
 
-Status: research draft against main at 6042d0af (2026-11-28). Nothing here is implemented or
-measured. Every cost below is an estimate. Each phase has a measurement as its exit
+Status: research draft against main at 6042d0af (2026-11-28). Phases 1a (C9, C10) and 1b
+(C1, C7, C8, C15) are implemented and measured (marked **Done** below); nothing else here is
+implemented or measured. Every cost below is an estimate. Each phase has a measurement as its exit
 criterion (see [Measurement](#measurement)).
 
 ## 0. Method and vocabulary
@@ -50,21 +51,21 @@ implementation gives a wrong verdict that nothing in the run sees.
 
 | # | Claim(s) | Fact now read from the code | Rust items | Today | Silent? | Path |
 |---|---|---|---|---|---|---|
-| C1 | A8 (A5, A6, A10, A11, A15) | `Lemma6Hyp` syntactic fields: `kept_rd`, `folded_og`, `folded_names`, `other_names`, `eff_names`, `cover` (the "names" half), `eff_s`, `rise_eff`; and, outside the Lean model, `X`'s initial states are `C`'s projections and each bit starts where `C` starts (`fold_initial`) | `restrict.rs::restrict_to`; `reduce/fold.rs::TransitionSystem::fold_of` (`s_keys`, `touched_t`), `::fold_initial`; `reduce/extended.rs::Extended::build` | **done**: R (`reduce/lemma6hyp.rs::lemma6_faults`, `FoldKey::Param` folds); D via `lemma6.rs::check` on test cones | yes: a kept guard reading `T`, an effect naming a free `T` param, or a wrong start makes `X` lose steps or states, giving a wrong `ok` | D |
+| C1 | A8 (A5, A6, A10, A11, A15) | `Lemma6Hyp` syntactic fields: `kept_rd`, `folded_og`, `folded_names`, `other_names`, `eff_names`, `cover` (the "names" half), `eff_s`, `rise_eff`; and, outside the Lean model, `X`'s initial states are `C`'s projections and each bit starts where `C` starts (`fold_initial`) | `restrict.rs::restrict_to`; `reduce/fold.rs::TransitionSystem::fold_of` (`s_keys`, `touched_t`), `::fold_initial`; `reduce/extended.rs::Extended::build` | **Done (1b):** R (`reduce/lemma6hyp.rs::lemma6_faults`, `FoldKey::Param` folds); D via `lemma6.rs::check` on test cones | yes: a kept guard reading `T`, an effect naming a free `T` param, or a wrong start makes `X` lose steps or states, giving a wrong `ok` | D |
 | C2 | A8 `exact`, A11 | `holds_fast` computes the bit `holdsB` (step (a)); node folds and bit groups are on paper | `fold.rs::Fold::holds`, `::holds_fast`, `::as_node`, `::strip_links`, `push_bits` | K (one action, small bounds); debug/shadow twin `fold/reference.rs` | yes: a bit that is false where it should be true drops an `S` step, giving a wrong `ok` | D |
 | C3 | A8 (`local_`, `shape`, `new_writes`), A18 (`Built`, `WF`) | the code's actions are in the slot syntax of `SymActModel.lean`; `candidate_slots` filters by role first; a `New` row has its `Create`; an `Earlier` param has a run-mark conjunct; every term reads its own entity's row | `build/actions.rs`; `explore/moves.rs::candidate_slots`; `types.rs::Action`, `Pred`, `Effect` | read; M on the model | yes, but only through other points: if the syntax is wrong, the Lean theorems do not apply | D |
 | C4 | A1, B6, `Local` (2) | a step changes only `Wr(a)` | `explore/plan.rs::check_writes`, `Plan::writes`; `moves.rs::each_successor`; `cone.rs::action_writes` | M in debug/shadow only (`Twin::Writes`); release unchecked | yes: an unlisted write lets a cone drop a writer, giving a wrong `ok` | D, P (step pruning) |
 | C5 | `Local` (3) | what a step writes is a function of `Rd(a) ∪ Wr(a)` | `each_successor`, `Plan` | read; no harness (Kani on `each_successor` did not finish) | yes | D |
 | C6 | A10 | the guards give `Pre` at each step; `Monotone.lean`'s write graph is not joined to the action model; `split.rs::acyclic` decides `Acyclic` | `split.rs::monotone_vars`, `::acyclic`; `narrow.rs`; `Reduction::rises_from` | read; R checks 5(d) statically, but with `monotone_vars` itself | yes: a non-monotone input breaks the quotient (wrong `ok`) | D |
-| C7 | A9 | the sweeps' fallback partition meets `Sweep.Cert`; `stuttering_blocks` computes the marked set | `partition.rs::quotient_blocks`; `partition/reference.rs::stable`, `::stuttering_blocks`, `::same_partition` | **done**: R on the fallback (`stable` and `marking_splits_nothing`); the main path's marking stays read, twin in debug/`shadow` | yes, on the fallback only | D |
-| C8 | A12, A3 | no counter is an input; a counted mark keeps its raiser and handler out of `S` | `split.rs::split_at`, `::monotone_vars`; `cone.rs::plain_reads`; `build/events.rs::count_up`, `::count_down` | **done**: R (`split_faults`, `Clause::Counter`); P-full; M (`Split.lean`) | yes, in principle | D |
-| C9 | A2 | `Trace::free_triggers` lists every step that runs an action reading a mark outside the cone; the exact cone's counterexample is vouched for | `trace.rs::free_triggers`, `::vouched`; `targets.rs::recheck_on`; `cone.rs::exact_target_cone` | read; `debug_assert!` only | **yes: a spurious counterexample prints as real**; replay inside the cone cannot see it | D |
-| C10 | A16 | the lifted start is an initial state of the unreduced cone | `explore/graph.rs::ComponentRun::lifted_path`; `reduce/lift.rs::lift` | read | partly: the trace replays from a non-initial state | D |
+| C7 | A9 | the sweeps' fallback partition meets `Sweep.Cert`; `stuttering_blocks` computes the marked set | `partition.rs::quotient_blocks`; `partition/reference.rs::stable`, `::stuttering_blocks`, `::same_partition` | **Done (1b):** R on the fallback (`stable` and `marking_splits_nothing`); the main path's marking stays read, twin in debug/`shadow` | yes, on the fallback only | D |
+| C8 | A12, A3 | no counter is an input; a counted mark keeps its raiser and handler out of `S` | `split.rs::split_at`, `::monotone_vars`; `cone.rs::plain_reads`; `build/events.rs::count_up`, `::count_down` | **Done (1b):** R (`split_faults`, `Clause::Counter`); P-full; M (`Split.lean`) | yes, in principle | D |
+| C9 | A2 | `Trace::free_triggers` lists every step that runs an action reading a mark outside the cone; the exact cone's counterexample is vouched for | `trace.rs::free_triggers`, `::vouched`; `targets.rs::recheck_on`; `cone.rs::exact_target_cone` | **Done (1a):** TV + R, `vouch.rs` | **yes: a spurious counterexample prints as real**; replay inside the cone cannot see it | D |
+| C10 | A16 | the lifted start is an initial state of the unreduced cone | `explore/graph.rs::ComponentRun::lifted_path`; `reduce/lift.rs::lift` | **Done (1a):** R, `vouch.rs::lifted_start` | partly: the trace replays from a non-initial state | D |
 | C11 | residual risk 1 | the cone choice: the closure under Lemma 2, with its documented exceptions (a latch read inexactly stays out and its guards are dropped; existence vars join without their columns) | `cone.rs::cone`, `::target_cone`, `::property_cone`, `::keep_writers`, `::reach_seed`; `restrict.rs::restrict_to` | P-full; D (`assert_cones_exact` on samples) | yes: a cone missing a writer gives a wrong `ok` | D |
 | C12 | A4, A5, native.md:853 | the staging of a property cone's runs (plain, then `_WF`, then `after`) | `cli/src/property_cone.rs`; `verify/native.rs::native_property_after` | argued, "for the order of its runs only" | yes, in principle | D |
 | C13 | A13, A14 | budget rejection; dropped checks get their own cone | `reduce/mod.rs::TLA_CELL_BUDGET`, `drop_unreadable_checks` | read / test gap | A13 no (performance only); A14 covered by 5(e) in `split_faults` | D |
 | C14 | A15 | nested reduction, run up to `H`, case 4 (one unobserved class read as the partition by input bytes) | `partition.rs::Classes::up_to_h`, `::divergence`; `hypotheses.rs::loop_faults` | P-sketch | yes, on those cones | D |
-| C15 | N16 (panics list) | `Extended::rebuild` reproduces `Extended::of`; a restriction that keeps `Tick` keeps `now` | `extended.rs::Extended::rebuild`; `restrict.rs::restrict_to` | **done**: R (`Extended::rebuild_checked` against `Extended::digest`; `restrict_to_mapped` asserts `Tick` ⇒ `now`) | yes, on a cache hit | D |
+| C15 | N16 (panics list) | `Extended::rebuild` reproduces `Extended::of`; a restriction that keeps `Tick` keeps `now` | `extended.rs::Extended::rebuild`; `restrict.rs::restrict_to` | **Done (1b):** R (`Extended::rebuild_checked` against `Extended::digest`; `restrict_to_mapped` asserts `Tick` ⇒ `now`) | yes, on a cache hit | D |
 
 ### 1b. Symmetry and liveness
 
@@ -107,7 +108,7 @@ implementation gives a wrong verdict that nothing in the run sees.
 Each entry gives the kind, what the checker reads, what it shares with the checked code
 (this is the residual trust), the failure action, and where it runs, which sets its cost.
 
-**C1, R: `lemma6_faults` in a new `reduce/lemma6hyp.rs`, beside `split_faults`.** It reads
+**C1, R: `lemma6_faults` in a new `reduce/lemma6hyp.rs`, beside `split_faults`. Done (1b).** It reads
 the built `Extended` (`X`'s actions, guards and initial states), each `Fold` (`act`,
 `guards`, `t_params`, `key`) and the split's sets. It covers `FoldKey::Param` folds;
 node folds (`FoldKey::Linked`) and bit groups stay with C2. It decides, without
@@ -175,27 +176,47 @@ recomputed as `split_faults` does). The cost is per rise edge, which is already 
 witness, and check that every edge respects it. That is linear and once per split. The
 Lean join of `Monotone.lean` to the action model is separate Lean work, not a certificate.
 
-**C7, R.** Run `partition/reference.rs::stable` on the sweeps' partition too when the
+**C7, R. Done (1b).** Run `partition/reference.rs::stable` on the sweeps' partition too when the
 fast one falls back. If that fails, the cone is unreduced. This runs only on the fallback
 path, so it costs about zero. For `stuttering_blocks`, check that the marked set is closed
 under the sweep's two rules. That is linear, and it is enough if the certificate needs only
 closure. Whether `Sweep.Marked` must be the least such set is to be confirmed in
 `Sweep.lean`; if it must, leastness stays read.
 
-**C8, R.** Two clauses in `split_faults`: no var that `is_counted` marks is an input (a
+**C8, R. Done (1b).** Two clauses in `split_faults`: no var that `is_counted` marks is an input (a
 new `Clause::Counter`), and every raiser and handler of a counted mark is in `T_a`. Free.
 
-**C9, TV and R, on counterexamples only.** `free_triggers` re-derived: for each step of
+**C9, TV and R, on counterexamples only. Done (1a).** `free_triggers` re-derived: for each step of
 the trace, test `action_reads(a) ∩ marks ⊄ cone.vars` directly from the action, not from
 the cone's bookkeeping, and require equality with `free_triggers`' list. Promote the
 `debug_assert!`s of `targets.rs::recheck_on` and `cone.rs::exact_target_cone` to checks
 that make the violation a `tool_error`. The cost applies only to cones with a candidate
 counterexample. This closes the main silent path to a wrong `violated`. N11's shared lasso
 code (C20) and A24's cap-stopped counterexamples are the others.
+As built (`core/vouch.rs`): the free triggers are read again off each step's guards with
+`pred_reads`, not through `action_reads`, which goes through `mark_reads`, the code the
+list is built from. A mismatch, or a step whose action the system lacks, adds what the list
+lacks, so the trace stays a candidate and `recheck_on` decides it (fallback); the run warns.
+`exact_target_cone` falls back to the whole system when its cone leaves a mark out or frees
+slots; an exact round whose counterexample is not vouched for is `Recheck::Fault`, a
+`TraceFault` (`LassoFault::Unvouched`), so the cone's verdict is `tool_error`. Each fault
+panics with `shadow:` in a debug or `shadow` build.
 
-**C10, R.** In `ComponentRun::lifted_path`, check that the lifted path's first state is in
+**C10, R. Done (1a).** In `ComponentRun::lifted_path`, check that the lifted path's first state is in
 `initial_states` of the unreduced cone (enumerate it, or test it against the init
 predicate). A failure is a `ReplayError`. This runs only on counterexamples.
+As built: the check sits at the reduced exit of `reduce/lift.rs::lift`, so every caller
+(`ComponentRun::lifted_path`, TLC replays, `lift_cycle`, the orbit traces, the inner lift)
+goes through it. `vouch.rs::is_unreduced_initial` tests the state against the initial-state
+definition and enumerates nothing. A failure is `ReplayError::NotInitial`; in `lift_cycle`
+it makes the reduced lasso spurious, and the property is decided unreduced.
+Measured for 1a (release builds of main and the branch in one target directory,
+`RDRA_JOBS=1`, `verify` at the default bounds; stdout, stderr and the TLA+ output
+byte-identical): patent-ops 45.13–45.14 → 45.07–45.08 G instructions retired, max RSS
+187.6–187.8 → 187.4–187.6 MB (3 runs each); clinic-ops 141.35–141.39 → 141.22–141.29 G,
+max RSS 993–999 MB (median 998) → 995–1007 MB (median 996) (5 runs each, interleaved).
+Neither sample has a counterexample, so the checks run only in `lift` and
+`exact_target_cone`.
 
 **C11, TV.** Check the invariant Theorem A1 needs, not minimality:
 `cone_faults(system, cone)` checks two things on the restricted system that `restrict_to`
@@ -224,9 +245,24 @@ which the reduction exists to avoid. What remains is Lean work (the nested induc
 the corpus's `C ⇒ R` TLC refinement. An option for the owner: a policy knob that turns
 off nested reductions and runs up to `H` in a "certified" mode.
 
-**C15, R.** On a cache hit, compare `Extended::rebuild`'s system digest with one stored at
+**C15, R. Done (1b).** On a cache hit, compare `Extended::rebuild`'s system digest with one stored at
 `Extended::of` time (one `u64` per entry). In `restrict_to`, assert that keeping `Tick`
 keeps `now`, statically. Free.
+As built for 1b: `lemma6_faults` also checks `FoldSpec.not_new` and `no_next`, that `X` keeps
+the clock with a tick, and ties `cover` to `X` by counting each action's params and guards
+against the restriction's rule, recomputed. C7's fallback is certified by `stable` and by
+`marking_splits_nothing`, a marking by `Marked`'s rules alone (`b2_of_marking`); the main
+path's partition gets that second marking in debug and `shadow` builds only, since it costs
+a second sweep. C15's digest is taken in `reduced_with` and compared in
+`Extended::rebuild_checked`, which `lift` and `class_table` call; `rebuild` sorts the folds
+by action, the split's order. Measured for 1b (release builds, `RDRA_JOBS=1`, `verify` at
+the default bounds; stdout and stderr byte-identical with main): patent-ops 45.07–45.14 →
+45.27–45.31 G instructions retired, max RSS 187.5–191.7 → 187.5–192.3 MB; clinic-ops
+141.25 → 141.38–141.46 G, max RSS 997 → 994–1011 MB. The checks themselves, run 100 times
+over per call: `lemma6_faults` costs 1.4 M (patent-ops, 20 calls) and 2.0 M (clinic-ops)
+instructions per `verify`, the digest under 0.4 M. The rest of the difference is code
+layout: a build of the branch with both calls removed retired 44.90–44.96 G on patent-ops,
+below main. Neither sample lifts a reduced trace, so `rebuild_checked` does not run there.
 
 **C16, R, gated on measurement.** After each `Canon::canonical`, check that
 `Group::apply(perm, s) == out` and that `perm` respects the classes (moves only movable
@@ -376,8 +412,8 @@ and the planted-bug test that every certificate needs (as
 
 | Phase | PR | Points | Kind | Effort | Est. cost (instructions / RSS) | Classes that change | Depends on |
 |---|---|---|---|---|---|---|---|
-| 1 | 1a counterexample vouching | C9, C10 | TV, R | 2 d | 0 off counterexamples / 0 | A2 gap closed; A16 "lifted start" closed | none |
-| 1 | 1b reduction syntax (done) | C1, C7, C8, C15 | R | 5 d | once per reduction, ~0 / 0 | A8's 8 fields, half of `cover` and `X`'s initial states move from read to R (`FoldKey::Param` folds); A9 fallback and marking, A12, A3 → R; N16's two internal facts → R | none |
+| 1 | 1a counterexample vouching (**Done**) | C9, C10 | TV, R | 2 d | 0 off counterexamples / 0 | A2 gap closed; A16 "lifted start" closed | none |
+| 1 | 1b reduction syntax (**Done**) | C1, C7, C8, C15 | R | 5 d | once per reduction, ~0 / 0 | A8's 8 fields, half of `cover` and `X`'s initial states move from read to R (`FoldKey::Param` folds); A9 fallback and marking, A12, A3 → R; N16's two internal facts → R | none |
 | 1 | 1c cone and build syntax | C11, C3 (R half), C33 | TV, R | 3 d | once per cone/build, ~0 / 0 | residual risk 1 "cone choice" → TV; A8/A18 syntax tie → R; T1 aliasing assumption → R | none |
 | 2 | 2a prover TVs | C22, C25, C24 | TV, W | 5 d | `--prove` only: ms + two builds already made + states × helper lemmas / 0 | B1 compare → TV; B2 Lemma U, B3 → TV; false helper lemmas → W on explored states (B16 unchanged) | none |
 | 3 | 3a step writes in release | C4 | R | 2 d + measure | per successor, target < 1% / 0 (per-action mask) | A1, B6 → R | none |

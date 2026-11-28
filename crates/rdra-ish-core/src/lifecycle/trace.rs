@@ -310,16 +310,23 @@ impl TransitionSystem {
         }
     }
 
-    /// Sets what the cone cannot vouch for in `trace`: `over_bound` and `free_triggers`.
+    /// Sets what the cone cannot vouch for in `trace`: `over_bound` and `free_triggers`. The
+    /// free triggers are checked against the steps' guards in every build
+    /// (`certify_free_triggers`).
     pub fn annotate(&self, cone: &Cone, trace: &mut Trace) {
         trace.over_bound = self.over_bound(cone, trace);
         trace.free_triggers = self.free_triggers(cone, trace);
+        self.certify_free_triggers(cone, trace);
     }
 
     /// The `(use case, event)` of each step whose event's mark the cone leaves out, in step
     /// order without repeats.
     fn free_triggers(&self, cone: &Cone, trace: &Trace) -> Vec<(String, String)> {
         let mut out: Vec<(String, String)> = Vec::new();
+        // A test plants a list that misses every free trigger (`certify_free_triggers`).
+        if super::explore::symmetry::dropped("free_triggers") {
+            return out;
+        }
         for step in &trace.steps {
             let Some(action) = self.actions.iter().find(|a| a.name == step.action) else {
                 continue;
