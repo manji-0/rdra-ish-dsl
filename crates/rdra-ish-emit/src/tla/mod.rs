@@ -8,6 +8,7 @@
 mod module;
 mod names;
 mod pred;
+mod refine;
 
 #[cfg(test)]
 mod tests;
@@ -17,6 +18,7 @@ use std::collections::BTreeSet;
 use rdra_ish_core::lifecycle::{Domain, EntId, TransitionSystem, Value};
 
 pub use names::{Decoder, StateCheck, TlaNames};
+pub use refine::{print_refinement, RefinementBundle};
 
 /// What the cfg asks TLC to do.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

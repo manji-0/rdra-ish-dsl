@@ -3,6 +3,9 @@ import RdraIsh.Stutter
 import RdraIsh.Reduction
 import RdraIsh.Example
 import RdraIsh.Symmetry
+import RdraIsh.Behaviour
+import RdraIsh.Fairness
+import RdraIsh.FairnessExample
 import RdraIsh.Branching
 import RdraIsh.ReductionLabels
 import RdraIsh.Stages

@@ -20,8 +20,12 @@ use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 
-use rdra_ish_core::lifecycle::{Bounds, Caps, Fairness, PropertyVerdict, Scope, TransitionSystem};
+use rdra_ish_cli::tlc_env::{tlc_env, Heap};
+use rdra_ish_core::lifecycle::{
+    Bounds, Caps, Fairness, NoClassTable, PropertyVerdict, Scope, Target, TransitionSystem,
+};
 use rdra_ish_core::load_project;
+use rdra_ish_emit::tla::{print, print_refinement, PrintMode, RefinementBundle, TlaBundle};
 
 fn corpus_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/engine_corpus")
@@ -1304,6 +1308,368 @@ fn a_reduced_wf_next_run_decides_what_the_unreduced_one_decides() {
     assert_eq!(
         at("cone_reduced_inner_class_loops", "JobStarts"),
         Some("found what the blind run misses")
+    );
+}
+
+/// One reduced cone of a corpus case and the modules of its refinement check: `C`, the cone
+/// unreduced, `R`, the cone reduced, and the check (docs/theory/tlc-agreement.md, "The
+/// reduction, step by step").
+struct Refinement {
+    label: String,
+    c: TlaBundle,
+    r: TlaBundle,
+    check: RefinementBundle,
+}
+
+/// The reduced cones of `case` at its header's bounds, each once: those of its targets and
+/// of its properties. Each is a refinement check, or the reason it has none.
+fn refinements(case: &Case) -> Vec<Result<Refinement, (String, NoClassTable)>> {
+    let project = load_project(std::slice::from_ref(&case.path), None)
+        .unwrap_or_else(|e| panic!("{}: {e}", case.name));
+    let ts = TransitionSystem::build(&project.model, case.bounds(), &Scope::default()).ts;
+    let cones = ts
+        .targets()
+        .into_iter()
+        .map(|t| {
+            let name = match t {
+                Target::Entity(e) => format!("entity {}", ts.entity(e).id),
+                Target::Invariant(i) => format!("invariant {}", ts.invariants()[i].name),
+                Target::AfterAssert(i) => format!("after {}", ts.after_asserts()[i].name),
+                Target::Reach(i) => format!("reach {i}"),
+            };
+            (name, ts.target_cone(t), ts.target_seed(t))
+        })
+        .chain((0..ts.properties().len()).map(|i| {
+            let name = format!("property {}", ts.properties()[i].name);
+            (name, ts.property_cone(i), ts.property_seed(i))
+        }));
+    let mut seen: BTreeSet<(String, String)> = BTreeSet::new();
+    let mut out = Vec::new();
+    for (label, cone, seed) in cones {
+        let reduced = ts.reduced_cone(&cone, [seed], Caps::VERIFY);
+        if reduced.reduction().is_none() {
+            continue;
+        }
+        let plain = ts.restrict_to(&cone.vars, &cone.keep);
+        let c = print(&plain, PrintMode::Safety, "Cone");
+        let r = print(&reduced, PrintMode::Safety, "Reduced");
+        if !seen.insert((c.tla.clone(), r.tla.clone())) {
+            continue;
+        }
+        let nested = match reduced.reduction().is_some_and(|r| r.inner().is_some()) {
+            true => ", nested",
+            false => "",
+        };
+        let label = format!("{} {label}{nested}", case.name);
+        out.push(match print_refinement(&reduced, &c, &r, "Refines") {
+            Ok(check) => Ok(Refinement { label, c, r, check }),
+            Err(why) => Err((label, why)),
+        });
+    }
+    out
+}
+
+/// What one TLC run of a refinement check, or of a module alone, printed.
+fn tlc_on(dir: &Path, files: &[(&str, &str)], module: &str, cfg: &str) -> String {
+    let _ = std::fs::remove_dir_all(dir);
+    std::fs::create_dir_all(dir.join("java-tmp")).expect("work dir");
+    for (name, text) in files {
+        std::fs::write(dir.join(name), text).expect("write a module");
+    }
+    std::fs::write(dir.join(format!("{module}.cfg")), cfg).expect("write the cfg");
+    let (key, value) = tlc_env(Heap::Cone, &dir.join("java-tmp"));
+    let tlc = if on_path("tlc") { "tlc" } else { "tlc2" };
+    let out = Command::new(tlc)
+        .env(key, value)
+        .args(["-workers", "1", "-metadir"])
+        .arg(dir.join("meta"))
+        .arg("-config")
+        .arg(format!("{module}.cfg"))
+        .arg(format!("{module}.tla"))
+        .current_dir(dir)
+        .output()
+        .expect("run tlc");
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    )
+}
+
+/// TLC's run of a refinement check, in a directory of its own under `tag`.
+fn tlc_refines(tag: &str, k: usize, m: &Refinement, r_tla: &str) -> String {
+    let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+        .join("refinement")
+        .join(tag)
+        .join(k.to_string());
+    tlc_on(
+        &dir,
+        &[
+            (&format!("{}.tla", m.c.module_name), &m.c.tla),
+            (&format!("{}.tla", m.r.module_name), r_tla),
+            (&format!("{}.tla", m.check.module_name), &m.check.tla),
+        ],
+        &m.check.module_name,
+        &m.check.cfg,
+    )
+}
+
+const TLC_NO_ERROR: &str = "Model checking completed. No error has been found.";
+
+/// TLC's line for a violated invariant of the refinement check, which a planted fault must
+/// produce by name: a parse error or a crash of TLC is no catch.
+fn tlc_invariant_violated(name: &str) -> String {
+    format!("Error: Invariant {name} is violated.")
+}
+
+/// Whether `log` says the `[][A]_v` of the check's `steps` property is violated. TLC names
+/// the formula by where it is, so the line must point into the property's definition.
+fn tlc_steps_violated(m: &RefinementBundle, log: &str) -> bool {
+    let line = m
+        .tla
+        .lines()
+        .position(|l| l.starts_with(&format!("{} ==", m.steps)))
+        .expect("the module defines the property")
+        + 1;
+    let head = format!("Error: Action property line {line}, col ");
+    let tail = format!(" of module {} is violated.", m.module_name);
+    log.lines()
+        .any(|l| l.starts_with(&head) && l.ends_with(&tail))
+}
+
+/// `tla` with the first `n` class moves of the table on the line that starts with `table`
+/// left out (each nonempty cell, in class order, emptied), and how many it left out.
+fn leave_out_moves(tla: &str, table: &str, n: usize) -> (String, usize) {
+    let mut dropped = 0;
+    let lines: Vec<String> = tla
+        .lines()
+        .map(|line| {
+            if !line.starts_with(table) {
+                return line.to_string();
+            }
+            let (mut out, mut rest) = (String::new(), line);
+            while let Some(at) = rest.find('{') {
+                let end = at + rest[at..].find('}').expect("a cell closes");
+                out.push_str(&rest[..at]);
+                match &rest[at..=end] {
+                    cell if cell != "{}" && dropped < n => {
+                        out.push_str("{}");
+                        dropped += 1;
+                    }
+                    cell => out.push_str(cell),
+                }
+                rest = &rest[end + 1..];
+            }
+            out + rest
+        })
+        .collect();
+    (lines.join("\n") + "\n", dropped)
+}
+
+/// The reduced cones of the corpus the refinement check runs on, and those it refuses.
+const CHECKED: usize = 17;
+const REFUSED: usize = 0;
+
+/// Every reduced cone of the corpus refines its reduction under TLC: each reached state of
+/// the cone unreduced maps to a class, its key being a state the extended sub-lifecycle
+/// reaches, and each step to a step of the reduced cone or a stutter of it (claims A8 and
+/// T19 of docs/theory/claims.md). TLC explores the unreduced cone with its own semantics,
+/// so the check shares no code with the reducer but the class table. A cone the table
+/// cannot list is refused with its reason, and the counts are pinned so the test cannot go
+/// empty. The prefix keeps it out of the debug `test` step (scripts/diff-test.sh).
+#[test]
+fn tlc_refinement_holds_on_every_reduced_cone_of_the_corpus() {
+    if !tools().tlc {
+        return;
+    }
+    let mut jobs = Vec::new();
+    let mut refused = Vec::new();
+    for case in cases().iter().filter(|c| c.rejects.is_empty()) {
+        for (k, m) in refinements(case).into_iter().enumerate() {
+            match m {
+                Ok(m) => jobs.push((format!("{}/{k}", case.name), m)),
+                Err((label, why)) => refused.push(format!("{label}: {why}")),
+            }
+        }
+    }
+    // One TLC process a worker, as the corpus test runs its cases.
+    let next = AtomicUsize::new(0);
+    let logs: Mutex<Vec<(usize, String)>> = Mutex::new(Vec::new());
+    let workers = std::thread::available_parallelism().map_or(2, |n| n.get().clamp(1, 4));
+    std::thread::scope(|s| {
+        for _ in 0..workers {
+            s.spawn(|| loop {
+                let i = next.fetch_add(1, Ordering::Relaxed);
+                let Some((tag, m)) = jobs.get(i) else { break };
+                let log = tlc_refines(tag, 0, m, &m.r.tla);
+                logs.lock().unwrap().push((i, log));
+            });
+        }
+    });
+    let mut logs = logs.into_inner().unwrap();
+    logs.sort_by_key(|(i, _)| *i);
+    let mut checked = Vec::new();
+    let mut failed = Vec::new();
+    for ((_, m), (_, log)) in jobs.iter().zip(&logs) {
+        match log.contains(TLC_NO_ERROR) {
+            true => checked.push(format!("{} ({} X states)", m.label, m.check.states)),
+            false => failed.push(format!("{}:\n{log}", m.label)),
+        }
+    }
+    for line in checked.iter().chain(&refused) {
+        println!("{line}");
+    }
+    assert!(
+        failed.is_empty(),
+        "refinement fails:\n{}",
+        failed.join("\n")
+    );
+    assert_eq!(
+        (checked.len(), refused.len()),
+        (CHECKED, REFUSED),
+        "the reduced cones of the corpus changed: pin the new counts"
+    );
+    assert!(
+        checked.iter().any(|line| line.contains(", nested")),
+        "a nested reduction's classes are composed and checked"
+    );
+}
+
+/// Class moves left out of the reduced cone's tables fail the refinement check where TLC on
+/// the reduced cone alone gives the same verdicts as before: the five first class moves of
+/// `Use` on `cone_triggered_param_on_a_stub`'s cone of `Forbidden`. A missing move that
+/// flips no verdict is invisible to every comparison of verdicts.
+#[test]
+fn tlc_refinement_catches_class_moves_left_out_that_tlc_on_the_reduced_cone_misses() {
+    if !tools().tlc {
+        return;
+    }
+    let case = cases()
+        .into_iter()
+        .find(|c| c.name == "cone_triggered_param_on_a_stub")
+        .expect("the case");
+    let m = refinements(&case)
+        .into_iter()
+        .filter_map(Result::ok)
+        .find(|m| m.r.tla.contains("Succ_Use =="))
+        .expect("a reduced cone whose S side runs Use");
+    let (r_tla, planted) = leave_out_moves(&m.r.tla, "Succ_Use == ", 5);
+    assert_eq!(planted, 5, "Use has five class moves to leave out");
+    let alone = |tla: &str, tag: &str| {
+        let dir = Path::new(env!("CARGO_TARGET_TMPDIR"))
+            .join("refinement")
+            .join(tag);
+        let log = tlc_on(
+            &dir,
+            &[(&format!("{}.tla", m.r.module_name), tla)],
+            &m.r.module_name,
+            &m.r.cfg,
+        );
+        let verdicts: BTreeSet<String> = log
+            .lines()
+            .filter(|l| l.starts_with("Error: ") || l.contains(TLC_NO_ERROR))
+            .map(str::to_string)
+            .collect();
+        assert!(!verdicts.is_empty(), "TLC gave no verdict:\n{log}");
+        verdicts
+    };
+    assert_eq!(
+        alone(&m.r.tla, "reduced-alone"),
+        alone(&r_tla, "reduced-alone-planted"),
+        "TLC on the reduced cone alone sees the class moves left out"
+    );
+    let log = tlc_refines("planted-moves", 0, &m, &r_tla);
+    assert!(
+        tlc_steps_violated(&m.check, &log),
+        "the refinement check misses the class moves left out:\n{log}"
+    );
+}
+
+/// With every param on a stub of the extended sub-lifecycle left unbound and the stub check
+/// off (`bind_stub_params_unchecked`), the extended sub-lifecycle drops `Issue` and `Note`'s
+/// rise, and the refinement check fails on the two corpus cases built around it, at the step it drops: a state
+/// of the cone whose key the extended sub-lifecycle never reaches. The switch is read from
+/// the environment, so the check runs in a process of its own
+/// (`tlc_refinement_with_stub_params_left_unbound`). Only a `shadow` build reads it.
+#[cfg(feature = "shadow")]
+#[test]
+fn tlc_refinement_catches_a_param_left_on_a_stub() {
+    if !tools().tlc {
+        return;
+    }
+    let out = Command::new(std::env::current_exe().expect("the test binary"))
+        .args([
+            "tlc_refinement_with_stub_params_left_unbound",
+            "--exact",
+            "--ignored",
+            "--nocapture",
+        ])
+        .env("RDRA_ISH_DROP_RULE", "bind_stub_params_unchecked")
+        .output()
+        .expect("the test binary runs");
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert!(out.status.success(), "{text}");
+    assert!(text.contains("1 passed"), "the check did not run:\n{text}");
+}
+
+/// The run `tlc_refinement_catches_a_param_left_on_a_stub` starts, with the stub params left
+/// unbound and unchecked.
+#[cfg(feature = "shadow")]
+#[test]
+#[ignore = "run by tlc_refinement_catches_a_param_left_on_a_stub, with the fault planted"]
+fn tlc_refinement_with_stub_params_left_unbound() {
+    assert_eq!(
+        std::env::var("RDRA_ISH_DROP_RULE").as_deref(),
+        Ok("bind_stub_params_unchecked"),
+        "run with the fault planted"
+    );
+    let mut caught = Vec::new();
+    for case in cases().into_iter().filter(|c| {
+        [
+            "cone_triggered_param_on_a_stub",
+            "cone_rise_param_on_a_stub",
+        ]
+        .contains(&c.name.as_str())
+    }) {
+        for (k, m) in refinements(&case).into_iter().enumerate() {
+            let m = m.unwrap_or_else(|(label, why)| panic!("{label}: {why}"));
+            let log = tlc_refines(&format!("{}-before-fix", case.name), k, &m, &m.r.tla);
+            if log.contains(&tlc_invariant_violated(&m.check.reached)) {
+                // The actions of TLC's trace: `State 2: <Place line 120, col 1 ...>`.
+                let steps: Vec<&str> = log
+                    .lines()
+                    .filter_map(|l| l.strip_prefix("State ")?.split_once(": <"))
+                    .filter_map(|(_, rest)| rest.split(' ').next())
+                    .collect();
+                println!(
+                    "{}: {} after {}",
+                    m.label,
+                    m.check.reached,
+                    steps.join(", ")
+                );
+                // TLC names a step by its action alone or with its parameters (`Note(1,1)`),
+                // depending on the version; the action is what the check is about.
+                let last = steps.last().map_or(String::new(), |a| {
+                    a.split('(').next().unwrap_or(a).to_string()
+                });
+                caught.push((case.name.clone(), last));
+            } else {
+                assert!(log.contains(TLC_NO_ERROR), "{}:\n{log}", m.label);
+            }
+        }
+    }
+    let caught: Vec<(&str, &str)> = caught.iter().map(|(c, a)| (&c[..], &a[..])).collect();
+    assert_eq!(
+        caught,
+        [
+            ("cone_rise_param_on_a_stub", "Note"),
+            ("cone_triggered_param_on_a_stub", "Issue")
+        ],
+        "the check catches each case at the step the build drops: Note's rise, Issue"
     );
 }
 

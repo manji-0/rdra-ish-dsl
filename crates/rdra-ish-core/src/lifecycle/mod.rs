@@ -53,7 +53,10 @@ pub use findings::{
 };
 pub use guards::{GuardDeps, GuardKind, GuardSubject};
 pub use lasso::{Fairness, LassoReplay, Loop, Unfair};
-pub use reduce::{ClassMove, Divergence, Fold, FoldKey, QuotientCache, Reduction, Step};
+pub use reduce::{
+    ClassMove, ClassTable, Divergence, Fold, FoldKey, NoClassTable, QuotientCache, Reduction, Step,
+    CLASS_TABLE_CAP,
+};
 pub use select::{NotChecked, Scope, Selection, UnknownId, Without};
 pub use states::{
     derive_states, derive_states_built, derive_states_checked, BoundsLine, CheckOutcome,
