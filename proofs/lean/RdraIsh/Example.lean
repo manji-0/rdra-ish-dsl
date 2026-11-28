@@ -1,4 +1,5 @@
 import RdraIsh.Reduction
+import RdraIsh.Symmetry
 
 /-!
 # A concrete instance of Theorem A8's hypotheses
@@ -77,3 +78,54 @@ theorem flag_after_s :
   a8_holds_iff split lemma6 extended stable (fun o => o.1 = true → o.2 = true)
 
 end RdraIsh.Example
+
+/-!
+# A concrete instance of `Sym`
+
+Two slots, each created once (`false → true`); the group is `{id, swap}` (`g = true` swaps),
+allowed on every state. The invariant "not both slots are created" is symmetric (and fails on
+both sides); "slot 0 is created whenever slot 1 is" is not symmetric, and the theorem says
+nothing of it.
+-/
+
+namespace RdraIsh.ExampleSym
+
+open LTS
+
+def M : LTS (Bool × Bool) Bool where
+  init s := s = (false, false)
+  step s a t := (a = false ∧ s.1 = false ∧ t = (true, s.2)) ∨
+    (a = true ∧ s.2 = false ∧ t = (s.1, true))
+
+def swap (g : Bool) (s : Bool × Bool) : Bool × Bool := if g then (s.2, s.1) else s
+
+def sym : Sym M Bool where
+  mul g h := xor g h
+  inv g := g
+  act := swap
+  actL g a := xor g a
+  mem _ _ := True
+  act_mul g h s := by cases g <;> cases h <;> rfl
+  act_inv g s := by cases g <;> rfl
+  act_inv' g s := by cases g <;> rfl
+  mul_mem _ _ := trivial
+  inv_mem _ := trivial
+  mem_act _ := Iff.rfl
+  step {s a t g} hst _ := by
+    obtain ⟨s1, s2⟩ := s
+    cases g <;> cases a <;> simp_all [M, swap]
+  mem_step _ _ := trivial
+  init {s g} hi _ := by
+    simp only [M] at hi ⊢
+    subst hi
+    cases g <;> rfl
+
+/-- The quotient by "store the state with its slots sorted" gives the plain verdict of the
+symmetric invariant. -/
+theorem sorted_quotient :
+    M.Holds (fun s => s ≠ (true, true)) ↔
+      (quotient M (fun s => swap (s.2 && !s.1) s)).Holds (fun s => s ≠ (true, true)) :=
+  quotient_holds_iff sym _ (fun s => s.2 && !s.1) (fun _ => rfl) (fun _ => trivial) _
+    (fun s g _ => by obtain ⟨s1, s2⟩ := s; cases g <;> cases s1 <;> cases s2 <;> decide)
+
+end RdraIsh.ExampleSym
