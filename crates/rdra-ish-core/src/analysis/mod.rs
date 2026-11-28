@@ -26,6 +26,7 @@ pub(crate) use condition::{body_condition_display, effect_value_display};
 use fk::{check_join_selectors, resolve_along_links, resolve_foreign_keys};
 use instance::register_instance;
 use predicate_process::process_predicate;
+pub(crate) use predicate_process::MAX_COUNTED;
 use property::register_property;
 
 pub fn build_model(ast: &Ast) -> (SemanticModel, Vec<Diagnostic>) {

@@ -665,7 +665,8 @@ pub fn traces(
     let mut parent: Vec<Option<usize>> = vec![None; n];
     let mut root: Vec<Option<u32>> = vec![None; n];
     let mut queue = VecDeque::new();
-    for at in 0..n as u32 {
+    let states = u32::try_from(n).expect("a run numbers its states with a `u32`");
+    for at in 0..states {
         if run.parent(at).is_none() {
             root[at as usize] = Some(at);
             queue.push_back(at);
@@ -673,15 +674,16 @@ pub fn traces(
     }
     while let Some(u) = queue.pop_front() {
         for &c in &out_of[u as usize] {
-            let v = calls[c].to as usize;
+            let to = calls[c].to;
+            let v = to as usize;
             if root[v].is_none() {
                 root[v] = root[u as usize];
                 parent[v] = Some(c);
-                queue.push_back(v as u32);
+                queue.push_back(to);
             }
         }
     }
-    let reached: Vec<u32> = (0..n as u32)
+    let reached: Vec<u32> = (0..states)
         .filter(|s| root[*s as usize].is_some())
         .collect();
     out.states = reached.len();
@@ -1492,11 +1494,11 @@ impl Cx<'_> {
             for p in &action.params {
                 let present = (0..ts.slots(p.entity))
                     .filter(|s| state.is_present(ts, p.entity, *s))
-                    .map(|s| s as u8);
+                    .map(slot8);
                 let slots: Vec<u8> = match p.role {
                     ParamRole::New => (0..ts.slots(p.entity))
                         .find(|s| !state.is_present(ts, p.entity, *s))
-                        .map(|s| s as u8)
+                        .map(slot8)
                         .into_iter()
                         .collect(),
                     ParamRole::Existing
@@ -1806,6 +1808,12 @@ fn default_input(domain: &DomainModel, input: &PortInput) -> String {
 
 /// The `k`-th value of a type the model leaves open: for `k > 0` another than
 /// [`default_value`]'s, where the type has another.
+/// A slot of an entity as a `u8`: an entity has at most 255 slots (`Bounds::instances` is a
+/// `NonZeroU8`).
+fn slot8(s: usize) -> u8 {
+    u8::try_from(s).expect("an entity has at most 255 slots")
+}
+
 fn fuzzed(domain: &DomainModel, ty: &FieldType, k: usize) -> String {
     let day = 1 + k % 28;
     match ty {

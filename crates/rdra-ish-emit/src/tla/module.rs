@@ -140,7 +140,7 @@ impl Latch {
             ts,
             names,
             primed,
-            depth: p.binders.len() as u8,
+            depth: p.binders.len(),
         };
         format!("({}) /\\ ({})", trigger(&mut ctx, p), ctx.pred(first))
     }
@@ -207,6 +207,8 @@ fn reduction(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
     let (Some(r), Some(class)) = (ts.reduction(), names.class()) else {
         return;
     };
+    // A class is a state of the S run, which numbers its states with a `u32`.
+    let class_count = u32::try_from(r.classes()).expect("a class number is a `u32`");
     out.push_str(&format!(
         "\\* The independent sub-lifecycle, reduced: {} is the class of its state under\n\
          \\* stuttering equivalence with respect to what the rest reads of it, one of {} classes\n\
@@ -216,7 +218,7 @@ fn reduction(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
     ));
     for &v in r.obs() {
         let d = ts.var(v);
-        let per_class: Vec<String> = (0..r.classes() as u32)
+        let per_class: Vec<String> = (0..class_count)
             .map(|c| match d.kind {
                 VarKind::Now => render_value(&d.domain, r.rep_value(c, v, 0).expect("in S")),
                 _ => {
@@ -269,7 +271,7 @@ fn reduction(ts: &TransitionSystem, names: &TlaNames, out: &mut String) {
              \\* the step to the class the representative is in under them.\n",
             inputs.join(", ")
         ));
-        let cells: Vec<String> = (0..r.classes() as u32)
+        let cells: Vec<String> = (0..class_count)
             .map(|c| {
                 let entries: Vec<String> = r
                     .rises_from(c)
@@ -971,7 +973,8 @@ fn next(ts: &TransitionSystem, names: &TlaNames, (wf_next, bound): (bool, bool),
 fn bindings(ts: &TransitionSystem, a: &Action) -> Vec<Vec<u8>> {
     let mut out = vec![Vec::new()];
     for param in &a.params {
-        let n = ts.slots(param.entity) as u8;
+        let n = u8::try_from(ts.slots(param.entity))
+            .expect("an entity has at most 255 slots: `Bounds::instances` is a `NonZeroU8`");
         out = (out.into_iter())
             .flat_map(|b| {
                 (0..n).map(move |s| {
@@ -1014,7 +1017,7 @@ fn closed(
         ts,
         names,
         primed,
-        depth: entities.len() as u8,
+        depth: entities.len(),
     };
     let inner = ctx.pred(body);
     if entities.is_empty() {
@@ -1094,7 +1097,7 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, latches: &[Latch], out: &mut 
             ts,
             names,
             primed: false,
-            depth: p.binders.len() as u8,
+            depth: p.binders.len(),
         };
         let mut next = Ctx {
             primed: true,
@@ -1177,7 +1180,7 @@ fn checks(ts: &TransitionSystem, names: &TlaNames, latches: &[Latch], out: &mut 
             ts,
             names,
             primed: false,
-            depth: r.binders.len() as u8,
+            depth: r.binders.len(),
         };
         // D22: the trigger adds the link; the path keeps only the instance present.
         let (quant, present) = binders(&ctx, &r.binders);

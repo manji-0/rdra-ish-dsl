@@ -17,6 +17,10 @@ use crate::lifecycle::types::{
 };
 use crate::model::{EventKey, NodeRef, Raiser, RelKind, UseCaseKey};
 
+// A counter of `.counted(k)` takes the `k + 2` values `0..=k` and `over`, `Value(k + 1)`, the
+// analysis admits `k` up to `MAX_COUNTED`, and those values fit a byte.
+const _: () = assert!(crate::analysis::MAX_COUNTED < u8::MAX);
+
 /// How the first step of a triggered use case reads the mark of one mark entity.
 enum Read {
     /// On its own params of the entity, each the raiser's row.
@@ -251,6 +255,10 @@ impl<'m> Builder<'m> {
         site: &Site,
     ) -> VarId {
         let model = self.model;
+        debug_assert!(
+            k <= crate::analysis::MAX_COUNTED,
+            "the analysis admits `.counted(k)` up to MAX_COUNTED"
+        );
         let (ev, name) = (&model.events[event].id, &model.use_cases[uc].id);
         let values: Vec<String> = (0..=k)
             .map(|i| i.to_string())
