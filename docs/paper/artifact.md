@@ -25,6 +25,11 @@ The `perf` feature adds the `perf-run` and `perf-pass` lines to stderr that the 
 | Determinism (7.4) | `scripts/paper/eval.py determinism $BIN docs/paper/eval/data/determinism.tsv samples/patent-ops samples/clinic-ops` | `eval/data/determinism.tsv` | about 2 min |
 | Whole model, no cone | `cargo run --release -p rdra-ish-core --example paper_whole -- samples/patent-ops 2 20000000` | printed | seconds to the state cap |
 | TLC agreement (7.5) | `python3 -I scripts/paper/tlc-baseline.py --check docs/paper/eval/tlc-baseline.md` (from saved CI lines); a local rerun is `scripts/verify-samples.sh --with-tlc --tlc-roots scripts/tlc-roots.txt $BIN` | `eval/data/tlc-ci-lines.txt` | the local rerun is about 4 min on CI |
+| Technical report | `python3 -I scripts/paper/build-tech-report.py` (and `--check`) | `tech-report-full.md` | instant |
+| T15 cross-check of `proved` | `prove_transcript OUT ROOT` then `scripts/paper/smt-crosscheck.py OUT/<root>.smt2` | `eval/data/smt-crosscheck.txt` | minutes per root |
+| T11 mutation sample | `cargo mutants --config .cargo/mutants-tlc.toml --baseline skip --timeout 900 --shard 0/12 --sharding round-robin` (tlc and z3 on PATH) | `eval/data/mutants-tlc-sample.txt` | about 3.5 h |
+| T16 prover | `scripts/paper/prove-eval.py run $BIN docs/paper/eval/data/prove.tsv` | `eval/data/prove.tsv` | about 4 min |
+| T8 local TLC | `scripts/paper/tlc-local.py run $BIN docs/paper/eval/data/tlc-local.tsv` (tlc on PATH) | `eval/data/tlc-local.tsv` | about 5 min |
 | Defects (Paper 2) | `python3 -I scripts/paper/defect-summary.py` | `evidence/defects.tsv` | instant |
 | Lean | `scripts/check-lean-proofs.sh` | `proofs/lean/` | about a minute from a warm elan cache |
 | Lean checkers on the samples | `scripts/check-lean-certificates.sh`, `scripts/check-lean-partitions.sh` | dumped splits and partitions | minutes |

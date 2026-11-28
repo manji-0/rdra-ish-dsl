@@ -1,0 +1,53 @@
+# cargo-mutants 27.1.0 --config .cargo/mutants-tlc.toml, round-robin shards 0/24 and 12/24 (= shard 0/12), TLC 1.7.4, z3 5.4.1, main at 9e4a123
+# 569 mutants listed; 48 tested: caught 37, missed 9, unviable 2, timeout 0
+## missed
+crates/rdra-ish-emit/src/tla/module.rs:917:73: replace == with != in from_guarded
+crates/rdra-ish-emit/src/tla/names.rs:100:15: replace += with *= in Taken::claim
+crates/rdra-ish-emit/src/tla/names.rs:301:9: replace TlaNames::rise_table -> Option<&str> with Some("xyzzy")
+crates/rdra-ish-emit/src/tla/pred.rs:137:21: delete match arm CmpOp::Ne in Ctx<'_>::cmp
+crates/rdra-ish-cli/src/tlc_output.rs:387:21: replace match guard assigns.is_empty() with false in parse_block
+crates/rdra-ish-cli/src/tlc_output.rs:442:23: replace += with *= in split_top
+crates/rdra-ish-emit/src/tla/mod.rs:133:44: replace == with != in render_value
+crates/rdra-ish-emit/src/tla/module.rs:974:5: replace bindings -> Vec<Vec<u8>> with vec![vec![1]]
+crates/rdra-ish-emit/src/tla/names.rs:439:9: replace TlaNames::slot_keys -> Vec<String> with vec![]
+## unviable
+crates/rdra-ish-emit/src/tla/module.rs:753:5: replace effects -> (Vec<String>, BTreeSet<VarId>) with (vec!["xyzzy".into()], BTreeSet::from_iter([Default::default()]))
+crates/rdra-ish-emit/src/tla/names.rs:392:9: replace TlaNames::named_action -> Option<ActId> with Some(Default::default())
+## caught
+crates/rdra-ish-cli/src/tlc_output.rs:61:9: replace Outcome::as_str -> &'static str with ""
+crates/rdra-ish-cli/src/tlc_output.rs:178:9: replace && with || in violation_kind
+crates/rdra-ish-cli/src/tlc_output.rs:311:5: replace parse_trace -> (Vec<TraceStep>, Option<Lasso>, usize) with (vec![], None, 1)
+crates/rdra-ish-cli/src/tlc_output.rs:358:5: replace action_label -> String with String::new()
+crates/rdra-ish-cli/src/tlc_output.rs:434:25: replace == with != in split_top
+crates/rdra-ish-cli/src/tlc_output.rs:457:26: replace == with != in split_top
+crates/rdra-ish-cli/src/tlc_output.rs:644:9: replace Banner::complete -> bool with true
+crates/rdra-ish-cli/src/tlc_replay.rs:87:5: replace decode -> Result<(Vec<State>, Vec<ActId>), String> with Ok((vec![], vec![]))
+crates/rdra-ish-cli/src/verify/compare.rs:183:5: replace as_str -> &'static str with "xyzzy"
+crates/rdra-ish-emit/src/tla/mod.rs:215:16: delete ! in cfg_without
+crates/rdra-ish-emit/src/tla/module.rs:26:5: replace render -> String with "xyzzy".into()
+crates/rdra-ish-emit/src/tla/module.rs:248:42: replace + with - in reduction
+crates/rdra-ish-emit/src/tla/module.rs:456:39: replace == with != in input_tuple
+crates/rdra-ish-emit/src/tla/module.rs:590:5: replace tuple_items -> Vec<String> with vec!["xyzzy".into()]
+crates/rdra-ish-emit/src/tla/module.rs:1068:5: replace checks with ()
+crates/rdra-ish-emit/src/tla/names.rs:354:9: replace TlaNames::invariant -> &str with "xyzzy"
+crates/rdra-ish-emit/src/tla/names.rs:492:9: replace TlaNames::decode -> Option<State> with None
+crates/rdra-ish-emit/src/tla/pred.rs:72:9: replace Ctx<'_>::count -> String with String::new()
+crates/rdra-ish-cli/src/tlc_output.rs:137:27: replace && with || in TlcRun::outcome
+crates/rdra-ish-cli/src/tlc_output.rs:221:5: replace initial_violation -> bool with false
+crates/rdra-ish-cli/src/tlc_output.rs:318:54: replace + with - in parse_trace
+crates/rdra-ish-cli/src/tlc_output.rs:570:47: replace + with - in dot_label
+crates/rdra-ish-cli/src/tlc_output.rs:664:27: replace + with * in running_java
+crates/rdra-ish-cli/src/verify/compare.rs:30:38: replace && with || in disagreements
+crates/rdra-ish-emit/src/tla/mod.rs:252:5: replace state_cfg -> String with "xyzzy".into()
+crates/rdra-ish-emit/src/tla/module.rs:162:9: replace Latch::init -> String with "xyzzy".into()
+crates/rdra-ish-emit/src/tla/module.rs:358:5: replace bit_name -> String with "xyzzy".into()
+crates/rdra-ish-emit/src/tla/module.rs:509:28: replace && with || in init
+crates/rdra-ish-emit/src/tla/module.rs:653:5: replace binder -> String with "xyzzy".into()
+crates/rdra-ish-emit/src/tla/module.rs:853:30: replace == with != in effects
+crates/rdra-ish-emit/src/tla/module.rs:1247:46: replace && with || in state_checks
+crates/rdra-ish-emit/src/tla/names.rs:140:23: delete ! in TlaNames::with_state_models
+crates/rdra-ish-emit/src/tla/names.rs:334:9: replace TlaNames::succ_table -> &str with ""
+crates/rdra-ish-emit/src/tla/names.rs:373:9: replace TlaNames::seen -> Option<(&str, &str)> with Some(("xyzzy", "xyzzy"))
+crates/rdra-ish-emit/src/tla/names.rs:549:22: replace += with *= in Decoder<'_>::decode
+crates/rdra-ish-emit/src/tla/pred.rs:103:20: replace += with -= in Ctx<'_>::quantify
+crates/rdra-ish-emit/src/tla/pred.rs:184:29: replace match guard domain.is_numeric() with true in Ctx<'_>::member
