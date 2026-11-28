@@ -660,7 +660,9 @@ one `split_with` picks. (a), (b) and (e) follow from the closure conditions and 
 of `obs`. (c) follows from the hypothesis `FoldData.cover`: every `T_v` read of an `S_a` action
 is a raw read (`raw_reads`), an existence of one, or a read its fold covers. (d) follows from
 the closure, `raw_reads ⊆ Rd`, and the hypothesis that an existence of a monotone variable is
-monotone (`FoldData.ex_mono`); `monotone_vars` itself is a parameter. With the locality of `Rd`
+monotone (`FoldData.ex_mono`); `monotone_vars` itself is a parameter, modelled on its own in
+`proofs/lean/RdraIsh/Monotone.lean`, where an existence that only creates and deletes write is
+monotone (`Monotone.lean::existence_monotone`). With the locality of `Rd`
 and `Wr` (`Local`: a guard conjunct depends only on `Rd ∪ Wr`, an effect changes only `Wr`,
 and its value there depends only on `Rd ∪ Wr`), (a) and (b) give the hypothesis `Split` of
 the Lean proof of Theorem A8 (`split_of_lemma5`, `split_computed`), which needs nothing of
@@ -1164,9 +1166,18 @@ reduction uses it, with `reference::stable`: (B1) every block lies inside one bl
 labels the partition starts from; (B2) one sweep of `stuttering_blocks` with every block a
 splitter splits nothing; (B3) every state of a block enters by a rise the same set of blocks as
 the block's first state. A partition that fails is reported as a tool bug on stderr and replaced
-by the sweeps' partition. So (B1)–(B3) hold of every partition a reduction uses, given two
-things argued by inspection only: that one splitting sweep of `stuttering_blocks` that splits
-nothing is (B2), and that the sweeps' fallback partition is stable when they stop.
+by the sweeps' partition. So (B1)–(B3) hold of every partition a reduction uses. M: Lean
+proves the step from the check to (B1)–(B3) over a model of it
+(`proofs/lean/RdraIsh/Sweep.lean::stable_of_cert`): on a complete run of a flat `X`, the
+states one sweep marks for a splitter are exactly those that leave their block into it by a
+silent path through the block (`Sweep.lean::marked_iff`), so a sweep that splits nothing is
+(B2), and a partition that passes the check is `Stable` with each block's first state as
+representative; a `Stable` partition passes it (`Sweep.lean::cert_of_stable`).
+`Sweep.lean::check_sound` proves a Boolean checker over the run's lists sound for the same
+check. Read from the code and not proved: that the depth-first marking of `stuttering_blocks`
+computes the marked set, that the run is `X`'s reachable graph, and that the sweeps'
+fallback partition meets the check when they stop (its last sweep and its last pass over the
+rises split nothing).
 Coarseness is not certified and is not needed: a finer stable partition is still a
 bisimulation. Evidence: `reduce/partition.rs::the_stability_certificate_rejects_a_partition_that_is_not_stable`
 (a partition that mixes labels, one where a block's states reach different blocks silently, one
@@ -1183,7 +1194,13 @@ leaves) and the random-graph test below, which also certifies every worklist par
 - **A10** (monotone inputs): Lemma 5c–d, checked at run time on every split (`split_faults`, R),
   and point 5 of Theorem A8. Monotonicity is not used in A8; it
   keeps `X` finite and small. It is used in A15 (case 3 and `s_cycles`). M: Lean proves Lemma 5
-  (c)(d) (`proofs/lean/RdraIsh/Split.lean::lemma5_of_closed`, Lemma 5's evidence above).
+  (c)(d) (`proofs/lean/RdraIsh/Split.lean::lemma5_of_closed`, Lemma 5's evidence above), and,
+  over a model of the write graph `monotone_vars` builds and of `each_successor`, that a step
+  from a pre-state that meets `Pre` (a created row absent with its cells at base, a deleted row
+  present, values in their domains, the clock below `int_max`) moves each cell of a variable
+  that is not cyclic along that graph (`proofs/lean/RdraIsh/Monotone.lean::succ_covers`), so a
+  variable it marks monotone changes finitely often along every behaviour
+  (`Monotone.lean::monotone_finite_changes`).
 - **A11** (folds): Lemma 6, whose step (a) derives the fold equivalence from `fold_of` and
   `Fold::holds`, which the `Twin::FoldHolds` twin checks against its reference. A count that reads `T` is never
   node-folded (counting-rules.md): `reduce/fold.rs::as_node` makes a node only of an existential (or an
@@ -1311,7 +1328,14 @@ loop (case 1 of Definition 5). The run's verdict is read as "no lasso of `R` tha
 `Search.lean::a15_search` takes instead the verdict of the search over components itself: N9,
 proved in `Search.lean` (`accepts_iff_lasso`), makes the two the same.
 Cases 2 and 3 of Definition 5 and the proof's (ii) belong to the nested case, which is not
-modelled; case 4 enters only through the hypothesis, and the proof's (iii) is not formalized.
+modelled. The proof's (iii) is proved: a cell whose steps follow an acyclic graph changes
+finitely often along every behaviour
+(`proofs/lean/RdraIsh/Monotone.lean::finite_changes_of_behaviour`), and when every cell of `S`
+follows one along the silent edges, no block of any partition has a silent cycle, so `a15`
+holds with no class marked, which is case 4 with `s_cycles` false (`Monotone.lean::no_silentCycle`,
+`Monotone.lean::a15_monotone`). The code's unobserved `S` is one class for all input bytes,
+which is not (B1); the reading of its `R` as the reduced cone of the partition by input bytes
+is argued.
 `ExampleFair.eventually_flag` discharges every hypothesis on a cone whose one block holds a
 silent cycle. R: every build checks that hypothesis, case 1, on each explored run of `X`
 (`reduce/hypotheses.rs::loop_faults`): it peels the silent edges between different states
@@ -1808,8 +1832,10 @@ Evidence: none beyond the reading of `escalate` and the guide.
   CI's shadow job (the `writes` twin, on the samples and the corpus) check `Wr` against the steps
   they take. A release build does not check it, and a step no run takes is not checked.
 - **Partition and Lemma 6.** A8, A15, and every reduced cone's verdict rest on (B1)–(B3), which
-  every build certifies on the partition it uses, given that one non-splitting sweep of
-  `stuttering_blocks` is (B2), argued by inspection; and on Lemma 6, argued over a reading of
+  every build certifies on the partition it uses (that the check gives (B1)–(B3) is proved in
+  Lean over a model of it, `proofs/lean/RdraIsh/Sweep.lean::stable_of_cert`, given that the
+  run is `X`'s reachable graph and that `stuttering_blocks` marks what the model marks); and
+  on Lemma 6, argued over a reading of
   the code and proved in Lean only over an action model of the cone and `X`, from
   hypotheses read from the code. Its fold half is checked against the cone's step relation on the
   domain samples and the built models only; its parameter matrix is checked cell by cell on
