@@ -1852,16 +1852,19 @@ fn a_rise_with_a_param_on_a_stub_is_a_rise_of_the_extended_sub_lifecycle() {
     }
 }
 
-/// The corpus cases whose fold and rise keep a param on a stub (claim A8).
-const STUB_CASES: &[(&str, &str)] = &[
+/// The corpus cases whose fold and rise keep a param on a stub (claim A8), each with the
+/// action that keeps it.
+const STUB_CASES: &[(&str, &str, &str)] = &[
     (
         "cone_triggered_param_on_a_stub",
+        "Issue",
         include_str!(
             "../../../../rdra-ish-cli/tests/engine_corpus/cone_triggered_param_on_a_stub.rdra"
         ),
     ),
     (
         "cone_rise_param_on_a_stub",
+        "Note",
         include_str!("../../../../rdra-ish-cli/tests/engine_corpus/cone_rise_param_on_a_stub.rdra"),
     ),
 ];
@@ -1886,7 +1889,7 @@ fn cones_with_seeds(ts: &TransitionSystem) -> Vec<(Cone, Seed)> {
 fn a_param_left_on_a_stub_makes_the_cone_decide_unreduced() {
     use crate::lifecycle::explore::symmetry::witnesses::dropping;
     let caps = Caps::new(usize::MAX, 200_000);
-    for (name, src) in STUB_CASES {
+    for (name, action, src) in STUB_CASES {
         let model = model_from(src);
         let ts = TransitionSystem::build(&model, Bounds::VERIFY, &Scope::ALL).ts;
         let (mut faults, mut fallbacks) = (0, 0);
@@ -1905,8 +1908,8 @@ fn a_param_left_on_a_stub_makes_the_cone_decide_unreduced() {
             };
             faults += 1;
             assert!(
-                fault.contains("Issue") || fault.contains("Note"),
-                "{name}: the fault names the fold's or the rise's param: {fault}"
+                fault.contains(&format!(" of {action}")),
+                "{name}: the fault names {action}'s param: {fault}"
             );
             if reduced.reduction().is_none() {
                 continue;

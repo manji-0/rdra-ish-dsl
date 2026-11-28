@@ -734,7 +734,10 @@ counterexample on both. `::a_param_left_on_a_stub_makes_the_cone_decide_unreduce
 `bind_stub_params` on those two cases: the check names `Issue`'s and `Note`'s parameter, and the
 cone is decided unreduced, with the cone's verdicts. `::no_extended_sub_lifecycle_leaves_a_param_on_a_stub`
 builds the top-level `X` of every target and property cone of the samples, the domain samples
-and the corpus, with and without inputs, and the check passes on each. This is evidence on
+and the corpus, with and without inputs, and the check passes on each.
+`reduce/extended.rs::tests::a_stub_param_no_fold_or_rise_stands_for_is_left_and_reported` counts
+`Note`'s rise among the `S_a` actions: `bind_stub_params` leaves its parameter's role, and the
+check reports it as unfolded. This is evidence on
 these models and bounds, not a proof of Lemma 6; cone-soundness.md, "Proof obligation", states
 the lemma in points 2, 3, and 5.
 

@@ -582,3 +582,59 @@ fn flips(k: usize, var: VarId, entity: EntId, source: usize) -> [Action; 2] {
         }],
     })
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lifecycle::tests::model_from;
+    use crate::lifecycle::{Bounds, Scope};
+
+    /// The other half of the check (claim A8): `bind_stub_params` binds a param on a stub
+    /// only for a fold or a rise. With the rise of `cone_rise_param_on_a_stub` (`Note`, whose
+    /// `Parent` Order param is on a stub) counted among the S actions, as though it were an
+    /// unfolded S action, its param keeps its role and is the check's fault, in every build.
+    #[test]
+    fn a_stub_param_no_fold_or_rise_stands_for_is_left_and_reported() {
+        let src = include_str!(
+            "../../../../rdra-ish-cli/tests/engine_corpus/cone_rise_param_on_a_stub.rdra"
+        );
+        let ts = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::ALL).ts;
+        let mut reported = 0;
+        for t in ts.targets() {
+            let (sys, local) = ts.cone_system(&ts.target_cone(t), [ts.target_seed(t)]);
+            let mut split = sys.split_with(&local, true);
+            if split.s.is_empty() || split.s.is_subset(&split.obs) {
+                continue;
+            }
+            let ext = Extended::of(&sys, &split);
+            assert!(
+                ext.stubs.fault.is_none(),
+                "{t:?}: the check passes as built"
+            );
+            let Some(note) = sys
+                .action_ids()
+                .find(|a| sys.actions[a.index()].name == "Note")
+            else {
+                continue;
+            };
+            let Some(k) = ext.acts.iter().position(|a| *a == Some(note)) else {
+                continue;
+            };
+            if !ext.rise[k] {
+                continue;
+            }
+            split.s_actions.insert(note);
+            let ext = Extended::of(&sys, &split);
+            let fault = ext.stubs.fault.as_ref().expect("the check fails");
+            assert!(fault.unfolded && fault.action == "Note", "{t:?}: {fault}");
+            let param = &ext.system.actions[k].params[fault.param];
+            assert_eq!(
+                param.role.binds_exists(),
+                Some(Value::PRESENT),
+                "{t:?}: the param keeps its role"
+            );
+            reported += 1;
+        }
+        assert!(reported > 0, "a cone keeps Note as a rise");
+    }
+}
