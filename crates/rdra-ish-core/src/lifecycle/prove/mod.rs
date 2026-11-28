@@ -14,14 +14,20 @@
 //! reachable. The bounded engines, not this one, find counterexamples.
 
 mod encode;
+#[cfg(not(kani))]
+mod explored;
 mod mine;
 mod smt;
 mod solver;
 mod strengthen;
+#[cfg(not(kani))]
+mod uniform;
 
 use std::collections::{BTreeMap, BTreeSet};
 
 pub use solver::{Sat, Solver, SolverError, Z3};
+#[cfg(not(kani))]
+pub use uniform::same_up_to_bound;
 
 use crate::lifecycle::cone::VarSet;
 use crate::lifecycle::types::{ActId, CmpOp, Domain, EntId, Pred, Term, VarId, VarKind};
@@ -40,6 +46,9 @@ pub struct Proof {
     /// Guards and writes the encoding could not express: guards it dropped and writes it
     /// left free. Both only add steps, so a proof stays sound; a rule may fail to prove.
     pub loose: Vec<String>,
+    /// The checks of the proof's own output that failed (`Proof::fault`): each is a tool bug,
+    /// and with any of them no rule is proved.
+    pub faults: Vec<String>,
 }
 
 impl Proof {
@@ -55,6 +64,19 @@ impl Proof {
             .iter()
             .filter(|r| matches!(r.verdict, Verdict::Unproved(_)))
             .count()
+    }
+
+    /// Records a check of the proof that failed: a bug of the encoder, the builder, or the
+    /// prover, never a finding about the model. No rule stays proved and no lemma kept: each
+    /// proved rule is `Unproved::Uncertified`.
+    pub fn fault(&mut self, why: String) {
+        for r in &mut self.rules {
+            if matches!(r.verdict, Verdict::Proved) {
+                r.verdict = Verdict::Unproved(Unproved::Uncertified(why.clone()));
+            }
+        }
+        self.lemmas.clear();
+        self.faults.push(why);
     }
 
     pub fn out_of_scope(&self) -> usize {
@@ -101,6 +123,9 @@ pub enum Unproved {
     /// inconsistent: the canary candidate `false` survived initiation (`premise`), so no rule
     /// is proved; the text says why.
     Premise(String),
+    /// The proof found the rule, but a check of the proof's own output failed
+    /// (`Proof::fault`): a tool bug, so it proves nothing. The text names the check.
+    Uncertified(String),
 }
 
 /// The set a proof kept, for the next proof to offer first (`prove_offered`): which
@@ -352,18 +377,115 @@ pub fn prove_offered<S: Solver + Send>(
     let mut extra: Vec<(String, Formula)> = Vec::new();
     for round in 0.. {
         let offer = if round == 0 { offer } else { None };
-        let (certified, found) =
+        let (mut certified, found, kept) =
             prove_round(ts, rules, refuted, solvers, options, offer, &mined, &extra)?;
         let new: Vec<(String, Formula)> = found
             .into_iter()
             .filter(|(t, _)| !extra.iter().any(|(u, _)| u == t))
             .collect();
         if new.is_empty() || round == STRENGTHEN_ROUNDS {
+            #[cfg(not(kani))]
+            certify(
+                ts,
+                rules,
+                refuted,
+                &mined,
+                &extra,
+                &kept,
+                &mut certified.proof,
+            );
+            #[cfg(kani)]
+            let _ = kept;
             return Ok(certified);
         }
         extra.extend(new);
     }
     unreachable!("the rounds are bounded")
+}
+
+/// The checks of a proof's own output, on every proof that proves a rule or keeps a lemma
+/// (claims B1 and B16 of docs/theory/claims.md): each comparison the encoding states agrees with the native one on
+/// every value at the run's bounds (`encode::compare_faults`), and each kept helper lemma holds
+/// on every state the miner's cones reach (`explored::lemma_faults`). A failure is a tool bug,
+/// so the proof proves nothing (`Proof::fault`); a debug or `shadow` build stops, unless a test
+/// planted the fault (`dropped`).
+#[cfg(not(kani))]
+fn certify(
+    ts: &TransitionSystem,
+    rules: &[usize],
+    refuted: &BTreeSet<usize>,
+    mined: &[(Origin, Formula, u8)],
+    extra: &[(String, Formula)],
+    kept: &[(String, Formula)],
+    proof: &mut Proof,
+) {
+    use crate::lifecycle::explore::symmetry::dropped;
+    use crate::lifecycle::types::GuardWhy;
+    if proof.proved() == 0 && proof.lemmas.is_empty() {
+        return;
+    }
+    // Every formula the proof encoded as a candidate, and every guard its steps assert.
+    let invs: Vec<&crate::lifecycle::types::Invariant> = rules
+        .iter()
+        .filter(|i| !refuted.contains(i))
+        .map(|&i| &ts.invariants()[i])
+        .collect();
+    let helpers = lemmas(ts);
+    let mut preds: Vec<encode::Encoded> = Vec::new();
+    for inv in &invs {
+        preds.push(encode::Encoded {
+            pred: &inv.body,
+            params: &[],
+            bound: &inv.binders,
+        });
+    }
+    let formulas = helpers
+        .iter()
+        .map(|(_, f)| f)
+        .chain(mined.iter().map(|(_, f, _)| f))
+        .chain(extra.iter().map(|(_, f)| f));
+    for f in formulas {
+        preds.push(encode::Encoded {
+            pred: &f.body,
+            params: &[],
+            bound: &f.binders,
+        });
+    }
+    let params: Vec<Vec<EntId>> = ts
+        .actions()
+        .iter()
+        .map(|a| a.params.iter().map(|p| p.entity).collect())
+        .collect();
+    for (a, params) in ts.actions().iter().zip(&params) {
+        for g in a.guards.iter().filter(|g| g.why != GuardWhy::Clock) {
+            preds.push(encode::Encoded {
+                pred: &g.pred,
+                params,
+                bound: &[],
+            });
+        }
+    }
+    let mut faults = encode::compare_faults(ts, &preds);
+    // A planted false lemma, as if one had survived Houdini.
+    let mut kept = kept.to_vec();
+    if dropped("prove_false_lemma") {
+        if let Some(e) = ts.entity_ids().next() {
+            let planted = Formula {
+                binders: vec![e],
+                body: Pred::False,
+                all_rows: false,
+            };
+            kept.push(("a planted false lemma".to_string(), planted));
+        }
+    }
+    faults.extend(explored::lemma_faults(ts, &kept, rules));
+    for fault in faults {
+        crate::shadow_assert!(
+            dropped("prove_compare") || dropped("prove_false_lemma"),
+            "shadow: prove: {fault}"
+        );
+        proof.fault(fault);
+    }
 }
 
 /// The canary of every proof: the candidate `false`, which must fall at initiation. It holds
@@ -443,6 +565,7 @@ fn unfounded(
             rules,
             lemmas: Vec::new(),
             loose,
+            faults: Vec::new(),
         },
         certificate: Certificate {
             digest: String::new(),
@@ -451,6 +574,10 @@ fn unfounded(
         reused: false,
     }
 }
+
+/// What one round gives: the proof, the lemmas its CTIs gave, and the lemmas it kept with
+/// their formulas.
+type Round = (Certified, Vec<(String, Formula)>, Vec<(String, Formula)>);
 
 /// How many times a proof is run again with the lemmas its CTIs gave (`strengthen`).
 const STRENGTHEN_ROUNDS: usize = 2;
@@ -467,7 +594,7 @@ fn prove_round<S: Solver + Send>(
     offer: Option<&Certificate>,
     mined: &[(Origin, Formula, u8)],
     extra: &[(String, Formula)],
-) -> Result<(Certified, Vec<(String, Formula)>), SolverError> {
+) -> Result<Round, SolverError> {
     let enc = Enc { ts };
     let mut verdicts: BTreeMap<usize, Verdict> = BTreeMap::new();
     let mut cands = Vec::new();
@@ -794,13 +921,14 @@ fn prove_round<S: Solver + Send>(
     }
 
     let kept: Vec<usize> = (0..cands.len()).filter(|k| set.contains(*k)).collect();
-    let kept_lemmas = kept
+    let kept_formulas: Vec<(String, Formula)> = kept
         .iter()
         .filter_map(|k| match &cands[*k].origin {
-            Origin::Lemma(text) => Some(text.clone()),
+            Origin::Lemma(text) => Some((text.clone(), cands[*k].formula.clone())),
             Origin::Rule(_) => None,
         })
         .collect();
+    let kept_lemmas = kept_formulas.iter().map(|(t, _)| t.clone()).collect();
     let proof = Proof {
         rules: rules
             .iter()
@@ -811,6 +939,7 @@ fn prove_round<S: Solver + Send>(
             .collect(),
         lemmas: kept_lemmas,
         loose,
+        faults: Vec::new(),
     };
     Ok((
         Certified {
@@ -819,6 +948,7 @@ fn prove_round<S: Solver + Send>(
             reused,
         },
         found,
+        kept_formulas,
     ))
 }
 

@@ -23,6 +23,11 @@ use crate::lifecycle::types::{
 };
 use crate::lifecycle::TransitionSystem;
 
+#[cfg(not(kani))]
+mod compare_tv;
+#[cfg(not(kani))]
+pub(super) use compare_tv::{compare_faults, Encoded};
+
 /// Which state a function name reads.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Frame {
@@ -95,6 +100,25 @@ fn now(frame: Frame) -> Expr {
         Frame::Post => "now_n",
     };
     Expr::sym(name, Sort::Int)
+}
+
+/// A value of `domain` as a term: its index for every domain but a key's, and for a key `nil`
+/// (an unlinked optional key) or `zero` (slot 0 of a non-optional one); any other slot is a
+/// row the encoding does not name. `Enc::value` and `Enc::compare` write values through it,
+/// and `compare_tv` holds it to the value it stands for.
+fn value_term(domain: &Domain, v: Value) -> R<Expr> {
+    match *domain {
+        Domain::Instance {
+            parent,
+            optional: true,
+        } if v == Value::NULL => Ok(nil(parent)),
+        Domain::Instance {
+            parent,
+            optional: false,
+        } if v.0 == 0 => Ok(zero(parent)),
+        Domain::Instance { .. } => Err(Unsupported("a fixed slot as a value".to_string())),
+        _ => Ok(Expr::int(i64::from(v.0))),
+    }
 }
 
 /// The row of entity `e` that a step's param `p` names.
@@ -178,17 +202,14 @@ impl Enc<'_> {
         eq(self.exists(e, frame, row), Expr::int(1))
     }
 
-    /// A value of `var`'s domain as a term of its sort.
+    /// A value of `var`'s domain as a term of its sort (`value_term`).
     fn value(&self, var: VarId, v: Value) -> R<Expr> {
-        match self.key(var) {
-            None => Ok(Expr::int(i64::from(v.0))),
-            Some((parent, true)) if v == Value::NULL => Ok(nil(parent)),
-            Some((parent, false)) if v.0 == 0 => Ok(zero(parent)),
-            Some(_) => Err(Unsupported(format!(
+        value_term(&self.ts.var(var).domain, v).map_err(|_| {
+            Unsupported(format!(
                 "a fixed slot of {} as a value",
                 self.ts.var_name(var)
-            ))),
-        }
+            ))
+        })
     }
 
     /// The sorts, the pre-state functions, and the facts every state of the system has: each
@@ -688,6 +709,11 @@ impl Enc<'_> {
         fn unsupported<T>(what: &str) -> R<T> {
             Err(Unsupported(what.to_string()))
         }
+        // A planted fault for the tests of `compare_tv`: `<` written as `<=`.
+        #[cfg(not(kani))]
+        if op == CmpOp::Lt && crate::lifecycle::explore::symmetry::dropped("prove_compare") {
+            return self.compare(lhs, CmpOp::Le, rhs);
+        }
         if let (Op::Row(row, e), Op::Var(v, d)) | (Op::Var(v, d), Op::Row(row, e)) = (lhs, rhs) {
             return match d {
                 Domain::Instance { parent, .. } if parent == e => {
@@ -758,13 +784,10 @@ impl Enc<'_> {
                     Some((v.clone(), *parent, *optional))
                 }
                 (Op::Row(r, e), _) => Some((r.clone(), *e, false)),
-                (Op::Lit(v), Some((parent, true))) if *v == Value::NULL => {
-                    Some((nil(parent), parent, true))
+                (Op::Lit(v), Some((parent, optional))) => {
+                    let key = Domain::Instance { parent, optional };
+                    Some((value_term(&key, *v)?, parent, optional))
                 }
-                (Op::Lit(v), Some((parent, opt))) if v.0 == 0 && !opt => {
-                    Some((zero(parent), parent, false))
-                }
-                (Op::Lit(_), Some(_)) => return unsupported("a fixed slot as a value"),
                 _ => None,
             })
         };
