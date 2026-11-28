@@ -666,8 +666,11 @@ and its value there depends only on `Rd ∪ Wr`), (a) and (b) give the hypothesi
 the Lean proof of Theorem A8 (`split_of_lemma5`, `split_computed`), which needs nothing of
 the folds; the cone system over `T_v × S_v` reaches a pair iff the action-level system reaches
 its valuation (`cone_reach_iff`). The proof does not read
-the code: that `action_reads`, `copy_reads` and `action_writes` meet `Local`, and that
-`raw_reads` and the folds meet `FoldData`, are hypotheses.
+the code. `Local` is a theorem for the action model read off the slot-level model of Theorem A18
+(`proofs/lean/RdraIsh/SymActModel.lean::local_`), whose read and write sets are computed from the
+syntax of guards and effects as `action_reads`, `copy_reads` and `effect_writes` compute them;
+that the code's actions are that syntax is read from the code. That `raw_reads` and the folds
+meet `FoldData` is a hypothesis.
 
 **Definition 4 (extended sub-lifecycle and quotient).** `X` is
 `reduce/extended.rs::Extended::build`: `restrict_to(S_v ∪ inputs)` without the havoc of `Triggered`
@@ -1566,9 +1569,14 @@ rule per piece on a single cycle is `threadFair_iff_pieces`.
   - `proofs/lean/RdraIsh/SearchSym.lean` proves the search above: it accepts iff some binding has
     a fair violating behaviour (`oAccepts_iff`), iff N9's search on the plain system accepts
     (`oAccepts_iff_accepts`), so its verdict is `a23`'s quotient side
-    (`not_oAccepts_iff_lassos`). It takes the commutation on every state (`Sym`; there is no
-    form over `SymOn`) and adds one hypothesis to `a23`'s: the fair instances enabled at each
-    state lie in a list. `TEdge.reverse` walks a thread edge back, and `threadsCovered_iff`
+    (`not_oAccepts_iff_lassos`). It adds one hypothesis to `a23`'s: the fair instances enabled
+    at each state lie in a list. With the commutation only on the set `W`
+    (`SymOn`), the search runs on the system restricted to `W`, which holds every stored state
+    and has the plain system's edges there, and its verdict is the plain system's
+    (`liveHolds_iff_not_oAccepts_on`, `oAccepts_on_iff_accepts`).
+    `proofs/lean/RdraIsh/SymActSearch.lean::orbit_verdict` composes this with A18 from (G1)–(G6):
+    on the slot-level model the orbit search's verdict is the plain one, with no commutation
+    assumed outside `W`. `TEdge.reverse` walks a thread edge back, and `threadsCovered_iff`
     equates the code's union-find with the pieces. `SearchExample.lean` runs the search on
     `ExampleSymLive`.
   - The proof covers liveness and not the entity-cone findings, and does not read the code.
@@ -1618,7 +1626,9 @@ self-edge stands for a concrete cycle inside its class and marks it (Definition 
 model of the cone system. In that model (G1)–(G4) and (G6) are conditions on the syntax of guards
 and effects, as `breaks.rs::scan` states them, (G5) is the semantics of a delete, and the two
 facts of the builder are hypotheses. `symOn` gives the `SymOn` that A23 assumes, and
-`a18_holds_iff` the verdict of an invariant `G_s` preserves on the canonical quotient. The model
+`a18_holds_iff` the verdict of an invariant `G_s` preserves on the canonical quotient. The same
+model, read as an action model (`proofs/lean/RdraIsh/SymActModel.lean::model`), meets the
+locality `Local` that Lemmas 5 and 6 assume (`local_`). The model
 reads an action's effects in list order, where `each_successor` applies the deletes and then the
 choices last. It does not model owner `Transition`s, which the scan leaves out with `OwnerChoice`.
 It covers neither the reduced cone nor the extended sub-lifecycle (A22). Kani: the harness
