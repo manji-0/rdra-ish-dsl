@@ -19,7 +19,8 @@ of `R` that satisfies `Fair_P` and stays forever only at such stops violates the
 (`ReducedRunOk`). Under `Fair_P`, a lasso that stays at `q` forever has no fair instance
 enabled at `q` (it would be enabled forever and never taken), so `LoopingStop` keeps only the
 second half of the stop rule. That the search over strongly connected components finds a lasso
-whenever one exists is N9 (native.md), which is not formalized here.
+whenever one exists is N9 (native.md), proved in Search.lean, where `a15_search` takes the
+search's verdict in place of `ReducedRunOk`.
 
 **Definition 5, case 1.** `SilentCycle X B c`: from a reachable state of block `c` the silent
 edges of `X` between two different states of `c` contain a cycle. The hypothesis `hloop`

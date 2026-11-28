@@ -1233,8 +1233,9 @@ flat case, from Lemma 5 (a)(b), Lemma 6 both ways, the shape of `X` and (B1)–(
 hypotheses (as `a8_dbsb` does), finitely many reachable states of `X` and `R`, and the
 hypothesis that every block whose silent edges between different states contain a cycle can
 loop (case 1 of Definition 5). The run's verdict is read as "no lasso of `R` that satisfies
-`Fair_P` and stops only where no move leaves or the class can loop violates `P`"; that the
-search over components finds such a lasso when one exists is N9, outside the Lean proof.
+`Fair_P` and stops only where no move leaves or the class can loop violates `P`", and
+`Search.lean::a15_search` takes instead the verdict of the search over components itself: N9,
+proved in `Search.lean` (`accepts_iff_lasso`), makes the two the same.
 Cases 2 and 3 of Definition 5 and the proof's (ii) belong to the nested case, which is not
 modelled; case 4 enters only through the hypothesis, and the proof's (iii) is not formalized.
 `ExampleFair.eventually_flag` discharges every hypothesis on a cone whose one block holds a
@@ -1425,15 +1426,29 @@ is not enabled. `can` need only pick a member of the orbit, so the theorem holds
 `g(s)` of a reachable `s`, which need not be reachable when `g` was not in the group of an earlier
 state on the path to `s`.
 
-*What the theorem leaves to the search.* `explore/orbit/liveness.rs` does not enumerate lassos. It
-accepts a strongly connected component of the goal-free (state, binding) pairs, reached from a
-failing trigger pair, when the component has a cycle, is expanded, and every piece of its threads
-takes its instance on some edge or meets a pair where it is not enabled. The pieces are the
-components of the thread graph over the whole component. Two implications are not proved: that
-such an accepted component holds a thread-fair violating annotated lasso, and that every
-thread-fair violating annotated lasso lies in a component the rule accepts or reaches a stop. They
-are the analogue of N9 for the annotated quotient. The rule per piece on a single cycle is proved
-(`threadFair_iff_pieces`).
+*The search.* `explore/orbit/liveness.rs` does not enumerate lassos. It accepts a strongly
+connected component of the goal-free (state, binding) pairs, reached from a failing trigger pair,
+when the component has a cycle, is expanded, and every piece of its threads takes its instance on
+some edge or meets a pair where it is not enabled. The pieces are the components of the thread
+graph over the whole component, with the direction of its edges forgotten. This is the analogue
+of N9 for the annotated quotient, and it decides the property:
+
+- A thread edge inside a component can be walked back. The edge and a path of pairs back close a
+  walk whose composite permutation lies in the group of its first state, and some power of it
+  acts as the identity. So a piece is strongly connected, and from every node of a piece a path
+  of threads reaches its covered node.
+- (⇐) In an accepted component, a loop that walks the thread of each instance enabled at its
+  first pair to a covered node, one instance after another, covers every thread in each round.
+  The stored path, the path to the component and that loop repeated are a thread-fair violating
+  annotated run, and the lift carries it to a fair violating behaviour.
+- (⇒) A fair violating lasso, seen through frames that stay put on a stutter, is a sequence of
+  pairs that repeats. It settles at a stop pair, or its repeated pairs lie in one component with a
+  cycle. A piece of that component with no covered node has a node over each of its pairs, so the
+  thread of the lasso through it would be enabled forever and never taken.
+
+The code builds the pieces from the nodes of enabled instances only, with union-find, and marks a
+node that an edge joins to a node whose instance is not enabled; that is the same criterion. The
+rule per piece on a single cycle is `threadFair_iff_pieces`.
 
 *Evidence for A23.* P-sketch. M:
 - The Lean proof `proofs/lean/RdraIsh/SymmetryLiveness.lean::a23` (`a23_iff` on runs, `a23_on`
@@ -1442,8 +1457,14 @@ are the analogue of N9 for the annotated quotient. The rule per piece on a singl
     cycle has the swap as its composite and closes after two copies.
   - `ExampleReachOnly` is a system with commutation on its reachable states whose canonical
     quotient reaches a state its plain run does not.
-  - The proof reads the run's search as a search for annotated lassos (above), covers liveness
-    and not the entity-cone findings, and does not read the code.
+  - `proofs/lean/RdraIsh/SearchSym.lean` proves the search above: it accepts iff some binding has
+    a fair violating behaviour (`oAccepts_iff`), iff N9's search on the plain system accepts
+    (`oAccepts_iff_accepts`), so its verdict is `a23`'s quotient side
+    (`not_oAccepts_iff_lassos`). It adds one hypothesis to `a23`'s: the fair instances enabled at
+    each state lie in a list. `TEdge.reverse` walks a thread edge back, and `threadsCovered_iff`
+    equates the code's union-find with the pieces. `SearchExample.lean` runs the search on
+    `ExampleSymLive`.
+  - The proof covers liveness and not the entity-cone findings, and does not read the code.
 - The twins `Twin::OrbitLiveness` and `Twin::OrbitStateModels`. `Twin::OrbitLiveness` compares
   with the plain run's search, so it checks the quotient, not the fair-component rule, as its
   description says.

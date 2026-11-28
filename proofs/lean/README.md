@@ -5,13 +5,17 @@
 <!-- derived-from ../../docs/theory/cones.md#wf_varsnext-on-a-reduced-cone -->
 <!-- derived-from ../../docs/theory/semantics.md#temporal-properties -->
 <!-- derived-from ../../docs/theory/semantics.md#verdicts -->
+<!-- derived-from ../../docs/theory/native.md#the-check -->
 
 This directory holds a Lean 4 project. It proves parts of Theorems A8, A15, A18, A20, A21 and A23 of
 [cones.md](../../docs/theory/cones.md) from their hypotheses, and Lemma 5 from Definition 3.
 The theorems of A8 and the others are stated over abstract transition systems; Lemma 5 is
 stated over a model of the cone by its actions
-([Definition 3 and Lemma 5 over actions](#definition-3-and-lemma-5-over-actions)). None of
-them reads the Rust code.
+([Definition 3 and Lemma 5 over actions](#definition-3-and-lemma-5-over-actions)). N9 of
+[native.md](../../docs/theory/native.md#the-check), the liveness search by fair components,
+and the same search on the pairs of a run up to symmetry are stated over abstract
+transition systems too ([The liveness searches](#the-liveness-searches)). None of them reads
+the Rust code.
 
 ## Building
 
@@ -105,6 +109,17 @@ toolchain to Mathlib's releases. The group laws are fields of `Sym`, so
 | `restrict_liveHolds_iff`, `a23_on` | `SymmetryLiveness.lean` | A18, A23, reachable states | With commutation only on a set `W` that holds the initial states and is closed under steps and every `G_s` (`SymOn`), `M` restricted to `W` has a `Sym` with `M`'s verdicts, and `a23` holds for it. |
 | `ExampleSymLive.plain_ok`, `ExampleSymLive.quotient_ok`, `ExampleSymLive.one_copy_open`, `ExampleSymLive.two_copies_close` | `SymmetryLivenessExample.lean` | none | Two interchangeable instances, each with a bit its fair action toggles, and the swap: every hypothesis of `a23` is discharged, the plain verdict of `eventually` is proved and `a23` gives the quotient's. The quotient cycle `(F,F) → (F,T) → (F,F)` has the swap as its composite; its lift does not close after one copy and does after two. |
 | `ExampleReachOnly.reach_only_counterexample` | `SymmetryLivenessExample.lean` | none | A system whose steps commute with `G_s` on its reachable states, with a canonical form in the orbit and an invariant the group preserves, where the invariant holds on the plain run and fails on the canonical quotient, which stores an unreachable image. So commutation on reachable states is not enough. |
+| `LTS.accepts_iff`, `LTS.accepts_iff_lasso`, `LTS.liveHolds_iff_not_accepts` | `Search.lean` | N9 | On a system whose reachable states lie in a list, N9's search (`Accepts`: a reachable trigger state in `N` reaches, by edges of `E_N`, a stop or a state of a fair component) accepts iff some behaviour, and iff some lasso, satisfies `Fair_P`, stays forever only where the stop rule holds, and violates `□(trig ⇒ ◇goal)`. So the property holds (D21) iff the search does not accept. |
+| `LTS.lasso_of_accepts`, `LTS.FairComp.cycle`, `LTS.lasso_of_cycle` | `Search.lean` | N9, (⇐) | A fair component holds a closed walk of `E_N` that takes every edge between two of its states; the prefix, the path to the end and that walk, or a stutter at a stop, fold into a lasso with the four properties. |
+| `LTS.accepts_of_behaviour` | `Search.lean` | N9, (⇒) | A fair violating behaviour reaches a segment it repeats: a stop if the segment is one state, else a fair component, since an instance enabled on the whole component is enabled forever and so taken by a step inside it. |
+| `LTS.liveHolds_plain_iff`, `LTS.liveHolds_wfNext_iff`, `LTS.isStop_true_iff`, `LTS.isStop_moves_iff` | `Search.lean` | N9, the stop rules | Under `Plain` the stop rule is `True`; under `WfNext` it is `¬ Moves`, and a state with no move has no enabled instance, so the code's test of `¬ Moves` alone is the stop. |
+| `a15_search` | `Search.lean` | A15 | `a15` with the run's verdict read as "N9's search on `R` under `LoopingStop` does not accept"; `ReducedRunOk` follows from it by N9 on `R`. |
+| `TEdge.reverse`, `Conn.star` | `SearchSym.lean` | A23, thread pieces | Inside a strongly connected component of the pairs, a thread edge can be walked back: the edge and a path of pairs back close a walk whose composite permutation lies in one finite `G_s` and has a power that acts as the identity. So a piece of the thread graph (connected with the direction forgotten) is strongly connected. |
+| `threadsCovered_iff`, `fairPComp_iff_code` | `SearchSym.lean` | A23, the code's pieces | The code's criterion, union-find over the nodes of enabled instances with a node marked when an edge of the component takes its instance or joins it to a node whose instance is not enabled, holds iff every piece of the full thread graph holds a covered node. |
+| `FairPComp.cover_one`, `FairPComp.cover`, `run_of_parts`, `behaviour_of_oAccepts` | `SearchSym.lean` | A23, the search (⇐) | In an accepted component every thread has a walk to a covered node; one such walk per instance enabled at the end pair, each from where the previous ones left it, is a loop whose every round covers every thread. The stored path, the path of pairs and that loop round and round (or a stutter at a stop pair) are an annotated run that `a23_lift` carries to a fair violating behaviour of `M`. |
+| `oAccepts_of_lasso`, `oAccepts_of_behaviour` | `SearchSym.lean` | A23, the search (⇒) | A fair violating lasso of `M`, seen through frames kept on stutters, is a sequence of pairs that repeats; it ends at a stop pair or in a component with a cycle, and a piece with no covered node would hold a thread of the lasso that is always enabled and never taken. |
+| `oAccepts_iff`, `liveHolds_iff_not_oAccepts`, `oAccepts_iff_accepts`, `not_oAccepts_iff_lassos` | `SearchSym.lean` | A23, N9 | With `a23`'s hypotheses and a list of the fair instances enabled at each state, the orbit search accepts iff some binding has a fair violating behaviour of `M`, iff N9's search on `M` accepts for some binding; it does not accept iff no thread-fair violating annotated lasso of the canonical quotient exists, the quotient side of `a23`. |
+| `ExampleFair.search_ok`, `ExampleFair.eventually_flag_search`, `ExampleSymLive.orbit_ok`, `ExampleSymLive.plain_search_ok` | `SearchExample.lean` | none | On the A15 and A23 examples the searches do not accept, and `a15_search` gives `C`'s verdict from the search on `R`. |
 
 ## What the hypotheses are
 
@@ -161,6 +176,13 @@ The proofs assume the following hypotheses and do not derive them:
   - `hloop`: every block whose silent edges between different states contain a cycle from
     a reachable state can loop (`SilentCycle`, Definition 5, case 1). The code's
     `divergence` and, for `obs = ∅`, `s_cycles` must make it true; cones.md argues both.
+- **The searches** (`Accepts`, `OAccepts`; [below](#the-liveness-searches)).
+  - The searched graph is the system's step relation on its reachable states: a complete
+    run (N1), so `En`, `Moves` and `Tk` are those of `M`.
+  - The reachable states lie in a list (`L`, `LM`). The orbit search also needs every `G_s`
+    finite and, at each state, the fair instances enabled there in a list (`hΦ`); the code
+    keys a finite set of instances (`Product::keys`).
+  - The canonical form is a `Canon`: `can s = π(s)(s)` with `π(s) ∈ G_s`.
 - **The fairness model** (`Behaviour.lean`). A fair instance is a set of `T_a` labels (fair
   actions are `T_a` actions, Lemma 5 (e), assumed by giving instances on `Ta` only). A step
   takes an instance only when it changes the state (assumption τ of native.md). Behaviours
@@ -197,19 +219,19 @@ The proofs assume the following hypotheses and do not derive them:
     `reduced` on a partition that `stable_of_stableV` makes `Stable`, so `a8_edges_iff`,
     `a8_stuck_iff` and `a8_plain_iff` apply to it as they stand.
   - Consequence 4 is stated for `□(trig ⇒ ◇goal)` at one binding, the form of D21's
-    `eventually` and `leads_to`, over behaviours. That the native search over lassos
-    decides it is N9. `always` is an invariant (consequence 1).
+    `eventually` and `leads_to`, over behaviours. N9's search decides it on a finite system
+    (`liveHolds_iff_not_accepts`). `always` is an invariant (consequence 1).
   - The folds. Their effect is inside the step relations that Lemma 6 relates. Lemma 5
     (c)–(e) are derived over the action model with `FoldData`
     ([below](#definition-3-and-lemma-5-over-actions)), but what a fold bit computes is not
     modelled; Lemma 5 (e) enters `a15` and `a8_plain_iff` as fair instances given on `T_a`
     labels.
 - **A15, the rest of the theorem.**
-  - The run's search. `a15` reads the run's verdict as "no lasso of `R` with the fairness
-    and stops above violates the property". That the search over strongly connected
-    components finds such a lasso when one exists is N9, which Lean does not check. The
-    lift and replay of a candidate are run-time evidence, and the converse (a counterexample
-    of the run is one of `C`) is not claimed.
+  - The run's search is the abstract one of
+    [The liveness searches](#the-liveness-searches): `a15_search` takes its verdict on `R`,
+    and what that section leaves out of the code is left out here. The lift and replay of a
+    candidate are run-time evidence, and the converse (a counterexample of the run is one of
+    `C`) is not claimed.
   - The nested case. Definition 5's cases 2 (an inner class that can loop) and 3 (an orbit
     self-edge of `S` up to `H`), and the proof's (ii), need the inner reduction, which
     Reduction.lean does not model.
@@ -217,18 +239,56 @@ The proofs assume the following hypotheses and do not derive them:
     `hloop`. The proof's (iii), that a variable whose write graph is acyclic changes
     finitely often, is not formalized.
 - **A23, the rest of the theorem.**
-  - The run's search. `a23` reads the orbit run's verdict as "no thread-fair annotated lasso
-    of the canonical quotient violates the property". `OrbitRun::decide_liveness` accepts a
-    strongly connected component of goal-free pairs when every piece of its thread graph is
-    taken or meets a disabled pair. Lean does not check that an accepted component holds a
-    thread-fair violating annotated lasso, nor that every such lasso lies in an accepted
-    component or reaches a stop (the analogue of N9). `threadFair_iff_pieces` covers one
-    thread round one cycle, not the pieces over a component with several cycles.
+  - The run's search is the abstract one of
+    [The liveness searches](#the-liveness-searches): `not_oAccepts_iff_lassos` makes its
+    verdict `a23`'s quotient side, and what that section leaves out of the code is left out
+    here.
   - The entity-cone findings up to symmetry (`state_model_findings`) and deadlocks are not
     stated.
 - **A18's BFS depth.** The claim that each class is reached at its least depth is not stated.
 
 The sources hold no `sorry`, no `admit` and no `axiom`, and no statement is left unproved.
+
+## The liveness searches
+
+<!-- derived-from ../../docs/theory/native.md#the-check -->
+
+`Search.lean` states the check of N9 and proves that it decides `□(trig ⇒ ◇goal)` at one
+binding. `SearchSym.lean` does the same for the search a run up to symmetry makes on pairs of
+a stored state and a binding, and relates it to N9's search on `M` and to `a23`. Each
+definition is the predicate the code computes; the table names where.
+
+| Lean (`RdraIsh.`) | Code (`crates/rdra-ish-core/src/lifecycle/explore/`) |
+|---|---|
+| `LTS.Enabled`, `LTS.Moves` | `liveness.rs:252-290` (`fair_steps`: the edges with `from ≠ to`) |
+| `LTS.NEdge`, `LTS.SameComp` | `liveness.rs:307-316` (`in_n`, `inside`, the adjacency, `components`) |
+| `LTS.FairComp` | `liveness.rs:317-349` (`size ≥ 2`, `always`, `taken`, `fair_cycle`) |
+| `LTS.IsStop` | `liveness.rs:350-365` (`stops` under `Plain`, `WfNext`, `Looping`) |
+| `LTS.Accepts` | `liveness.rs:366-381` (`toward`, the backward walk from the ends) and `:237-242` (the start) |
+| `REdge`, `pn`, `tn` | `orbit/liveness.rs:716-718` (`is_real`), `:212-217` (`target`), `:131-151` and `:228-231` (`imap`, `moved`) |
+| `PN`, `PEdge`, `SameP` | `orbit/liveness.rs:257-290` (`in_n`, the adjacency of real edges, `components`) |
+| `Candidate` | `orbit/liveness.rs:281-302` (`self_loop`, `candidate`) |
+| `En`, `TEdgeE`, `CoveredE`, `ThreadsCovered` | `orbit/liveness.rs:152-180` (enabled instances per stored state) and `:353-438` (`threads_covered`) |
+| `PStop`, `OAccepts` | `orbit/liveness.rs:304-340` (`stops`, `toward`, `start`) |
+
+The code's mark of a node into which an edge comes from a pair where no enabled instance
+moves to it (`orbit/liveness.rs:419-426`) is the third case of `CoveredE`; the move of an
+instance is a bijection, so this is the pair where the instance's preimage is not enabled.
+
+Not modelled:
+
+- Tarjan's algorithm (`graph.rs::Adjacency::components`): a component is mutual
+  reachability.
+- N10, the cut at `expanded` of a capped graph (`open`, `s < expanded`): the graph is complete.
+- The choice of binding (the first triggered state in BFS order) and of start: the
+  verdicts quantify over all.
+- The bit sets and sorted lists that hold `always`, `taken` and the enabled instances.
+- The counterexample the code builds (`walk`, `fair_loop`, the lasso lift and its
+  `MOST_COPIES`): the proofs build their own lasso, and the code's certifies itself at run
+  time (N11).
+- `imap`'s case for an action the reduction skips, which keeps the instance: the orbit
+  search on a reduced cone is outside the model, and its counterexample is decided again on
+  the plain runs (`cli/src/verify/native.rs::liveness_up_to_symmetry`).
 
 ## Definition 3 and Lemma 5 over actions
 
