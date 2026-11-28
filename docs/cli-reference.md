@@ -2008,7 +2008,8 @@ covers one part: the TypeScript types `--lang ts` prints for a model `check` pas
 `<Entity>Kind`, the `<Entity>Row` types, and the signatures of their companion objects and of
 `parse<Entity>Row`). Everything else may change in any release: the functions, rule checks,
 dispatchers, header and obligations, `--allow-failing`, `--check` and the fingerprint, `--seal`,
-and the Rust and Go output. [The design](./design/algebraic-codegen.md) describes where it is
+and the Rust and Go output. [Code Generation](./codegen.md) says what the output holds and
+guarantees. [The design](./design/algebraic-codegen.md) describes where it is
 going, and [Generated code style](./design/algebraic-codegen.md#generated-code-style) the shapes.
 
 | Flag | Default | Meaning |
@@ -2358,4 +2359,5 @@ rename, completion, hover, signature help, document and workspace symbols, forma
 - [incremental-modeling.md](./incremental-modeling.md): the staged modeling flow `next` follows.
 - [state-derivation.md](./state-derivation.md): how `check` and `states` explore, and every finding name.
 - [formal-verification.md](./formal-verification.md): `verify` and `export --kind tla`.
+- [codegen.md](./codegen.md): what `codegen` writes, and what `check --code` shows of the service code.
 - [compatibility.md](./compatibility.md): which commands, flags, exit codes, and formats are stable.
