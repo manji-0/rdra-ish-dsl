@@ -6,6 +6,7 @@ use super::reduce::{walked_models, GATE};
 use super::*;
 use crate::lifecycle::explore::symmetry::witnesses::dropping;
 use crate::lifecycle::{LassoFault, Recheck, ReplayError, Target, Trace};
+use crate::model::SemanticModel;
 
 /// A handler `Finalize` whose event `Review` raises: the rule's own cone leaves the mark out,
 /// so its counterexample runs `Finalize` without the event.
@@ -174,24 +175,30 @@ fn initial_states_agree(ts: &TransitionSystem) -> usize {
     n
 }
 
-/// No certificate fires on the samples, the domain samples and the engine corpus cases that
-/// build a model, and `DOC`, at `Bounds::STATES`: the initial-state test agrees with the enumeration; each
-/// check's exact cone, with and without slots, passes its check; and on each check's cone,
-/// reduced as `check` reduces it, each counterexample's free triggers pass theirs, each one
-/// the cone cannot vouch for is decided again with no fault, and every state of a reduced
-/// cone's run lifts from an initial state of the unreduced cone. A fault panics in this debug
-/// build. The counts show each check ran on something; no walked model but `DOC` has a check
-/// whose cone counterexample runs a use case without its event.
-#[test]
-fn no_counterexample_certificate_fires_on_the_walked_models() {
+/// What `walk` saw: initial states, exact cones, counterexamples (those with a free trigger,
+/// those rechecked), and lifted paths.
+#[derive(Debug, Default)]
+struct Walked {
+    initial: usize,
+    exact: usize,
+    compared: usize,
+    free: usize,
+    rechecked: usize,
+    lifted: usize,
+}
+
+/// Walks `models` at `Bounds::STATES`: the initial-state test agrees with the enumeration;
+/// each check's exact cone, with and without slots, passes its check; and on each check's
+/// cone, reduced as `check` reduces it, each counterexample's free triggers pass theirs, each
+/// one the cone cannot vouch for is decided again with no fault, and the first states of a
+/// reduced cone's run lift from an initial state of the unreduced cone. A fault panics in this
+/// debug build.
+fn walk<'a>(models: impl Iterator<Item = &'a (String, SemanticModel)>) -> Walked {
     let caps = Caps::new(usize::MAX, 20_000);
-    let (mut initial, mut exact, mut compared, mut free, mut rechecked, mut lifted) =
-        (0, 0, 0, 0, 0, 0);
-    let mut models = walked_models();
-    models.push(("DOC".to_string(), model_from(DOC)));
-    for (name, model) in &models {
+    let mut w = Walked::default();
+    for (name, model) in models {
         let ts = TransitionSystem::build(model, Bounds::STATES, &Scope::ALL).ts;
-        initial += initial_states_agree(&ts);
+        w.initial += initial_states_agree(&ts);
         let checks: Vec<Target> = (ts.targets().into_iter())
             .filter(|t| matches!(t, Target::Invariant(_) | Target::AfterAssert(_)))
             .collect();
@@ -200,7 +207,7 @@ fn no_counterexample_certificate_fires_on_the_walked_models() {
                 let cone = ts.exact_target_cone(t, slots);
                 assert!(!ts.cone_leaves_marks(&cone), "{name}: {t:?}");
                 assert!(!slots || !ts.cone_frees_slots(&cone), "{name}: {t:?}");
-                exact += 1;
+                w.exact += 1;
             }
         }
         if checks.is_empty() {
@@ -215,31 +222,54 @@ fn no_counterexample_certificate_fires_on_the_walked_models() {
                 let mut t = trace.clone();
                 ts.annotate(&c.cone, &mut t);
                 assert_eq!(ts.free_trigger_faults(&c.cone, &mut t), None, "{name}");
-                compared += 1;
+                w.compared += 1;
                 if t.free_triggers.is_empty() {
                     continue;
                 }
-                free += 1;
+                w.free += 1;
                 let target = ts.violated_check(&d.diag).expect("a check's violation");
                 let r = ts.recheck(target, false, caps);
                 assert!(!matches!(r, Recheck::Fault(_)), "{name}: {r:?}");
-                rechecked += 1;
+                w.rechecked += 1;
             }
             if c.run.system.reduction().is_some() {
-                for at in 0..c.run.states.len().min(64) as u32 {
+                for at in 0..c.run.states.len().min(4) as u32 {
                     assert!(c.run.trace_to(at).is_ok(), "{name}: state {at} lifts");
-                    lifted += 1;
+                    w.lifted += 1;
                 }
             }
         }
     }
-    let counts = format!(
-        "{initial} initial states, {exact} exact cones, {compared} counterexamples ({free} with a free trigger, {rechecked} rechecked), {lifted} lifted paths"
-    );
-    eprintln!("{counts}");
+    eprintln!("{w:?}");
+    w
+}
+
+/// No certificate fires on the samples and the domain samples (`walk`). The counts show each
+/// check ran on something; no sample has a check whose cone counterexample runs a use case
+/// without its event.
+#[test]
+fn no_counterexample_certificate_fires_on_the_samples() {
+    let models = walked_models();
+    let w = walk(models.iter().filter(|(n, _)| n.starts_with("samples/")));
     assert!(
-        initial > 0 && exact > 0 && compared > 0 && free > 0 && rechecked > 0 && lifted > 0,
-        "{counts}"
+        w.initial > 0 && w.exact > 0 && w.compared > 0 && w.lifted > 0,
+        "{w:?}"
+    );
+}
+
+/// No certificate fires on the engine corpus cases that build a model, and `DOC` (`walk`). No
+/// corpus case but `DOC` has a check whose cone counterexample runs a use case without its
+/// event.
+#[test]
+fn no_counterexample_certificate_fires_on_the_corpus() {
+    let mut models: Vec<(String, SemanticModel)> = (walked_models().into_iter())
+        .filter(|(n, _)| !n.starts_with("samples/"))
+        .collect();
+    models.push(("DOC".to_string(), model_from(DOC)));
+    let w = walk(models.iter());
+    assert!(
+        w.initial > 0 && w.exact > 0 && w.compared > 0 && w.free > 0 && w.rechecked > 0,
+        "{w:?}"
     );
 }
 

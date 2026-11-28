@@ -1,6 +1,7 @@
 //! Run-time certificates of a counterexample found on a cone (claims A2 and A16 of
-//! docs/theory/claims.md). Every build checks them, and only on a counterexample or on the
-//! exact cone a recheck runs, so no explored state pays for them:
+//! docs/theory/claims.md). Every build checks them once per trace (a counterexample's free
+//! triggers, a lift's start) or once per cone (an exact cone), so no explored state pays for
+//! them:
 //!
 //! - `free_trigger_faults`: the free triggers `annotate` lists (`Trace::free_triggers`) are
 //!   those read off each step's action directly: the raised marks its guards read

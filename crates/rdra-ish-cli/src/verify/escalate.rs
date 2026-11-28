@@ -40,26 +40,27 @@ const GROWTH: u64 = 10;
 
 /// Escalates each rule of `unproved` that its safety cone of `jobs` passed (`cones`), prints
 /// one `escalated:` line per rule, and an error per counterexample. Returns how many rules a
-/// counterexample broke.
+/// counterexample broke, and how many an exact cone's unvouched counterexample left a tool
+/// error (`Recheck::Fault`).
 pub(super) fn escalate(
     (program, model): (&ResolvedProgram, &SemanticModel),
     (ts, bounds, scope): (&TransitionSystem, &Bounds, &Scope),
     (jobs, cones): (&[Job], &[Option<BfsCone>]),
     unproved: &BTreeSet<usize>,
     caps: Caps,
-) -> usize {
+) -> (usize, usize) {
     let passed: Vec<(usize, (Instances, u64))> = unproved
         .iter()
         .filter_map(|&i| Some((i, passed_at(ts, jobs, cones, i)?)))
         .collect();
     if passed.is_empty() {
-        return 0;
+        return (0, 0);
     }
     // One build per bound, shared by the rules; `None` once a bound does not build as `ts`.
     let systems: Vec<Option<TransitionSystem>> = (1..=STEPS)
         .map(|k| grown(bounds, k).and_then(|b| same_system(model, b, scope, ts)))
         .collect();
-    let mut broken = 0;
+    let (mut broken, mut faults) = (0, 0);
     for (i, (at, peak)) in passed {
         let inv = &ts.invariants()[i];
         let mut said = Vec::new();
@@ -106,11 +107,11 @@ pub(super) fn escalate(
                     break;
                 }
                 // The exact cone's counterexample is not one it vouches for (claim A2): a
-                // tool error, which fails the run as a counterexample does.
+                // tool error, counted with the traces that fail their own check.
                 Recheck::Fault(d) => {
                     said.push(format!("tool error at {n} instances"));
                     eprintln!("error[TraceFault]: {}", d.diag);
-                    broken += 1;
+                    faults += 1;
                     break;
                 }
                 Recheck::Holds => said.push(format!("ok at {n} instances")),
@@ -126,7 +127,7 @@ pub(super) fn escalate(
             said.join(", ")
         );
     }
-    broken
+    (broken, faults)
 }
 
 /// The instances of each entity of `cone` of `ts`.
