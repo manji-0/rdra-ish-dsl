@@ -139,19 +139,20 @@ impl TransitionSystem {
                 fault(ConeClause::Reads, format!("{} reads {var}", a.name));
             }
             for (mark, reads) in self.mark_reads(a) {
-                let exact = keep.contains(&ActId::at(i))
-                    || self.is_counted(mark)
-                    || (self.actions.iter().enumerate())
-                        .filter(|(_, b)| self.action_writes(b).contains(&mark))
-                        .all(|(j, _)| member[j]);
-                if !exact {
-                    continue;
-                }
                 let missing = match vars.contains(&mark) {
                     false => Some(mark),
                     true => outside(&reads),
                 };
-                if let Some(v) = missing {
+                // Read exactly, the mark brings what it reads (C2); read inexactly, it may
+                // stay out with them.
+                let exact = || {
+                    keep.contains(&ActId::at(i))
+                        || self.is_counted(mark)
+                        || (self.actions.iter().enumerate())
+                            .filter(|(_, b)| self.action_writes(b).contains(&mark))
+                            .all(|(j, _)| member[j])
+                };
+                if let Some(v) = missing.filter(|_| exact()) {
                     let (mark, var) = (self.var_name(mark), self.var_name(v));
                     fault(
                         ConeClause::Mark,
