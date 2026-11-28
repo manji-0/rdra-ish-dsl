@@ -25,6 +25,8 @@ while IFS= read -r path; do
     docs/diagram-sample-review.md | samples/*) code=true ;;
     # Prose. A `case` `*` matches `/` too, so these cover the subdirectories.
     docs/*.md | docs/*.png | skills/*.md | .audit/* | .claude/*) ;;
+    # The Lean proofs: no cargo build or test reads them, and ci.yml's `lean` job checks them.
+    proofs/lean/* | scripts/check-lean-proofs.sh) ;;
     # Any other file in a subdirectory, such as an `.rdra` under skills/ that tests check.
     */*) code=true ;;
     # Prose at the top level: README.md, CHANGELOG.md, CLAUDE.md, LICENSE.
