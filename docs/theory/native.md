@@ -10,10 +10,10 @@ of [semantics.md](./semantics.md) (D1 to D25) without redefining it. `T` is the 
 build returns; that it is `T_β(M)` (D13) is claim [I1](./claims.md#0-the-build), not a step
 of any proof here.
 
-It describes the code at commit `5ae62f2c2076f308d78a5d3fe97393664c574a9f` (origin/main,
-2026-11-28, the merge of #542), the commit the [index](./README.md) and every theme document
+It describes the code at commit `9857092ae33cd9c1dc4b1812a28cdba9b79a720e` (origin/main,
+2026-11-28, the merge of #544), the commit the [index](./README.md) and every theme document
 are pinned to. The document was first written against `fb6928c7` and has been brought up to
-date four times. After the final audit of docs/theory it was re-read at `c97c88ef` (the
+date five times. After the final audit of docs/theory it was re-read at `c97c88ef` (the
 merge of #525): the code that the fixes of P19, P20, P50, P51, P52, P53, P54 and P55 changed
 (#470, #478, #479, #484, #487, #494, #510, #518, #522) was re-read there, and for every other
 function, type and constant this document names, its definition at `fb6928c7` was compared
@@ -32,11 +32,14 @@ panicking), which were read at `5f59fae2`; by #532 (`cli/src/prove.rs`,
 `cli/tests/prove_cli.rs`),
 #534 (`cli/tests/proof_equivalence.rs`), #535 (`cli/tests/engine_corpus.rs`) and #537
 (`explore/symmetry/g6.rs`, a test, and its `mod` line), none of which this document cites;
-and #533 changes only `.config/nextest.toml`. From `5f59fae2` to the pin, the crates change
+and #533 changes only `.config/nextest.toml`. From `5f59fae2` to `5ae62f2c` (the merge of #542), the crates change
 only by #539 (`cli/tests/engine_equivalence.rs` runs TLC under `-lncheck final`; it changes no
 test this document cites in what it compares) and #541 (`reduce/lift.rs::lift` and
 `reduce/partition.rs::Succ::shortest_path`: a class move with no S path behind it is a fault,
-with a test in `core/tests/reduce.rs`), which were read at the pin. Code is cited as in
+with a test in `core/tests/reduce.rs`), which were read at `5ae62f2c`. From `5ae62f2c` to the pin, the crates change only by #544 (`prove/encode.rs::Enc::one_of`
+and its call, tests added to `cli/tests/prove_cli.rs` and `core/tests/reference/proofs.rs`, a
+`z3_` corpus case and its line in the symmetry snapshot), which changes no statement here:
+the `prove_cli.rs` tests it names are unchanged. Code is cited as in
 [semantics.md](./semantics.md): paths are relative to `crates/rdra-ish-core/src/lifecycle/`
 unless they start with `cli/` (`crates/rdra-ish-cli/`) or name the crate root (`core-root/`,
 for `crates/rdra-ish-core/src/`).
@@ -1144,3 +1147,6 @@ Changes to statements of this document after it was first written, newest last.
   list (`step_ends_with`). N9's stops add the `StopRule::Looping` rule of a reduced graph. The
   orbit self-edge's index has its own checked conversion beside `edge_number`. The #532 files
   include `cli/tests/prove_cli.rs`.
+- **2026-11-28, re-pin to `9857092a`** (the merge of #544), with the index. #544 (P66)
+  changes the prover's encoding and adds tests and a corpus case, which change no statement
+  here; the first paragraph says so.

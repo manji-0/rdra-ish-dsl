@@ -8,10 +8,10 @@ on a smaller system decides what `T_β(M)` (D13) would: a cone of influence, a c
 an independent sub-lifecycle, a run up to slot permutations, and a run at more instances. It
 uses the notation of [semantics.md](./semantics.md) and does not redefine it.
 
-The code read is commit `5ae62f2c2076f308d78a5d3fe97393664c574a9f` (origin/main,
-2026-11-28, the merge of #542), the commit the [index](./README.md) and every theme document
+The code read is commit `9857092ae33cd9c1dc4b1812a28cdba9b79a720e` (origin/main,
+2026-11-28, the merge of #544), the commit the [index](./README.md) and every theme document
 are pinned to. The document was first written against `fb6928c7` and has been brought up to
-date four times. After the final audit of docs/theory it was re-read at `c97c88ef` (the
+date five times. After the final audit of docs/theory it was re-read at `c97c88ef` (the
 merge of #525): the code that the fixes of P1, P7, P10, P11, P20, P30, P31, P32 and P33
 changed (#477, #480, #488, #509, #512, #516, #518, #521, #522) was re-read there, and for every
 other function, type and constant this document names, its definition at `fb6928c7` was
@@ -28,12 +28,15 @@ symmetric lasso lift faults instead of panicking), #532 (`cli/verify/escalate.rs
 (`cli/tests/proof_equivalence.rs`), #535 (`cli/tests/engine_corpus.rs`'s reader) and #537
 (`explore/symmetry/g6.rs`, the test of (G6) outside guards); each was read at `5f59fae2`, and the
 statements that cite them were rewritten ([Errata](#errata)). #533 changes only
-`.config/nextest.toml`. From `5f59fae2` to the pin, the crates change only by #539, which makes
+`.config/nextest.toml`. From `5f59fae2` to `5ae62f2c` (the merge of #542), the crates change only by #539, which makes
 `cli/tests/engine_equivalence.rs` run TLC under `-lncheck final` and changes none of the
 tests this document cites in what they compare, and #541
 (`reduce/lift.rs::lift`, `reduce/partition.rs::Succ::shortest_path`, and a test in
 `core/tests/reduce.rs`: a class move with no S path behind it is a fault), which was read at
-the pin; A16, Candidates and the Threats were rewritten for it. How the document changed after it was first written is in
+`5ae62f2c`; A16, Candidates and the Threats were rewritten for it. From `5ae62f2c` to the pin, the crates change only by #544 (`prove/encode.rs::Enc::one_of`
+and its call, tests added to `cli/tests/prove_cli.rs` and `core/tests/reference/proofs.rs`, a
+`z3_` corpus case and its line in the symmetry snapshot), which changes no statement here:
+the `prove_cli.rs` tests it names are unchanged. How the document changed after it was first written is in
 [Errata](#errata). `unread@pin` marks a statement whose cited code was not read at the
 pinned commit ([claims inventory](./claims.md#how-to-read-a-row)). Paths are relative to
 `crates/rdra-ish-core/src/lifecycle/` unless they start with `cli/`
@@ -1433,3 +1436,6 @@ Changes to statements of this document after it was first written, newest last.
   cone. A1 says the entity-cone mark assertion covers cones that free no slots. The
   `closed_cone` sentence says the same closure feeds verdicts through `exact_target_cone`. A6
   says its `always` arm runs only from tests.
+- **2026-11-28, re-pin to `9857092a`** (the merge of #544), with the index. #544 (P66)
+  changes the prover's encoding and adds tests and a corpus case, which change no statement
+  here; the first paragraph says so.
