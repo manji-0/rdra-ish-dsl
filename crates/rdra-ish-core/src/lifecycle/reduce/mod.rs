@@ -665,7 +665,9 @@ impl SilentSteps {
 }
 
 /// A cell of the parameter matrix of Lemma 6 of docs/theory/cones.md, read off the cone: the
-/// kind of the action (`folded`, `unfolded`, `rise`, `steady`), the side of the param's
+/// kind of the action (`folded`, `unfolded`, `rise` for a T action that writes a raw input,
+/// `bit` for one that writes none but writes a var a bit reads, `steady` for the rest, which
+/// `Reduction::is_steady` names), the side of the param's
 /// entity (`S`, `input`, `stub`, `dropped`), the param's role in the cone (`New`,
 /// `Existing`, `Parent`, `Earlier`, `Triggered`, or `node row` for the row a node fold
 /// adds), and whether it keys a fold's bit.
@@ -674,9 +676,13 @@ pub(crate) type ParamCell = (&'static str, &'static str, &'static str, bool);
 
 #[cfg(test)]
 impl Reduction {
-    /// The cells of the parameter matrix the cone `ts` this reduces fills, each action's
-    /// params by the cone's roles.
-    pub(crate) fn param_cells(&self, ts: &TransitionSystem) -> BTreeSet<ParamCell> {
+    /// The cells of the parameter matrix that the actions `stepped` of the cone `ts` this
+    /// reduces fill, each action's params by the cone's roles.
+    pub(crate) fn param_cells(
+        &self,
+        ts: &TransitionSystem,
+        stepped: &BTreeSet<ActId>,
+    ) -> BTreeSet<ParamCell> {
         use super::types::{ParamRole, VarKind};
         use fold::FoldKey;
         let side =
@@ -697,6 +703,9 @@ impl Reduction {
         let mut out = BTreeSet::new();
         for (i, a) in ts.actions.iter().enumerate() {
             let id = ActId::at(i);
+            if !stepped.contains(&id) {
+                continue;
+            }
             let folds: Vec<&Fold> = self.bits.iter().flatten().filter(|f| f.act == id).collect();
             let kind = if self.s_actions.contains(&id) {
                 if folds.is_empty() {
@@ -706,6 +715,8 @@ impl Reduction {
                 }
             } else if ts.action_writes(a).iter().any(|v| self.inputs.contains(v)) {
                 "rise"
+            } else if !self.is_steady(id) {
+                "bit"
             } else {
                 "steady"
             };

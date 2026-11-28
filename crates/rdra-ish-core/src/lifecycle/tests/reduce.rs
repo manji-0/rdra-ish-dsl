@@ -11,8 +11,8 @@ use crate::memory::{MemoryPool, MemorySize};
 use super::cone::{load, SAMPLES};
 use super::*;
 use crate::lifecycle::{
-    Action, ActionOrigin, ComponentRun, Cone, EntId, Fold, FoldKey, QuotientCache, Reduction,
-    ReplayError, Seed, State, Step, Target, TargetExploration, VarSet,
+    ActId, Action, ActionOrigin, ComponentRun, Cone, EntId, Fold, FoldKey, QuotientCache,
+    Reduction, ReplayError, Seed, State, Step, Target, TargetExploration, Value, VarSet,
 };
 
 const DOMAIN_SAMPLES: &[&str] = &[
@@ -1797,6 +1797,8 @@ struct StepsChecked {
     s: FoldsChecked,
     /// The cone's T steps that change the input bytes, each matched stage by stage.
     rises: usize,
+    /// Those steps with an S var of the successor moved, each found to be no rise.
+    forged: usize,
 }
 
 /// Lemma 6 of docs/theory/cones.md step by step, on every complete reduced cone of `models`
@@ -1806,17 +1808,23 @@ struct StepsChecked {
 /// step of the cone (`silent_steps_are_cone_steps`), and every T step that changes the input
 /// bytes is a rise of `X` by the same action to the successor's raw inputs, then one flip per
 /// bit slot that changes (`SilentSteps::rises_through`). Returns the cells of the parameter
-/// matrix the cones fill (`Reduction::param_cells`), for each cell's test to assert it ran.
+/// matrix that the actions these checks ran on fill (`Reduction::param_cells`), for each
+/// cell's test to assert it ran.
 fn lemma6_steps_hold(models: &[(&str, SemanticModel)], bounds: &[Bounds]) -> StepsChecked {
     let mut seen = StepsChecked::default();
     each_reduced_cone(models, bounds, false, |name, target, cone, run, red| {
-        seen.cells.extend(red.param_cells(cone));
         cone_s_steps_are_silent_steps(name, target, cone, run, red, &mut seen.s);
         silent_steps_are_cone_steps(name, target, cone, run, red, &mut seen.s);
         let silent = red.silent_steps(cone);
+        // The actions a check above or below ran on: every S step, every T step that changes
+        // the inputs, and every step of a steady action, which `R` runs as the cone does.
+        let mut stepped: BTreeSet<ActId> = BTreeSet::new();
         for s in run.states.iter() {
             let before = red.input_bytes(cone, &s);
             for m in cone.moves(&s) {
+                if red.s_actions().contains(&m.act) || red.is_steady(m.act) {
+                    stepped.insert(m.act);
+                }
                 if red.s_actions().contains(&m.act) || red.input_bytes(cone, &m.next) == before {
                     continue;
                 }
@@ -1829,8 +1837,28 @@ fn lemma6_steps_hold(models: &[(&str, SemanticModel)], bounds: &[Bounds]) -> Ste
                     &s.0
                 );
                 seen.rises += 1;
+                stepped.insert(m.act);
+                // The check reads the state it is given: no rise changes S, so the same step
+                // with an S var moved is no rise.
+                if let Some(v) = cone
+                    .var_ids()
+                    .find(|v| red.is_s_var(*v) && cone.var(*v).domain.size(cone) > 1)
+                {
+                    let mut forged = m.next.clone();
+                    let size = cone.var(v).domain.size(cone);
+                    let moved = Value(
+                        u8::try_from((usize::from(forged.get(cone, v, 0).0) + 1) % size).unwrap(),
+                    );
+                    forged.set(cone, v, 0, moved);
+                    assert!(
+                        !silent.rises_through(red, cone, m.act, &s, &forged),
+                        "{name} {target:?}: a rise to a state with S moved"
+                    );
+                    seen.forged += 1;
+                }
             }
         }
+        seen.cells.extend(red.param_cells(cone, &stepped));
     });
     seen
 }
@@ -1838,16 +1866,15 @@ fn lemma6_steps_hold(models: &[(&str, SemanticModel)], bounds: &[Bounds]) -> Ste
 /// The cells of the parameter matrix of Lemma 6 (docs/theory/cones.md, "Parameters") that
 /// cannot occur, each for the reason the matrix gives: an S action's `New` or `Earlier` row
 /// on T writes T; an unfolded S action reads the existence of every T row it binds, so no
-/// such row is on a stub or dropped; a fold's key and a node fold's row are on an input or a
-/// stub; a key is never a `New` row; a rise writes no S, so it has no `New` or `Earlier` row
+/// such row is on a stub or dropped; a node fold's row is on an input or a stub; a key is
+/// never a `New` row; a rise writes no S, so it has no `New` or `Earlier` row
 /// on S.
 fn impossible_cell(cell: &ParamCell) -> bool {
     let (kind, side, role, key) = *cell;
     let s_action = kind == "folded" || kind == "unfolded";
     (s_action && side != "S" && matches!(role, "New" | "Earlier"))
         || (kind == "unfolded" && matches!(side, "stub" | "dropped"))
-        || (kind == "folded" && side == "dropped" && key)
-        || (kind == "folded" && side == "S" && role == "node row")
+        || (kind == "folded" && matches!(side, "S" | "dropped") && role == "node row")
         || (role == "New" && key)
         || (kind == "rise" && side == "S" && matches!(role, "New" | "Earlier"))
 }
@@ -1868,7 +1895,10 @@ fn assert_cells_step_as_the_cone_does(
         impossible.is_empty(),
         "cells the matrix rules out: {impossible:?}"
     );
-    assert!(seen.s.s_steps > 0 && seen.rises > 0, "{seen:?}");
+    assert!(
+        seen.s.s_steps > 0 && seen.rises > 0 && seen.forged == seen.rises,
+        "{seen:?}"
+    );
 }
 
 /// The order's cone, with S the vouchers, booklets and tickets: Voucher's owner keeps Order as
@@ -2132,10 +2162,20 @@ fn stub_and_dropped_rows_bind_where_the_cone_binds_them() {
 /// Lemma 6 step by step on the cells of its parameter matrix with a row on an input
 /// (`INPUT_ROWS`), as `stub_and_dropped_rows_bind_where_the_cone_binds_them` checks them, and
 /// on `STUB_AND_DROPPED_ROWS` with every voucher under a shop as well: in the voucher's own
-/// cone `Grant` folds keyed by its `Parent` shop, an input there.
+/// cone `Grant` folds keyed by its `Parent` shop, an input there. Last on `INPUT_ROWS` with the
+/// voucher unread, as `stub_and_dropped_rows_bind_where_the_cone_binds_them` has it, and with
+/// `Issue` waiting for an open desk: that read makes the desk's existence and status raw
+/// inputs, and `Grant` and `GrantNoted` still fold, keyed by the order, with the desk beside
+/// the key as a `Parent` row and an `Existing` one on an input.
 #[test]
 fn input_rows_bind_where_the_cone_binds_them() {
+    let open_desks = format!(
+        "{}condition AnyOpenDesk \"開いた窓口\"\nholds(AnyOpenDesk, Desk.status == open)\n\
+         applies_to(AnyOpenDesk, Issue)\n",
+        INPUT_ROWS.replace(", Voucher.kind == food, Voucher.stamp == true", "")
+    );
     let models = [
+        ("INPUT_ROWS, desks read raw", model_from(&open_desks)),
         ("INPUT_ROWS", model_from(INPUT_ROWS)),
         (
             "STUB_AND_DROPPED_ROWS under shops",
@@ -2150,7 +2190,9 @@ fn input_rows_bind_where_the_cone_binds_them() {
         &[
             ("folded", "S", "Triggered", false),
             ("folded", "input", "Existing", true),
+            ("folded", "input", "Existing", false),
             ("folded", "input", "Parent", true),
+            ("folded", "input", "Parent", false),
             ("folded", "input", "Triggered", true),
             ("folded", "input", "node row", true),
             ("unfolded", "input", "Existing", false),
