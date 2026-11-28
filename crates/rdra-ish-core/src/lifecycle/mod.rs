@@ -102,8 +102,9 @@ pub struct TransitionSystem {
     now: Option<VarId>,
     offsets: Vec<usize>,
     width: usize,
-    /// The id of each API a `New` param is created through (`Param::via_api`).
-    api_ids: std::collections::HashMap<crate::model::ApiKey, String>,
+    /// The id of each API a `New` param is created through (`Param::via_api`). A `BTreeMap`
+    /// needs no random hash seed, so a Kani harness can build a system (`cone.rs`, `proofs`).
+    api_ids: std::collections::BTreeMap<crate::model::ApiKey, String>,
     /// The S side of a reduced cone (`reduced`).
     reduction: Option<std::sync::Arc<Reduction>>,
     /// What the move generator reads of each action's guards (`explore::Plans`).
@@ -128,7 +129,7 @@ impl TransitionSystem {
             now: None,
             offsets: Vec::new(),
             width: 0,
-            api_ids: std::collections::HashMap::new(),
+            api_ids: std::collections::BTreeMap::new(),
             reduction: None,
             plans: explore::Plans::default(),
         }

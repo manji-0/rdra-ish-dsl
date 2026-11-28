@@ -86,27 +86,32 @@ impl TransitionSystem {
         reads
     }
 
-    fn term_reads(&self, t: &Term, out: &mut VarSet) {
+    fn term_reads(&self, t: &Term, out: &mut impl Extend<VarId>) {
         match t {
-            Term::Slot { var, .. } => {
-                out.insert(*var);
-            }
+            Term::Slot { var, .. } => out.extend([*var]),
             Term::Now => out.extend(self.now),
             Term::Lit(_) | Term::Int(_) | Term::Index(_) => {}
         }
     }
 
-    pub(crate) fn pred_reads(&self, pred: &Pred, out: &mut VarSet) {
-        for node in pred.nodes() {
-            if let Pred::Forall { entity, .. }
-            | Pred::Exists { entity, .. }
-            | Pred::Count { entity, .. } = node
-            {
-                out.insert(self.entity(*entity).exists);
+    /// The vars a predicate reads, into any set: a `VarSet`, or a Kani harness's mask. The
+    /// existence of each entity a quantifier ranges over, and what each term reads. It
+    /// recurses over the tree, as `Pred::each_term` does, so a Kani harness can walk it.
+    pub(crate) fn pred_reads(&self, pred: &Pred, out: &mut impl Extend<VarId>) {
+        match pred {
+            Pred::Forall { entity, body }
+            | Pred::Exists { entity, body }
+            | Pred::Count { entity, body, .. } => {
+                out.extend([self.entity(*entity).exists]);
+                self.pred_reads(body, out);
             }
-        }
-        for t in pred.terms() {
-            self.term_reads(t, out);
+            Pred::Not(body) => self.pred_reads(body, out),
+            Pred::And(parts) | Pred::Or(parts) => {
+                parts.iter().for_each(|p| self.pred_reads(p, out));
+            }
+            Pred::True | Pred::False | Pred::Cmp(..) | Pred::In(..) => {
+                pred.each_term(&mut |t| self.term_reads(t, out));
+            }
         }
     }
 
@@ -600,5 +605,352 @@ impl TransitionSystem {
             out.extend_from_slice(&state.0[at..at + width]);
         }
         State(out.into_boxed_slice())
+    }
+}
+
+/// Kani harnesses (`cargo kani -p rdra-ish-core`): `pred_reads`, the read set of a predicate
+/// that the cone and the split build `plain_reads`, `mark_reads` and `copy_reads` from, covers
+/// what `eval` reads. On a fixed system, with symbolic states, successors, bindings and leaves.
+///
+/// The system has an entity `E` (existence, an Int column, a Bool column, an optional owner
+/// of `P`), an entity `P` (existence alone), two slots each, and a clock: 11 state bytes. A
+/// predicate is well typed, as the build makes it: a slot term reads a var of the entity of
+/// the param or binder it names, and the clock only through `Term::Now`; a binding puts each
+/// param on a slot of its entity. Without that a term could read past its var into the next
+/// one, which no read set names.
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+    use crate::lifecycle::expr::Env;
+    use crate::lifecycle::types::{
+        Birth, Bounds, CmpOp, Domain, EntityDecl, ModelRef, Site, Start, Value, VarDecl,
+    };
+    use std::num::NonZeroU8;
+
+    const WIDTH: usize = 11;
+    /// The var each state byte belongs to.
+    const BYTE_VAR: [usize; WIDTH] = [0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5];
+    const E: EntId = EntId(0);
+    const P: EntId = EntId(1);
+    const EXISTS_E: VarId = VarId(0);
+    const EXISTS_P: VarId = VarId(1);
+    const INT_E: VarId = VarId(2);
+    const BOOL_E: VarId = VarId(3);
+    const OWNER_E: VarId = VarId(4);
+    const NOW: VarId = VarId(5);
+    /// The state byte of the clock.
+    const CLOCK: usize = 10;
+    /// The `int_max` of the bounds, which no harness here reads.
+    const INT_MAX: u8 = 3;
+
+    fn site() -> Site {
+        Site::bare(ModelRef::Synthesized)
+    }
+
+    fn system() -> TransitionSystem {
+        let two = NonZeroU8::new(2).unwrap();
+        let mut ts = TransitionSystem::empty(Bounds::uniform(two, INT_MAX));
+        let var = |kind, domain| VarDecl {
+            kind,
+            domain,
+            base: Value(0),
+            start: Start::Base,
+            site: site(),
+            ends: Vec::new(),
+        };
+        let column = |entity| VarKind::Column {
+            entity,
+            column: String::new(),
+            lifecycle: true,
+            variation: false,
+        };
+        ts.vars = vec![
+            var(VarKind::Exists(E), Domain::Existence),
+            var(VarKind::Exists(P), Domain::Existence),
+            var(column(E), Domain::Int),
+            var(column(E), Domain::Bool),
+            var(
+                VarKind::Owner {
+                    child: E,
+                    parent: P,
+                    fk: crate::model::FkId::at(0),
+                    role: None,
+                },
+                Domain::Instance {
+                    parent: P,
+                    optional: true,
+                },
+            ),
+            var(VarKind::Now, Domain::Int),
+        ];
+        let entity = |exists, columns, owners| EntityDecl {
+            key: Default::default(),
+            id: String::new(),
+            label: String::new(),
+            birth: Birth::Created,
+            slots: two,
+            exists,
+            columns,
+            owners,
+        };
+        ts.entities = vec![
+            entity(EXISTS_E, vec![INT_E, BOOL_E], vec![OWNER_E]),
+            entity(EXISTS_P, Vec::new(), Vec::new()),
+        ];
+        ts.now = Some(NOW);
+        // The offsets `layout` gives two slots a var and one for the clock. `layout` itself
+        // drops the system's `Plans`, whose drop glue CBMC cannot bound.
+        ts.offsets = vec![0, 2, 4, 6, 8, CLOCK];
+        ts.width = WIDTH;
+        ts
+    }
+
+    /// The vars of an entity's slots.
+    fn vars_of(e: EntId) -> &'static [VarId] {
+        if e == E {
+            &[EXISTS_E, INT_E, BOOL_E, OWNER_E]
+        } else {
+            &[EXISTS_P]
+        }
+    }
+
+    fn any_op() -> CmpOp {
+        match kani::any::<u8>() % 6 {
+            0 => CmpOp::Eq,
+            1 => CmpOp::Ne,
+            2 => CmpOp::Lt,
+            3 => CmpOp::Le,
+            4 => CmpOp::Gt,
+            _ => CmpOp::Ge,
+        }
+    }
+
+    /// A slot of either entity.
+    fn any_slot() -> u8 {
+        let s: u8 = kani::any();
+        kani::assume(s < 2);
+        s
+    }
+
+    /// Two param slots, each on a slot of its param's entity.
+    fn any_binding() -> [u8; 2] {
+        [any_slot(), any_slot()]
+    }
+
+    /// The entities of a predicate's params and of the binders around it, outermost first.
+    struct Scope<'a> {
+        params: &'a [EntId],
+        bound: Vec<EntId>,
+    }
+
+    /// Any var of `e`.
+    fn any_var_of(e: EntId) -> VarId {
+        let vars = vars_of(e);
+        let k: usize = kani::any();
+        kani::assume(k < vars.len());
+        vars[k]
+    }
+
+    /// A param, its successor row, or a binder of the scope, as an `At`, with its entity.
+    fn any_at(scope: &Scope) -> (At, EntId) {
+        if !scope.bound.is_empty() && kani::any::<bool>() {
+            let b: usize = kani::any();
+            kani::assume(b < scope.bound.len());
+            (At::Bound(id8(b)), scope.bound[b])
+        } else {
+            let p: usize = kani::any();
+            kani::assume(p < scope.params.len());
+            let at = if kani::any() {
+                At::Param(id8(p))
+            } else {
+                At::Next(id8(p))
+            };
+            (at, scope.params[p])
+        }
+    }
+
+    /// Any well-typed term: a slot of a param, of its successor row, or of a binder; a
+    /// literal; an integer; a slot index; the clock.
+    fn any_term(scope: &Scope) -> Term {
+        match kani::any::<u8>() % 5 {
+            0 => {
+                let (at, e) = any_at(scope);
+                Term::Slot {
+                    var: any_var_of(e),
+                    at,
+                }
+            }
+            1 => Term::Lit(Value(kani::any())),
+            2 => Term::Int(i64::from(kani::any::<i8>())),
+            3 => Term::Index(any_at(scope).0),
+            _ => Term::Now,
+        }
+    }
+
+    /// A comparison of any two terms.
+    fn any_cmp(scope: &Scope) -> Pred {
+        Pred::Cmp(any_term(scope), any_op(), any_term(scope))
+    }
+
+    /// A membership of any term in no term or one. Each list is a literal of its length: a
+    /// length CBMC cannot fold to a constant has it unwind every walk over the list.
+    fn any_in(scope: &Scope, one: bool) -> Pred {
+        let values = if one { vec![any_term(scope)] } else { vec![] };
+        Pred::In(any_term(scope), values)
+    }
+
+    /// A set of the system's vars, one flag per var. `pred_reads` writes into it in place of a
+    /// `VarSet`, whose B-tree CBMC would have to unwind.
+    #[derive(Clone, Copy, Default)]
+    struct Mask([bool; 6]);
+
+    impl Extend<VarId> for Mask {
+        fn extend<I: IntoIterator<Item = VarId>>(&mut self, vars: I) {
+            for v in vars {
+                self.0[v.index()] = true;
+            }
+        }
+    }
+
+    impl Mask {
+        /// Whether the var of state byte `i` is in the set.
+        fn holds_byte(&self, i: usize) -> bool {
+            self.0[BYTE_VAR[i]]
+        }
+    }
+
+    /// Calls `f` with each state byte, unrolled: a loop over the bytes would set the unwind
+    /// bound of every harness past the width, and CBMC would unwind every loop of the code
+    /// under proof that far.
+    fn each_byte(mut f: impl FnMut(usize)) {
+        f(0);
+        f(1);
+        f(2);
+        f(3);
+        f(4);
+        f(5);
+        f(6);
+        f(7);
+        f(8);
+        f(9);
+        f(10);
+    }
+
+    /// Whether two states differ in some byte.
+    fn differ(a: &[u8], b: &[u8]) -> bool {
+        let mut differ = false;
+        each_byte(|i| differ |= a[i] != b[i]);
+        differ
+    }
+
+    /// A state that agrees with `s` on the vars of `keep` and is anything elsewhere.
+    fn agreeing(s: &[u8; WIDTH], keep: &Mask) -> [u8; WIDTH] {
+        let mut out: [u8; WIDTH] = kani::any();
+        each_byte(|i| {
+            if keep.holds_byte(i) {
+                out[i] = s[i];
+            }
+        });
+        out
+    }
+
+    /// Read locality of a predicate: two states, and two successors, that agree on the vars
+    /// `pred_reads` returns give the predicate `make` builds the same value under any binding.
+    /// The predicate has a param of each entity and sits under one binder of `E`, as an
+    /// invariant's body does (`find_violation`), so a quantifier's body reads two binders.
+    ///
+    /// `make` builds one shape with symbolic leaves, over entities it names, with at most one
+    /// box or list above the leaves. CBMC unwinds to the bound every walk over a list whose
+    /// length it cannot fold to a constant: a symbolic shape's parts, a symbolic entity's
+    /// slots, a box inside a box. The system and the predicate are forgotten, not dropped:
+    /// their drop glue recurses without a bound CBMC can see.
+    fn reads_only_its_read_set(make: impl Fn(&mut Scope) -> Pred) {
+        let ts = system();
+        let params = [E, P];
+        let mut scope = Scope {
+            params: &params,
+            bound: vec![E],
+        };
+        let pred = make(&mut scope);
+        let mut keep = Mask::default();
+        ts.pred_reads(&pred, &mut keep);
+        let (s, n): ([u8; WIDTH], [u8; WIDTH]) = (kani::any(), kani::any());
+        let (s2, n2) = (agreeing(&s, &keep), agreeing(&n, &keep));
+        let binding = any_binding();
+        let outer = any_slot();
+        let eval = |s: &[u8; WIDTH], n: &[u8; WIDTH]| {
+            let mut env = Env {
+                next: Some(StateSlice::new(n)),
+                bound: vec![outer],
+                ..Env::new(&binding)
+            };
+            ts.eval(&pred, StateSlice::new(s), &mut env)
+        };
+        let (a, b) = (eval(&s, &n), eval(&s2, &n2));
+        kani::cover!(differ(&s, &s2) && a);
+        kani::cover!(differ(&s, &s2) && !a);
+        assert_eq!(a, b);
+        std::mem::forget((pred, ts));
+    }
+
+    /// The body of a quantifier over `entity`: `body` with it as the next binder.
+    fn quantified(
+        scope: &mut Scope,
+        entity: EntId,
+        body: impl Fn(&mut Scope) -> Pred,
+    ) -> (EntId, Box<Pred>) {
+        scope.bound.push(entity);
+        let body = Box::new(body(scope));
+        scope.bound.pop();
+        (entity, body)
+    }
+
+    /// The atoms: `True`, `False`, a comparison, and a membership in no term or one. A term is
+    /// any of a slot of a param, of its successor row or of the binder, a literal, an integer,
+    /// a slot index, the clock.
+    #[kani::proof]
+    #[kani::unwind(2)]
+    fn an_atom_reads_only_its_read_set() {
+        reads_only_its_read_set(|_| Pred::True);
+        reads_only_its_read_set(|_| Pred::False);
+        reads_only_its_read_set(|s| any_cmp(s));
+        reads_only_its_read_set(|s| any_in(s, false));
+        reads_only_its_read_set(|s| any_in(s, true));
+    }
+
+    /// The connectives over a comparison: `Not`, and `And` and `Or` of none or one. A list of
+    /// two predicates needs an unwind bound of 3, at which CBMC does not finish in minutes.
+    #[kani::proof]
+    #[kani::unwind(2)]
+    fn a_connective_reads_only_its_read_set() {
+        reads_only_its_read_set(|s| Pred::Not(Box::new(any_cmp(s))));
+        reads_only_its_read_set(|s| Pred::And(vec![any_cmp(s)]));
+        reads_only_its_read_set(|s| Pred::Or(vec![any_cmp(s)]));
+        reads_only_its_read_set(|_| Pred::And(Vec::new()));
+        reads_only_its_read_set(|_| Pred::Or(Vec::new()));
+    }
+
+    /// The quantifiers over a comparison that may read its binder and the outer one: `Forall`
+    /// over `E`, `Exists` over `P`, `Count` over `E` with any operator and bound.
+    #[kani::proof]
+    #[kani::unwind(3)]
+    fn a_quantifier_reads_only_its_read_set() {
+        reads_only_its_read_set(|s| {
+            let (entity, body) = quantified(s, E, |s| any_cmp(s));
+            Pred::Forall { entity, body }
+        });
+        reads_only_its_read_set(|s| {
+            let (entity, body) = quantified(s, P, |s| any_cmp(s));
+            Pred::Exists { entity, body }
+        });
+        reads_only_its_read_set(|s| {
+            let (entity, body) = quantified(s, E, |s| any_cmp(s));
+            Pred::Count {
+                entity,
+                body,
+                op: any_op(),
+                n: kani::any::<u8>() % 3,
+            }
+        });
     }
 }
