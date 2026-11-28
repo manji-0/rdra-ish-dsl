@@ -458,7 +458,7 @@ impl Enc<'_> {
                 {
                     Ok(vals) => {
                         let c = fresh(&mut cmds, self.var_sort(*var));
-                        cmds.push(Command::Assert(self.one_of(numbers, vals, &c)));
+                        cmds.push(Command::Assert(Self::one_of(numbers, vals, &c)));
                         forks.push((*var, *p, None, c));
                     }
                     Err(Unsupported(why)) => {
@@ -528,7 +528,7 @@ impl Enc<'_> {
     /// Int range. A value below `from` is one a `.when`-guarded line of the same column
     /// asks for beside the numbers, as `null` beside `present` (`build/sets.rs::guarded_set`),
     /// which the step must still be able to write.
-    fn one_of(&self, numbers: &Option<Numbers>, listed: Vec<(Value, Expr)>, c: &Expr) -> Expr {
+    fn one_of(numbers: &Option<Numbers>, listed: Vec<(Value, Expr)>, c: &Expr) -> Expr {
         let is = |t: Expr| eq(c.clone(), t);
         match numbers {
             Some(n) => {
@@ -908,5 +908,80 @@ mod tests {
     #[test]
     fn an_empty_disjunction_is_false() {
         assert_eq!(any(Vec::new()).to_string(), "false");
+    }
+}
+
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+    use crate::lifecycle::types::{ModelRef, Site};
+
+    /// The largest domain and the largest `from`.
+    const SIZE: u8 = 4;
+    const FROM: u8 = 3;
+
+    /// What the step may write for a choice: within the run's domain the values the native
+    /// step forks on (`explore/moves.rs::each_successor`, one successor per value listed), and
+    /// past its top every number from `from` (`Numbers`), since a proof holds for every Int
+    /// range.
+    fn admitted(values: &[bool], numbers: &Option<Numbers>, size: u8, c: u8) -> bool {
+        match c < size {
+            true => values[usize::from(c)],
+            false => numbers.as_ref().is_some_and(|n| Value(c) >= n.from),
+        }
+    }
+
+    /// `one_of` holds of a candidate exactly when the choice admits it. The choice is one the
+    /// builder makes for a non-key column of a domain up to `SIZE` values: any non-empty set of
+    /// listed values and, for a choice of every number from `from` (`present` from 1, a copy from 0),
+    /// beside them the expansion of the numbers from `from` to the top, as
+    /// `build/sets.rs::guarded_set` joins a `.when`-guarded `null` and a `.when`-guarded
+    /// `present` of one column. The `.when` conditions are guards of the action, not part of
+    /// the choice, and a key column's values are not numbers.
+    #[kani::proof]
+    #[kani::unwind(6)]
+    fn one_of_admits_what_the_step_forks_on() {
+        let size: u8 = kani::any();
+        kani::assume((1..=SIZE).contains(&size));
+        let numbers = kani::any::<bool>().then(|| {
+            let from: u8 = kani::any();
+            kani::assume(from <= FROM);
+            Numbers {
+                from: Value(from),
+                conds: Vec::new(),
+                site: Site {
+                    fact: ModelRef::ColumnEffect(0),
+                    span: None,
+                },
+            }
+        });
+        // The list: `SIZE` values of the domain, so a set of up to `SIZE` values with
+        // repeats, holding the expansion of the numbers. A list of fixed length keeps CBMC
+        // from tracking a list of every length; a repeat changes no set `one_of` reads.
+        let mut values = [false; SIZE as usize];
+        let mut terms = Vec::with_capacity(usize::from(SIZE));
+        for _ in 0..SIZE {
+            let v: u8 = kani::any();
+            kani::assume(v < size);
+            values[usize::from(v)] = true;
+            terms.push((Value(v), Expr::int(i64::from(v))));
+        }
+        if let Some(n) = &numbers {
+            kani::assume((n.from.0..size).all(|v| values[usize::from(v)]));
+        }
+        let listed_below = numbers
+            .as_ref()
+            .is_some_and(|n| (0..n.from.0.min(size)).any(|v| values[usize::from(v)]));
+        let encoded = Enc::one_of(&numbers, terms, &Expr::sym("c", Sort::Int));
+
+        let c: u8 = kani::any();
+        let holds = encoded.holds_at("c", i64::from(c));
+        assert_eq!(holds, admitted(&values, &numbers, size, c));
+
+        kani::cover!(listed_below && holds && numbers.as_ref().is_some_and(|n| Value(c) < n.from));
+        kani::cover!(numbers.is_none() && holds);
+        kani::cover!(numbers.is_none() && !holds);
+        kani::cover!(c >= size && holds);
+        kani::cover!(c < size && !holds);
     }
 }
