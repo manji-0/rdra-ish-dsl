@@ -542,26 +542,21 @@ after(Decide).assert(Doc.status != drop)
     assert!(exact > 0);
 }
 
-/// The systems of the samples of samples/formal-verification and, per system, a step from
-/// an initial state.
+/// The systems of the samples of samples/formal-verification and of samples/ec-site (whose
+/// state is wider than those) and, per system, a step from an initial state.
 fn first_steps() -> Vec<(TransitionSystem, State, crate::lifecycle::explore::Move)> {
-    let mut out = Vec::new();
-    let mut paths: Vec<_> = std::fs::read_dir(
-        std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../samples/formal-verification"),
-    )
-    .unwrap()
-    .map(|e| e.unwrap().path())
-    .filter(|p| p.extension().is_some_and(|x| x == "rdra"))
-    .collect();
+    let root = repo_root();
+    let mut paths: Vec<_> = std::fs::read_dir(root.join("samples/formal-verification"))
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "rdra"))
+        .collect();
     paths.sort();
+    paths.push(root.join("samples/ec-site"));
+    let mut out = Vec::new();
     for path in paths {
-        let rel = path.strip_prefix(std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../.."));
-        let ts = TransitionSystem::build(
-            &load(rel.unwrap().to_str().unwrap()),
-            Bounds::VERIFY,
-            &Scope::ALL,
-        )
-        .ts;
+        let rel = path.strip_prefix(&root).unwrap().to_str().unwrap();
+        let ts = TransitionSystem::build(&load(rel), Bounds::VERIFY, &Scope::ALL).ts;
         let Some(s) = ts.initial_states().into_iter().next() else {
             continue;
         };
@@ -573,11 +568,12 @@ fn first_steps() -> Vec<(TransitionSystem, State, crate::lifecycle::explore::Mov
 }
 
 /// The mask every step is held to (claims A1, B6): flipping one byte of a step's successor
-/// is caught exactly when no var of `action_writes` holds the byte, in a whole 8-byte word
-/// of the state and in the state's last, partial word alike.
+/// is caught exactly when no var of `action_writes` holds the byte, in a whole 16-byte word,
+/// in the overlapping last word of a state at least 16 bytes wide, and in a state narrower
+/// than a word.
 #[test]
 fn a_changed_byte_is_caught_exactly_when_its_action_does_not_write_it() {
-    let (mut body, mut tail) = (0, 0);
+    let (mut body, mut last, mut short) = (0, 0, 0);
     for (ts, s, step) in first_steps() {
         let plan = &ts.plans()[step.act.index()];
         assert!(
@@ -594,17 +590,17 @@ fn a_changed_byte_is_caught_exactly_when_its_action_does_not_write_it() {
                 "byte {cell} of {width}"
             );
             if !plan.writes(cell) {
-                if cell < width / 8 * 8 {
-                    body += 1;
-                } else {
-                    tail += 1;
+                match (cell < width / 16 * 16, width >= 16) {
+                    (true, _) => body += 1,
+                    (false, true) => last += 1,
+                    (false, false) => short += 1,
                 }
             }
         }
     }
     assert!(
-        body > 0 && tail > 0,
-        "{body} whole-word and {tail} tail bytes"
+        body > 0 && last > 0 && short > 0,
+        "{body} whole-word, {last} last-word and {short} short-state bytes"
     );
 }
 
