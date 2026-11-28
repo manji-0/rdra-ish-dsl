@@ -233,8 +233,9 @@ and the native step the later effect's, and on a delete the printer resets only 
 param's entries while the native step drops every choice keyed by that param. Neither
 `candidate_slots` nor `bindings_for` keeps two params of one entity apart, and
 `Action::slots_written_twice` and `Builder::one_write_per_slot` compare `(var, param)` pairs,
-not slots. No builder path was found that gives one action two params of one entity that
-write the same variable, but none was shown to be impossible either: the argument below
+not slots. The fourth audit of these documents found no builder path that gives one action two params
+of one entity that write the same variable (this was not searched again here), but none was
+shown to be impossible either: the argument below
 assumes it, and it is not checked. Case by case:
 
 - `Create`: both set the entity's `Exists` to `present` at the new slot, at once and in effect

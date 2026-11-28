@@ -148,8 +148,10 @@ is a closed set contained in every closed set: the least one. ∎
 
 The function `closed_cone` (`keep_writers(·, false)`, #261) is called only by the TLA+
 printer (`emit/tla/module.rs`). The same closure feeds verdicts through
-`exact_target_cone`, which is `keep_writers(·, false)` and then `cone`: it decides entity
-cones (`target_cone`, P32) and the last round of `recheck_on`.
+`exact_target_cone(target, false)`, which is `keep_writers(·, false)` and then `cone`: it
+decides an entity cone that leaves a mark out (`target_cone`, P32), and the last round of
+`recheck_on` when its caller passes `slots = false`, as `targets.rs` and
+`verify/bfs.rs::recheck_cones` do (`escalate.rs` passes `true`).
 
 **Definition 2 (deviations).** Let `W = cone(σ, K)` and `C = T|W =
 restrict_to(W, K)`. `W` has
@@ -1211,7 +1213,7 @@ the row; a fixed or closed one carries its pull request.
 | A10, A11 | Lemma 6, point 5 | sketch (A11: that a count is never node-folded is read from `fold.rs::strip_links`) | M, D | P31 (partly fixed; fold evidence #516, #521) |
 | A12, A13, A14 | by reading | full (by construction) | D (A12, A13) | |
 | A15 | Theorem A15 | full relative to A8's hypotheses | R, D | P7 (fixed, #480), P31 (partly fixed; fold evidence #516, #521) |
-| A16 | lift | none | R (every lifted step and look-up, every build), D | P20 (fixed, #518, #522, #529, #531) |
+| A16 | lift | none | R (every lifted step and look-up, every build), D | P20 (fixed, #518, #522, #529, #531, #541) |
 | A17 | — | none | M, D | |
 | A18 | Theorem A18 | full given (G1)–(G6) | M, D | P8 (prose fixed, #475), P30 (fixed, #488; outside guards refuted, #537) |
 | A19 | `DeletedRowOwner` | full (as the case (G5) removes) | D | |
@@ -1347,8 +1349,8 @@ the row; a fixed or closed one carries its pull request.
   extended sub-lifecycle that `lift` rebuilds and explores again (`Extended::build`,
   `moves_of_into`, `initial_states`; they hold if `Extended::rebuild` reproduces the build the
   reduction was made from, which is not checked), `Canon::canonical`'s count of places, and the
-  lasso replays' last state. The two that read a lifted path, that one and `lift_stop`'s
-  state list, hold whatever path is lifted. A failure there
+  lasso replays' last state. The two that read a lifted path, `run_orbits_annotating`'s last
+  step and `lift_stop`'s state list, hold whatever path of the system's own states is lifted. A failure there
   stops the command; none can print a trace that does not replay.
 - **Bounded results.** Everything here, escalation included, is a statement at a bound. `ok at n` at
   `β + 1` and `β + 2` adds two bounded results; it is not an induction.
