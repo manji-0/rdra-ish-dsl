@@ -32,6 +32,9 @@ pub(crate) struct ProofTally {
     pub unproved: usize,
     pub deny_unproved: bool,
     pub claim: Claim,
+    /// Checks of the proof's output that failed (`Proof::faults`): tool bugs, which fail the
+    /// run as a tool error.
+    pub faults: usize,
 }
 
 impl ProofTally {
@@ -58,12 +61,18 @@ impl ProofTally {
 /// - Scope: a scope flag drops use cases from the system the prover encodes, so a proof there
 ///   holds in that system, not in the whole model. A counterexample or a CTI under a scope is
 ///   one of the whole model too, so those lines name no scope.
+///
+/// Every build `int_range` makes without an error is compared with `ts` up to Lemma U of
+/// docs/theory/z3.md (`prove::same_up_to_bound`), the two ends of the printed range among them.
+/// A build that differs is a tool bug: the claim keeps the difference (`Claim::faults`), and
+/// the proof then proves no rule.
 #[derive(Clone, Debug)]
-pub(crate) struct Claim(String);
+pub(crate) struct Claim(String, Vec<String>);
 
 impl Claim {
     pub(crate) fn of(model: &SemanticModel, scope: &Scope, ts: &TransitionSystem) -> Claim {
-        let ints = match int_range(model, scope, ts) {
+        let mut faults = Vec::new();
+        let ints = match int_range(model, scope, ts, &mut faults) {
             Some((least, most)) => {
                 format!(" and every --int-range-max from {least} to {most}")
             }
@@ -73,7 +82,18 @@ impl Claim {
             Some(flags) => format!("in the selected scope: {flags}"),
             None => "in the whole model".to_string(),
         };
-        Claim(format!("for any number of rows{ints}, {sigma}"))
+        Claim(format!("for any number of rows{ints}, {sigma}"), faults)
+    }
+
+    /// A claim with no faults, for tests.
+    #[cfg(test)]
+    pub(crate) fn plain(text: &str) -> Claim {
+        Claim(text.to_string(), Vec::new())
+    }
+
+    /// The builds in the range that are not the run's system up to Lemma U.
+    pub(crate) fn faults(&self) -> &[String] {
+        &self.1
     }
 
     pub(crate) fn as_str(&self) -> &str {
@@ -91,16 +111,35 @@ impl Claim {
 /// var. Each is first guessed, the least from the literals a build at 0 reports past its
 /// range and the greatest as 255 or 254, and the guess is confirmed by a build on each side
 /// of it; bisection decides only when a guess fails. So a proof costs about five builds more.
-fn int_range(model: &SemanticModel, scope: &Scope, ts: &TransitionSystem) -> Option<(u8, u8)> {
+/// Each build without an error is compared with `ts` (`prove::same_up_to_bound`), and each
+/// difference goes to `faults`; the system is dropped once compared.
+fn int_range(
+    model: &SemanticModel,
+    scope: &Scope,
+    ts: &TransitionSystem,
+    faults: &mut Vec<String>,
+) -> Option<(u8, u8)> {
     if !ts.vars().iter().any(|v| v.domain.is_numeric()) {
         return None;
     }
+    let faults = std::cell::RefCell::new(faults);
     let build = |int_max: u8| {
         let bounds = Bounds {
             int_max,
             ..ts.bounds.clone()
         };
-        TransitionSystem::build(model, bounds, scope).diags
+        let built = TransitionSystem::build(model, bounds, scope);
+        if !has_errors(&built.diags) {
+            if let Err(why) = prove::same_up_to_bound(ts, &built.ts) {
+                let fault = format!(
+                    "the build at --int-range-max {int_max} is not the run's system at {} up to Lemma U: {why}",
+                    ts.bounds.int_max
+                );
+                rdra_ish_core::shadow_assert!(false, "shadow: int_range: {fault}");
+                faults.borrow_mut().push(fault);
+            }
+        }
+        built.diags
     };
     let builds = |int_max: u8| !has_errors(&build(int_max));
     let m = ts.bounds.int_max;
@@ -253,10 +292,15 @@ pub(crate) fn run_proof(
         offer.as_ref(),
     )
     .map_err(|e| anyhow::anyhow!("z3 failed: {e}"))?;
-    if let (Some(file), false) = (&cache, offer.as_ref() == Some(&certified.certificate)) {
+    let mut proof = certified.proof;
+    for fault in claim.faults() {
+        proof.fault(fault.clone());
+    }
+    // A proof whose output failed a check leaves no certificate for the next run.
+    let wanted = proof.faults.is_empty() && offer.as_ref() != Some(&certified.certificate);
+    if let (Some(file), true) = (&cache, wanted) {
         certificate::write(file, &version, &certified.certificate);
     }
-    let proof = certified.proof;
     let (yours, rules): (Vec<&RuleProof>, Vec<&RuleProof>) =
         proof.rules.iter().partition(|r| lemmas.contains(&r.inv));
     let count =
@@ -299,6 +343,12 @@ pub(crate) fn run_proof(
     for lemma in &proof.lemmas {
         out!(text, "lemma: {lemma}{within}");
     }
+    for fault in &proof.faults {
+        out!(
+            text,
+            "fault: a check of the proof failed, so it proves no rule (a tool bug): {fault}"
+        );
+    }
     for loose in &proof.loose {
         out!(
             text,
@@ -328,6 +378,7 @@ pub(crate) fn run_proof(
         unproved: count(&rules, unproved),
         deny_unproved,
         claim,
+        faults: proof.faults.len(),
     };
     let with = |f: fn(&Verdict) -> bool| -> BTreeSet<usize> {
         proof
@@ -397,6 +448,12 @@ fn print_verdict(
         }
         Verdict::Unproved(Unproved::Premise(why)) => {
             out!(text, "unproved: {name}: {why}")
+        }
+        Verdict::Unproved(Unproved::Uncertified(_)) => {
+            out!(
+                text,
+                "unproved: {name}: a check of the proof failed (see the fault line)"
+            )
         }
         Verdict::Unproved(Unproved::Unknown { action }) => {
             out!(text, "unproved: {name}: z3 gave up on {action}")

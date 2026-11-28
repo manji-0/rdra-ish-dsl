@@ -158,8 +158,17 @@ Every run, in every build:
   and reports one that does not replay as a tool error (N16); the lifts' own look-ups are
   faults too (A16, N13);
 - refuses, at build time, a column domain past a byte (`DomainTooLarge`), a state past the
-  packed width (`StateTooWide`), and an action that writes one slot twice
+  packed width (`StateTooWide`), and an action that writes one slot twice or has two params
+  that can bind one slot and write one var there with values that can differ
   (`ConflictingEffects`) (I1, N2, T1);
+- checks, at build time, that every action is in the slot syntax the Lean proofs take
+  (`WF`, `Built`), and stops as a tool error when one is not (`build/syntax.rs`, A8,
+  A18);
+- checks every cone `target_cone`, `property_cone` and `exact_target_cone` return against
+  what Theorems A1 and A2 need (closed, holding its seed, and exact where its use needs it)
+  and decides on the whole system when one fails, and checks every restriction to a cone
+  against what Definition 2 lets it drop, stopping the run as a tool error when one does not
+  (`cone_check.rs`, A1);
 - panics on an edge number past `u32` instead of wrapping it (`core/explore/edges.rs::edge_number`,
   and the orbit self-edge index of `core/explore/bfs.rs::Bfs::take`, N1);
 - checks the split of a reduced cone against Lemma 5 and the counted rule
@@ -198,10 +207,15 @@ documents arrive at them from their own side.
    prover's encoding that no sample or corpus case exercises is not common-mode, but no
    comparison of a proof with BFS meets it either. The reference interpreter checks the
    builder without reading its output, on a subset of the language, and checks z3's
-   `proved` at `m + 1` and `m + 3` (I1, B1). Outside that subset, and for the cone choice,
-   the property-cone ladder, the quotient tables, and `TlaNames`, only hand-written
-   expectations, such as the engine corpus's `expect` lines, see such a fault, and only on
-   the models they name (T7).
+   `proved` at `m + 1` and `m + 3` (I1, B1). Every run checks each cone the cone builders
+   return against what Theorems A1 and A2 need of it, not against a second choice: the cone is closed, holds
+   its seed and is exact where its use needs it, and its restriction drops only what
+   Definition 2 lists (A1). That check shares the actions' read and write sets
+   (`plain_reads`, `mark_reads`, `copy_reads`, `action_writes`, `pred_reads`) with the
+   choice, so a fault in those is still common-mode. Outside the interpreter's subset, and
+   for those sets, the property-cone ladder, the quotient tables, and `TlaNames`, only
+   hand-written expectations, such as the engine corpus's `expect` lines, see such a fault,
+   and only on the models they name (T7).
 2. **No run-time check of an `ok` or a `proved` as such.** A counterexample is checked
    before it prints (N16); an `ok` and a `proved` are not. The causes of a wrong one that
    are known are refused or checked in every run (see
@@ -252,7 +266,10 @@ not a bound on what exists.
   `exact`, is read from the code with no run-time check; for node folds and groups of folds
   sharing a bit, the syntactic fields are read too, and the check's tie of `cover` to `X`
   counts guards rather than matching each one. That the code's actions
-  are the slot syntax over which `local_`, `shape` and `new_writes` are proved is read too.
+  are the slot syntax over which `local_`, `shape` and `new_writes` are proved is checked
+  in every build for `WF` and `Built`, while that `candidate_slots` filters by role before
+  any guard, and takes the lowest absent slot for `New`, and that `each_successor` executes
+  the syntax as the Lean semantics does, are read.
   The Lean model has one bit per fold, no node fold, and the cone's parameter positions;
   cones.md argues those parts on paper. The nested case (the
   induction over the depth, the outer representative and class moves read on the inner run)
@@ -282,14 +299,15 @@ not a bound on what exists.
   unreduced cone with no tool error in a release build. The panics left on a lift's way stop the run.
 - **A18.** No Kani harness proves the canonical form invariant under the group; it rests on an
   exhaustive unit test and the `Canonical` twin. The `g6.rs` test has no `always` or
-  `unchanged`. The scan does not check the builder's two facts, and the extended
+  `unchanged`. The build checks `WF` and the builder's two facts on the whole system, and a
+  cone keeps them by the restriction's check (A1), not by a check of its own; the extended
   sub-lifecycle's `Earlier { step: 0 }` parameters carry no run-mark conjunct. The Lean model
   has action guards only, so (G6) outside guards is a paper step, and `a18_holds_iff` takes the
   invariant's invariance as a hypothesis. The model reads effects in list order, where
   `each_successor` applies the deletes and then the choices last; it has no owner
   `Transition`, no data domain sizes and no `null` data values, and covers neither the reduced
   cone nor the extended sub-lifecycle (A22). That the model is `Group::apply`, `breaks.rs::scan`
-  and `each_successor` is read from the code, and so is `WF`. The Lean model's `G6` forbids
+  and `each_successor` is read from the code. The Lean model's `G6` forbids
   every guard read of a `New` row's owner, where the scan forbids it only when the parent's
   class moves; the remaining case is a paper step. The least BFS depth of each class is a paper
   step only.
@@ -313,15 +331,15 @@ not a bound on what exists.
 
 **Proofs with z3**
 
-- **B1.** `Enc::compare` re-implements `expr.rs::compare` and is tied to it by reading and
-  differential tests only; under `core/prove/` only `Enc::one_of` has a Kani harness, and no
-  code has a twin.
+- **B1.** Every proof checks `Enc::compare` against `expr.rs::compare` at the run's bounds
+  only; the rest of the encoding is tied to the native step by reading and differential tests,
+  under `core/prove/` only `Enc::one_of` has a Kani harness, and no code has a twin.
   `proof_equivalence` skips 130 comparisons on the samples. The header of
   `z3_guarded_null_beside_present` says BFS breaks its rule at `--int-range-max 6`, which no
   test runs.
-- **B2.** Nothing checks at run time that a bound in a proof's printed `--int-range-max` range
-  builds the same system; Lemma U is a reading of the code, checked by the reference
-  interpreter on its subset.
+- **B2.** A proof compares with its own system only the builds its printed `--int-range-max`
+  range was found by, the two ends among them; between them Lemma U is a reading of the code,
+  checked by the reference interpreter on its subset.
 - **B6.** Step pruning has no test; that a step changes only `Wr(a)` is checked in debug and
   `shadow` builds only.
 - **B7.** No test checks that an unstateable rule is `out of scope`, that a guard is dropped or
@@ -333,7 +351,8 @@ not a bound on what exists.
 - **B14.** Independence from the solver count is empirical.
 - **B16.** The checks z3 gives up on by itself are counted, not asserted. A wrong `proved`
   turns a cone stopped at the memory limit into a wrong `ok`, and no run-time check sees it
-  (residual risk 2).
+  (residual risk 2). The check of the kept lemmas runs in tests only, not on users' runs, and
+  reads only the states the miner's cones reach.
 - **B18.** No test asserts that `proved` covers state rules only.
 
 **The native verifier**
@@ -363,8 +382,7 @@ not a bound on what exists.
 
 **Agreement with TLC**
 
-- **T1.** The printed reduced step has no per-construct argument, and that no two params of
-  one action that can bind one slot write one variable is assumed, not checked.
+- **T1.** The printed reduced step has no per-construct argument.
 - **T5.** The 25 `VERIFY_FALLBACK` cones meet TLC at 1 instance only, and oidc-auth's browser
   flow at 2 instances rests on the native checker alone; whether an entity cone of the other
   roots shares its variables with an invariant's cone, and so meets TLC there, is open.

@@ -11,6 +11,7 @@
 
 mod build;
 mod cone;
+mod cone_check;
 mod diag;
 mod explore;
 mod expr;

@@ -8,6 +8,7 @@ mod links;
 mod naming;
 mod preds;
 mod sets;
+pub(super) mod syntax;
 mod transitions;
 mod vars;
 
@@ -86,7 +87,10 @@ impl<'m> Builder<'m> {
 
     fn finish(mut self, scope: &Scope) -> Built {
         self.ts.layout();
+        #[cfg(test)]
+        self.plant_syntax_fault();
         self.one_write_per_slot();
+        self.in_slot_syntax();
         self.goals_met_by_delete();
         let bits = super::explore::packed_bits(&self.ts);
         if let Some(d) = too_wide(bits, super::explore::MOST_PACKED_BITS) {
@@ -130,16 +134,21 @@ fn too_wide(bits: u64, most: u64) -> Option<StateDiag> {
 
 impl<'m> Builder<'m> {
     /// An action that writes one slot twice fails the build with `ConflictingEffects`
-    /// (`Action::slots_written_twice`): the engines would not agree on its step. No builder
-    /// path makes one today; this keeps a future one from reaching the engines.
+    /// (`Action::slots_written_twice`): the engines would not agree on its step. So does one
+    /// whose two params can bind one slot and write one var there
+    /// (`TransitionSystem::shared_slot_writes`, Proposition T1's aliasing assumption). No
+    /// builder path makes either today; this keeps a future one from reaching the engines.
     fn one_write_per_slot(&mut self) {
-        let found: Vec<(String, VarId, Site, Vec<EntityKey>)> = (self.ts.actions.iter())
+        let ts = &self.ts;
+        let found: Vec<(String, VarId, Site, Vec<EntityKey>)> = (ts.actions.iter())
             .flat_map(|a| {
-                let entities: Vec<EntityKey> = (a.params.iter())
-                    .map(|p| self.ts.entity(p.entity).key)
-                    .collect();
-                (a.slots_written_twice().into_iter())
-                    .map(move |(var, _)| (a.name.clone(), var, a.site.clone(), entities.clone()))
+                let entities: Vec<EntityKey> =
+                    (a.params.iter()).map(|p| ts.entity(p.entity).key).collect();
+                let twice = a.slots_written_twice().into_iter().map(|(var, _)| var);
+                let shared = ts.shared_slot_writes(a).into_iter().map(|(var, ..)| var);
+                twice
+                    .chain(shared)
+                    .map(move |var| (a.name.clone(), var, a.site.clone(), entities.clone()))
             })
             .collect();
         for (usecase, var, site, entities) in found {
@@ -151,6 +160,17 @@ impl<'m> Builder<'m> {
                     column,
                     sites: vec![site],
                 },
+            );
+        }
+    }
+
+    /// An action outside the slot syntax the Lean proofs take (`build/syntax.rs`) stops the
+    /// build as a tool error: the builder is at fault, not the model, and no engine runs on
+    /// a system the proofs do not cover.
+    fn in_slot_syntax(&self) {
+        if let Some(fault) = self.ts.slot_syntax_faults().first() {
+            panic!(
+                "tool error: the built step of {fault}, outside the slot syntax the proofs take (a tool bug, not a finding about the model)"
             );
         }
     }

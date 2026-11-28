@@ -15,9 +15,11 @@ use root::repo;
 mod tools;
 use tools::tool;
 
-/// `verify` with no certificate cache: every proof runs its Houdini rounds.
+/// `verify` with no certificate cache: every proof runs its Houdini rounds. Every `verify` here
+/// also checks the kept lemmas on explored states (`CHECK_LEMMAS_ENV`), which users' runs skip.
 fn verify(args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .env(rdra_ish_core::lifecycle::prove::CHECK_LEMMAS_ENV, "1")
         .current_dir(repo())
         .env_remove("RDRA_Z3")
         .env("RDRA_ISH_NO_PROOF_CACHE", "1")
@@ -30,6 +32,7 @@ fn verify(args: &[&str]) -> Output {
 /// `verify`, with the proof's certificates kept under `cache` (`XDG_CACHE_HOME`).
 fn verify_cached(args: &[&str], cache: &Path) -> Output {
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+        .env(rdra_ish_core::lifecycle::prove::CHECK_LEMMAS_ENV, "1")
         .current_dir(repo())
         .env_remove("RDRA_Z3")
         .env_remove("RDRA_ISH_NO_PROOF_CACHE")
@@ -67,6 +70,7 @@ fn a_cached_certificate_changes_nothing_a_run_prints() {
         let _ = std::fs::remove_dir_all(&dir);
         let args = ["--prove", &sample(name)];
         let off = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
+            .env(rdra_ish_core::lifecycle::prove::CHECK_LEMMAS_ENV, "1")
             .current_dir(repo())
             .env_remove("RDRA_Z3")
             .env("RDRA_ISH_NO_PROOF_CACHE", "1")

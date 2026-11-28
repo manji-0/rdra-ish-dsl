@@ -82,7 +82,7 @@ impl End {
     }
 
     /// Each count that fails the run, in the order the failure message lists them.
-    fn failures(&self) -> [Failure; 8] {
+    fn failures(&self) -> [Failure; 9] {
         let failure = |count, tool, what| Failure { count, tool, what };
         [
             failure(
@@ -127,6 +127,11 @@ impl End {
                 self.tlc.tool_errors,
                 true,
                 "TLC run(s) that failed without a model violation",
+            ),
+            failure(
+                self.proof.as_ref().map_or(0, |p| p.faults),
+                true,
+                "check(s) of the proof's output that failed (a tool bug)",
             ),
         ]
     }
@@ -241,5 +246,25 @@ mod tests {
         let mut failed = end();
         failed.bfs.errors = 1;
         assert_eq!(failed.result(0), RunResult::Counterexample);
+    }
+
+    /// A check of the proof's own output that fails (a wrong comparison, a build outside
+    /// Lemma U, a kept lemma a reached state breaks) is a tool error, never a finding.
+    #[test]
+    fn a_proof_fault_is_a_tool_error() {
+        let mut faulty = end();
+        faulty.proof = Some(ProofTally {
+            proved: 0,
+            rules: 1,
+            unproved: 1,
+            deny_unproved: false,
+            claim: crate::prove::Claim::plain("for any number of rows, in the whole model"),
+            faults: 1,
+        });
+        assert_eq!(faulty.result(0), RunResult::ToolError);
+        if let Some(p) = &mut faulty.proof {
+            p.faults = 0;
+        }
+        assert_eq!(faulty.result(0), RunResult::Ok);
     }
 }

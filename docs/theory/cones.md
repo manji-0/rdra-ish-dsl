@@ -158,6 +158,23 @@ existence is outside `W`, a `Triggered` parameter whose mark is outside `W` (its
 it), and a parameter on an entity neither kept nor stubbed. A cone has no stub: by (C4) the
 parent of every owner in `W` has its existence in `W`.
 
+**What every run checks of a cone.** `cone_check.rs::TransitionSystem::cone_faults` checks
+each cone `target_cone`, `property_cone` and `exact_target_cone` return: `σ ⊆ W`, (C1)–(C4)
+recomputed from `plain_reads`, `mark_reads`, `copy_reads`, `action_writes` and `existences`
+(closure, not minimality: Lemma 2 needs only that `W` is closed), and, for an entity's cone,
+a `can_reach`'s and an exact one, no left-out mark (and no freed entity for a `can_reach`'s
+and an exact one with `slots`). A fault gives the cone `V` with the same `K`, which is closed
+and exact, with a warning. `::restriction_faults` checks every `restrict_to` against the
+paragraph above: the kept actions are `A_W`, each keeps exactly its effects on `W`, and the
+only guards and parameters it drops are a copy guard with `τ ∉ W`, a left-out mark's guards
+and `Triggered` parameter, and a freed entity's `New` parameter, whose `Create` goes with it.
+Under closure every other guard reads `W`, so it stays. A freed entity's row is read by no
+guard of `A_W` but a copy guard into it, which goes because its target is outside `W`: a
+plain guard that read the row would put its var in `W` by (C1) and the existence by (C4).
+A fault there stops the run as a tool error. The cones `targets.rs::recheck_on` grows between
+its first round and its exact one come from `cone` directly, so only the restriction check
+meets them.
+
 ---
 
 ## Projection and lifting
@@ -813,11 +830,11 @@ or `restrict_to`'s bookkeeping, and it reads `X`'s own guards and initial states
 
 | Field | Fact | How the code meets it |
 |---|---|---|
-| `local_` | `Local`: a guard conjunct reads only `Rd(a) ∪ Wr(a)` and depends only on what it reads; the effect leaves every variable outside `Wr(a)` as it is, and its value on `Wr(a)` depends only on `Rd(a) ∪ Wr(a)` | M: proved for the action model read off the slot syntax of Theorem A18 (`SymActModel.lean::local_`, under `Built`); Kani proves that a predicate reads only its `pred_reads` (T13); a debug or `shadow` build holds every step to `Wr(a)` (A1). That the code's actions are that syntax is read |
+| `local_` | `Local`: a guard conjunct reads only `Rd(a) ∪ Wr(a)` and depends only on what it reads; the effect leaves every variable outside `Wr(a)` as it is, and its value on `Wr(a)` depends only on `Rd(a) ∪ Wr(a)` | M: proved for the action model read off the slot syntax of Theorem A18 (`SymActModel.lean::local_`, under `Built`); Kani proves that a predicate reads only its `pred_reads` (T13); a debug or `shadow` build holds every step to `Wr(a)` (A1). R: every build checks that the built actions are in that syntax, `WF` and `Built` of `SymActions.lean` (`build/syntax.rs::TransitionSystem::slot_syntax_faults`; a fault stops the build as a tool error); that `each_successor` executes the syntax as the Lean semantics does is read |
 | `lemma5` | Lemma 5 (a)(b) | R: `split_faults`; the proof of Lemma 5 above |
 | `reads` | Lemma 5 (c), with a fold's reads those of `Fold::reads` | R: `split_faults` checks (c) with `Fold::reads` |
-| `shape` | `a`'s guard is its role conjuncts followed by its other conjuncts `og` | M: proved for the slot model (`SymActModel.lean::shape`); that `candidate_slots` filters by role before the guards is read |
-| `new_writes` | a `New` parameter's entity's existence is in `Wr(a)` | M: proved for the slot model under `Built` (`SymActModel.lean::new_writes`); that a `New` row comes with its `Create` is read from `build/actions.rs` |
+| `shape` | `a`'s guard is its role conjuncts followed by its other conjuncts `og` | M: proved for the slot model (`SymActModel.lean::shape`); R: every build checks that each role binds what `Rows.cand` says (`ParamRole::binds_exists`, `build/syntax.rs`); that `candidate_slots` applies it before the guards is read |
+| `new_writes` | a `New` parameter's entity's existence is in `Wr(a)` | M: proved for the slot model under `Built` (`SymActModel.lean::new_writes`); R: every build checks that each `New` parameter of the built system has its `Create` (`build/syntax.rs`), and a restriction keeps a `New` parameter only with its entity's existence, so with its `Create` |
 | `kept_rd` | a conjunct `X` keeps reads only `S_v ∪ inputs` | R: every guard of every action of `X` but a fold's bit guard reads only `X`'s first variables, `S_v ∪ inputs` (`reduce/lemma6hyp.rs::lemma6_faults`); `restrict_to` keeps a guard only when it reads `S_v ∪ inputs` (P2) |
 | `cover` | every conjunct in `og` of an `S_a` action is kept or folded | R: every guard of an `S_a` action outside its fold reads only `S_v ∪ inputs` and names only parameters `restrict_to` keeps (`keepsP`), so the restriction's rule keeps it, and every action of `X` has as many parameters and guards as that rule keeps (`reduce/lemma6hyp.rs::lemma6_faults`); `split_faults` checks the reads too, through `raw_reads`. The tie to `X` is a count: a guard `X` reads in place of another can only add steps, which the replay of every counterexample rejects (N16) |
 | `rise_eff` | a `T_a` action's value on an input depends only on `S_v ∪ inputs` | R: a transition's source, a tick's clock and a copy's reads, for every effect or copy onto an input, lie in `S_v ∪ inputs` (`reduce/lemma6hyp.rs::lemma6_faults`); step (c) below says why the other effects read nothing |
