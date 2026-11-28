@@ -7,8 +7,11 @@
 <!-- derived-from ../../docs/theory/semantics.md#verdicts -->
 
 This directory holds a Lean 4 project. It proves parts of Theorems A8, A15, A18, A20 and A21 of
-[cones.md](../../docs/theory/cones.md) from their hypotheses. Every theorem is stated over
-abstract transition systems. None of them reads the Rust code.
+[cones.md](../../docs/theory/cones.md) from their hypotheses, and Lemma 5 from Definition 3.
+The theorems of A8 and the others are stated over abstract transition systems; Lemma 5 is
+stated over a model of the cone by its actions
+([Definition 3 and Lemma 5 over actions](#definition-3-and-lemma-5-over-actions)). None of
+them reads the Rust code.
 
 ## Building
 
@@ -99,7 +102,9 @@ toolchain to Mathlib's releases. The group laws are fields of `Sym`, so
 The proofs assume the following hypotheses and do not derive them:
 
 - **Lemma 5 (a)(b)** (`Split`). An `S_a` step keeps `T`. A `T_a` step keeps `S` and reads
-  `S` only through `obs`.
+  `S` only through `obs`. `Reduction.lean` takes it as a hypothesis; over the action model,
+  `split_computed` derives it from `Local`
+  ([below](#definition-3-and-lemma-5-over-actions)).
 - **Lemma 6** (`Lemma6Fwd`, `Lemma6`, `Lemma6By`, `Lemma6Staged`). Every initial state
   projects to an initial state of `X`. From a reachable `(t, s)`, an `S_a` step of `C` is a
   silent edge of `X` from `x(t, s) = (s, inp t)`, and the converse holds; `Lemma6By stands`
@@ -172,8 +177,11 @@ The proofs assume the following hypotheses and do not derive them:
   - Consequence 4 is stated for `□(trig ⇒ ◇goal)` at one binding, the form of D21's
     `eventually` and `leads_to`, over behaviours. That the native search over lassos
     decides it is N9. `always` is an invariant (consequence 1).
-  - Lemma 5 (c)–(e) and the folds. Their effect is inside the step relations that Lemma 6
-    relates; Lemma 5 (e) enters as fair instances given on `T_a` labels.
+  - The folds. Their effect is inside the step relations that Lemma 6 relates. Lemma 5
+    (c)–(e) are derived over the action model with `FoldData`
+    ([below](#definition-3-and-lemma-5-over-actions)), but what a fold bit computes is not
+    modelled; Lemma 5 (e) enters `a15` and `a8_plain_iff` as fair instances given on `T_a`
+    labels.
 - **A15, the rest of the theorem.**
   - The run's search. `a15` reads the run's verdict as "no lasso of `R` with the fairness
     and stops above violates the property". That the search over strongly connected
@@ -266,8 +274,5 @@ keeps `T` small.
   `T` in place. `mem_eq_of_sound` shows that both give `Mem`, provided every insert of the
   loop applies one condition. That much is read from the code.
 
-The earlier sections list **Lemma 5 (a)(b)** as a hypothesis and **Lemma 5 (c)–(e)** as not
-covered. Both describe `Reduction.lean` alone. `split_computed` derives `Split`, which is
-Lemma 5 (a)(b), from `Local`, and `lemma5_of_closed` derives (c)–(e) with `FoldData`. The
-folds stay abstract, and so does what a fold bit computes. The cone that `restrict_to` builds
-is not part of this model.
+The folds stay abstract, and so does what a fold bit computes. The cone that `restrict_to`
+builds is not part of this model.
