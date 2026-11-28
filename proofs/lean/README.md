@@ -492,8 +492,8 @@ with the inputs of `S` on and off (the walk of `every_split_passes_its_check`):
 The dump has about 500 distinct certificates, about half of them with an `S` side, at most
 34 variables and 46 actions each, about 200 KB in all. Once the Rust test binary and the
 Lean project are built, the script takes about 3 seconds, and `lemma5-check` itself takes
-0.03 s of CPU. A cold run adds the build of rdra-ish-core's test binary. CI does not run
-the script.
+0.03 s of CPU. A cold run adds the build of rdra-ish-core's test binary. CI's `formal-verify` job runs
+the script with the `ci-checked` profile.
 
 | Lean (`RdraIsh.`) | File | Claim | Statement |
 |---|---|---|---|
