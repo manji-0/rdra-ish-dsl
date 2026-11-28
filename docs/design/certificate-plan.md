@@ -2,8 +2,8 @@
 
 Status: research draft against main at 6042d0af (2026-11-28). Phases 1a (C9, C10), 1b
 (C1, C7, C8, C15), 1c (C11, C3's R half, C33) and 2a (C22, C24, C25) are implemented and
-measured (marked **Done** below); nothing else here is implemented or measured. Every cost below
-is an estimate. Each phase has a measurement as its exit criterion (see
+measured (marked **Done** below). Phase 3a (C4) is measured and over its budget, so it is not
+implemented. Nothing else here is implemented or measured. Every other cost below is an estimate. Each phase has a measurement as its exit criterion (see
 [Measurement](#measurement)).
 
 ## 0. Method and vocabulary
@@ -178,6 +178,48 @@ successor and `s` are hot in cache, since the table hashes `next` next. Expect l
 instructions; the measurement decides. A failure is a `tool_error` for the cone (no
 fallback: the whole system runs the same step). It shares only the packing. Classes
 change: A1 and B6 go from M (debug) to R.
+
+*Measured (3a): over budget, so C4 stays read.* The form above, built with the mask kept
+beside the plans in every build and checked in `each_raw_move` after `holds`, costs more than
+the 1% target. Every edge of a run comes through `each_raw_move` (`each_successor` has no
+other caller that makes edges; `scan_guards` reads successors only for guard diagnostics).
+The check reads the raw step, before `moves_of_into` moves a reduced representative.
+The measurement used release builds of main and the branch, `RDRA_JOBS=1`, and `verify` at
+the default bounds. There were 3 interleaved runs each. Stdout and stderr were
+byte-identical.
+
+| Sample | Steps checked | Mean width | Instructions, main | Instructions, with C4 | Max RSS median, main → C4 |
+|---|---|---|---|---|---|
+| patent-ops | 6.1 M | 44 B | 45.08–45.11 G | 45.76 G (+1.45%) | 191.7 → 190.7 MB |
+| clinic-ops | 36.4 M | 40.5 B | 141.23–141.31 G | 144.14–144.19 G (+2.05%) | 1008.4 → 1007.7 MB |
+
+RSS does not rise. The check costs about 66–78 instructions per step, against about 7,300
+(patent-ops) and 3,900 (clinic-ops) per step for the whole run. Those 66–78 instructions
+include the mask's code-shape effect. A build that keeps the mask but never calls the check
+already retires +0.6% on patent-ops, and that share moves by ±0.4% with how the mask is
+stored. The other variants measured on patent-ops:
+
+| Variant | patent-ops |
+|---|---|
+| 8-byte words, partial last word copied | +2.5% |
+| 8-byte words, overlapping last word | +1.7% |
+| 16-byte words, overlapping last word | +1.45% |
+| 16-byte words, masks in an array beside the plans | +2.0% |
+
+A tighter loop saves perhaps 20 instructions a step, about 0.3%, and does not bring the cost
+under 1%. The implementation and its tests are on the branch `cert/phase-3a-release-check`.
+The tests are: the byte test over whole, last and short words; the planted `action_writes`
+writer that stops a run; and the direct step test.
+
+*Proposed cheaper form (a different certificate, not yet measured).* Test each write that
+`each_successor` makes, not each successor. Each `State::set` target cell
+(`offset + slot`) is tested against the action's cell mask, so the cost scales with the
+effects a step applies, not with the state's width. The same test catches a slot out of
+range. One fact stays read: that `each_successor` writes the successor only through that
+setter. A wrapper type around the successor that exposes only the checked setter would make
+that fact structural. It is a weaker claim than C4's, which compares whole states, so it would
+get its own row and its own measurement, and A1 and B6 would keep their present classes until
+then.
 
 **C5, not certifiable at run time.** The functional dependence on `Rd ∪ Wr` needs two
 states that agree on `Rd ∪ Wr` and differ elsewhere. C28's independent step comparison
@@ -503,8 +545,8 @@ and the planted-bug test that every certificate needs (as
 | 1 | 1a counterexample vouching (**Done**) | C9, C10 | TV, R | 2 d | 0 off counterexamples / 0 | A2 gap closed; A16 "lifted start" closed | none |
 | 1 | 1b reduction syntax (**Done**) | C1, C7, C8, C15 | R | 5 d | once per reduction, ~0 / 0; measured at `RDRA_JOBS=1` `verify`: +0.4% instructions on patent-ops, +0.1% on clinic-ops (code layout: the checks themselves retire under 2.5M), max RSS within run-to-run spread | A8's 8 fields, half of `cover` and `X`'s initial states move from read to R (`FoldKey::Param` folds); A9 fallback and marking, A12, A3 → R; N16's two internal facts → R | none |
 | 1 | 1c cone and build syntax (**Done**) | C11, C3 (R half), C33 | TV, R | 3 d | once per cone/build, ~0 / 0; measured at `RDRA_JOBS=1` `verify`: +0.2% instructions on patent-ops, +0.04% on clinic-ops, max RSS within the spread a one-string change to main gives | residual risk 1 "cone choice" → TV; A8/A18 syntax tie → R; T1 aliasing assumption → R | none |
-| 2 | 2a prover TVs | C22, C25, C24 | TV, W | 5 d | `--prove` only: ms + two builds already made + states × helper lemmas / 0 | B1 compare → TV; B2 Lemma U, B3 → TV; false helper lemmas → W on explored states (B16 unchanged) | none |
-| 3 | 3a step writes in release | C4 | R | 2 d + measure | per successor, target < 1% / 0 (per-action mask) | A1, B6 → R | none |
+| 2 | 2a prover TVs (**Done**) | C22, C25, C24 | TV, W | 5 d | `--prove` only: ms + two builds already made + states × helper lemmas / 0 | B1 compare → TV; B2 Lemma U, B3 → TV; false helper lemmas → W on explored states (B16 unchanged) | none |
+| 3 | 3a step writes in release (measured, over budget: stays read) | C4 | R | 2 d + measure | per successor, target < 1% / 0 (per-action mask); measured at `RDRA_JOBS=1` `verify`: +1.45% instructions on patent-ops, +2.05% on clinic-ops (66–78 per step), max RSS unchanged | none until a cheaper form passes (see C4) | none |
 | 3 | 3b canonical membership | C16 (R + K) | R, K | 3 d + measure | per canonicalization, target < 1% / one scratch row per worker | A21 "member of the orbit" → R, "function of the state" → K; T13 canonical gap → K | none |
 | 4 | 4a liveness witness, plain (**Done**) | C19 (plain) | W | 4 d | O(V+E) per binding with no start; target < 1% of the run / transient per-component arrays as `avoid`'s; measured at `RDRA_JOBS=1` `verify`: the check, run 11 times over per call, retires 0.26 G per run on patent-ops (0.57%) and 2.85 G on insurance-claim-ops (0.52%), under 0.01% on food-permit-ops; main → branch 45.17–45.18 → 45.31–45.32 G (patent-ops), 547.8 → 549.8 G (insurance-claim-ops), 233.1 → 232.4 G (food-permit-ops), 141.1–141.2 → 140.7–140.8 G (clinic-ops, no liveness property); max RSS within the run-to-run spread; stdout and stderr byte-identical | N9, N10 code → W; T8 / residual risk 2 for liveness `ok` narrowed to the shared predicates | none |
 | 4 | 4b liveness witness, orbit | C19 (orbit), C21 (initial + lasso states) | W, R | 3 d (after reading `orbit/liveness.rs`) | as 4a | A23 search code → W; LiveEqui partially R | 3b, 4a |
@@ -534,7 +576,8 @@ run-time check. Phases 6–8 are larger and mostly help CI or opt-in runs.
 
 - **Shared primitives** that the checkers read too: the parser, `build_model`, the AST types,
   `eval` / `holds_bound`, `pred_reads` (Kani on depth-1 shapes), `action_reads` /
-  `action_writes` (cross-checked by C4 for writes only), `fair_instance`, the packing (Kani),
+  `action_writes` (held to every step in debug and `shadow` builds only, since C4 is over
+  budget in release), `fair_instance`, the packing (Kani),
   and the edge list. Each certificate above names which of them it uses.
 - **The builder outside the reference subset** (C28), and the functional-dependence half of
   `Local` (C5). The only independent check of these is the reference interpreter. The
