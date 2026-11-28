@@ -439,15 +439,41 @@ impl Classes {
         reference::check(n, &silent, &rise_edges, &initial, &blocks);
         // The worklist's partition is certified before the reduction uses it (claims A8, A9 of
         // docs/theory/claims.md): a partition that is not stable could merge states the cone
-        // tells apart. One that fails is a tool bug; the sweeps' partition, stable when they
-        // stop, takes its place.
+        // tells apart. One that fails is a tool bug; the sweeps' partition takes its place, and
+        // passes the same certificate and a marking of its own (`marking_splits_nothing`), or
+        // the cone is decided unreduced.
+        // A test may plant a fault (`dropped`): both partitions put every state in one block.
+        let planted = dropped("sweeps_certified");
+        let one = |blocks: Vec<u32>| match planted {
+            true => vec![0; n],
+            false => blocks,
+        };
+        let blocks = one(blocks);
         let blocks = match reference::stable(n, &silent, &rise_edges, &initial, &blocks) {
             true => blocks,
             false => {
                 eprintln!(
                     "warning: the quotient of a sub-lifecycle ({n} states) failed its stability check; using the partition of repeated sweeps (a tool bug)"
                 );
-                reference::quotient_blocks(n, &silent, &rise_edges, &initial)
+                let sweeps = one(reference::quotient_blocks(
+                    n,
+                    &silent,
+                    &rise_edges,
+                    &initial,
+                ));
+                if !reference::stable(n, &silent, &rise_edges, &initial, &sweeps)
+                    || !reference::marking_splits_nothing(n, &silent, &sweeps)
+                {
+                    crate::shadow_assert!(
+                        dropped("sweeps_certified"),
+                        "shadow: Classes::of_graph: the sweeps' partition of {n} states failed its certificate"
+                    );
+                    eprintln!(
+                        "warning: the partition of repeated sweeps ({n} states) failed its certificate too; deciding the cone unreduced (a tool bug)"
+                    );
+                    return (Classified::Untrusted, ended, Vec::new());
+                }
+                sweeps
             }
         };
         // The identity on an S no inner reduction shrank reduces nothing (#101). Up to `H` a
@@ -1302,5 +1328,52 @@ property JobStarts eventually(Job.status == running).fair(Start)
             &labels,
             &[0, 0, 0, 1]
         ));
+    }
+
+    /// Claim A9: the second reading of (B2), the marking the sweeps' partition is certified
+    /// with besides `stable`, accepts a partition no sweep splits and rejects one a sweep does:
+    /// a state that reaches another block when its block-mate does not, also through a path
+    /// inside the block, and a silent cycle with no exit beside a state that leaves.
+    #[test]
+    fn the_marking_rejects_a_partition_a_sweep_splits() {
+        let splits_nothing = reference::marking_splits_nothing;
+        assert!(splits_nothing(3, &[(0, 1)], &[0, 1, 2]));
+        assert!(!splits_nothing(3, &[(0, 1)], &[0, 1, 0]));
+        // 2 -> 0 -> 1: 2 reaches block 1 through 0, inside block 0.
+        assert!(splits_nothing(3, &[(2, 0), (0, 1)], &[0, 1, 0]));
+        assert!(!splits_nothing(4, &[(2, 0), (0, 1)], &[0, 1, 0, 0]));
+        assert!(!splits_nothing(4, &[(0, 1), (1, 0), (2, 3)], &[0, 0, 0, 1]));
+        // Self-loops are no edge out.
+        assert!(splits_nothing(2, &[(0, 0), (1, 1)], &[0, 0]));
+        // An edge past the run's states.
+        assert!(!splits_nothing(2, &[(0, 2)], &[0, 0]));
+    }
+
+    /// Claims A8, A9, end to end: when the worklist's partition fails its certificate and the
+    /// sweeps' fails it too (both planted to one block, `sweeps_certified`), the cone is decided
+    /// unreduced.
+    #[test]
+    fn a_fallback_partition_that_fails_its_certificate_leaves_the_cone_unreduced() {
+        use crate::lifecycle::explore::symmetry::witnesses::dropping;
+        let caps = Caps::new(usize::MAX, 200_000);
+        let mut fell_back = 0;
+        for key_cycles in [false, true] {
+            let ts = TransitionSystem::build(
+                &model_from(&model(key_cycles)),
+                Bounds::VERIFY,
+                &Scope::ALL,
+            )
+            .ts;
+            for t in ts.targets() {
+                let (sys, seeds) = ts.cone_system(&ts.target_cone(t), [ts.target_seed(t)]);
+                let reduced = sys.reduced(&seeds, caps);
+                let planted = dropping("sweeps_certified", || sys.reduced(&seeds, caps));
+                if reduced.reduction().is_some_and(|r| r.reps.len() > 1) {
+                    fell_back += 1;
+                    assert!(planted == sys, "{t:?}: the cone is decided unreduced");
+                }
+            }
+        }
+        assert!(fell_back > 0, "a reduced cone falls back");
     }
 }

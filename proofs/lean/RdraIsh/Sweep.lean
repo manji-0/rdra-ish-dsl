@@ -36,10 +36,10 @@ is injective, so the checks read the same on the blocks as given.
 **What is read from the code, not derived.** That the depth-first marking of
 `stuttering_blocks` computes `Marked` (the least set closed under its two rules), that
 `same_partition` of the sweep's result holds iff the sweep split nothing, and that the run
-is complete. The fallback, `partition/reference.rs::quotient_blocks`, is used without the
-check: its last sweep splits nothing and its last pass over the rises splits nothing, which
-is `Cert.b2` and `Cert.b3` at the partition it returns, and its blocks refine the labels it
-starts from (`Cert.b1`). That reading is argued, not checked here.
+is complete. The fallback, `partition/reference.rs::quotient_blocks`, passes the same
+check, and `partition/reference.rs::marking_splits_nothing` besides: a marking by the two rules
+of `Marked` alone, closed under them and all or none on each block, the hypotheses of
+`b2_of_marking`. A fallback that fails either leaves the cone unreduced.
 -/
 
 namespace RdraIsh.Sweep

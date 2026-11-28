@@ -154,9 +154,11 @@ impl Extended {
         )
     }
 
-    /// The extended sub-lifecycle of a reduced cone, as `of` built it.
+    /// The extended sub-lifecycle of a reduced cone, as `of` built it: the folds in the split's
+    /// order, which is by action.
     pub(super) fn rebuild(cone: &TransitionSystem, r: &Reduction) -> Self {
-        let folds: Vec<Fold> = r.bits.iter().flatten().cloned().collect();
+        let mut folds: Vec<Fold> = r.bits.iter().flatten().cloned().collect();
+        folds.sort_by_key(|f| f.act);
         Self::build(
             cone,
             &r.vars.iter().copied().collect(),
@@ -165,6 +167,68 @@ impl Extended {
             &r.obs,
             &folds,
         )
+    }
+
+    /// `rebuild`, held to the build `reduced_with` made (claim N16 of docs/theory/claims.md):
+    /// `None`, with a warning, when the two differ (`digest`), so that no lift or class table
+    /// reads a sub-lifecycle other than the one the classes were read off. A debug or `shadow`
+    /// build panics there.
+    pub(super) fn rebuild_checked(cone: &TransitionSystem, r: &Reduction) -> Option<Self> {
+        let ext = Self::rebuild(cone, r);
+        if ext.digest() == r.digest {
+            return Some(ext);
+        }
+        crate::shadow_assert!(
+            false,
+            "shadow: Extended::rebuild: the sub-lifecycle of {} vars is not the one reduced_with built",
+            ext.system.vars.len()
+        );
+        eprintln!(
+            "warning: the extended sub-lifecycle of a reduced cone did not rebuild as it was built (a tool bug)"
+        );
+        None
+    }
+
+    /// A digest of what the reduction reads of this sub-lifecycle: `system`'s vars, entities,
+    /// actions, clock and layout (not its checks, which `drop_unreadable_checks` changes on the
+    /// cone after the build and no run of `X` evaluates) and the maps of `Extended`. `Debug`
+    /// output is fed to a hasher with fixed keys, the one `HashMap` sorted first, so equal
+    /// builds give equal digests in every process.
+    pub(super) fn digest(&self) -> u64 {
+        use std::fmt::Write as _;
+        use std::hash::Hasher;
+        struct Feed(std::collections::hash_map::DefaultHasher);
+        impl std::fmt::Write for Feed {
+            fn write_str(&mut self, s: &str) -> std::fmt::Result {
+                self.0.write(s.as_bytes());
+                Ok(())
+            }
+        }
+        let mut feed = Feed(std::collections::hash_map::DefaultHasher::new());
+        let x = &self.system;
+        let mut variants: Vec<_> = self.variants.iter().collect();
+        variants.sort();
+        write!(
+            feed,
+            "{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}{:?}",
+            x.vars,
+            x.entities,
+            x.actions,
+            x.now,
+            x.offsets,
+            x.width,
+            self.acts,
+            self.rise,
+            self.obs_local,
+            self.inputs_local,
+            self.bit_vars,
+            self.bits,
+            variants,
+            self.params,
+            self.fixed_why,
+        )
+        .expect("a digest is written to a hasher");
+        feed.0.finish()
     }
 
     /// `restrict_to(S ∪ inputs)` with one bit var per group of folded S actions, each such
@@ -225,12 +289,15 @@ impl Extended {
         system.actions = kept.iter().map(|&i| system.actions[i].clone()).collect();
         acts = kept.iter().map(|&i| acts[i]).collect();
         // A bit starts where the cone starts: an entity no use case creates is present from
-        // the first state, and a bit over it is raised there.
+        // the first state, and a bit over it is raised there. A test or a `shadow` build may
+        // start every bit at the other value (`dropped`), so that the check of `X`'s initial
+        // states fails (`lemma6_faults`).
+        let flipped = dropped("bit_starts");
         for (g, &var) in groups.vars.iter().enumerate() {
-            if groups.bits[g]
+            let on = groups.bits[g]
                 .iter()
-                .any(|f| cone.fold_initial(f) == Some(true))
-            {
+                .any(|f| cone.fold_initial(f) == Some(true));
+            if on != flipped {
                 system.vars[var.index()].base = Value::TRUE;
             }
         }

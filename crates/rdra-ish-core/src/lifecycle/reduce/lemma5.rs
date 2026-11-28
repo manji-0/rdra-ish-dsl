@@ -2,8 +2,10 @@
 //! `split_with` chose before the reduction uses it. The check reads the split's sets (`T_v`,
 //! `T_a`, `S_v`, `S_a`, `obs`, the inputs and the folds) and the seeds, and nothing else of
 //! `split_at`'s work: it computes each action's reads (mark reads and copy reads included)
-//! and writes afresh from the action, and monotonicity afresh with `monotone_vars`. A fault
-//! makes `reduced_with` decide the cone unreduced.
+//! and writes afresh from the action, and monotonicity afresh with `monotone_vars`. It also
+//! checks the counted rule of docs/design/counted-events.md ("The reduction", claims A3 and
+//! A12): a counted mark is in `T` and no input, and every action that writes one is in `T_a`.
+//! A fault makes `reduced_with` decide the cone unreduced.
 
 use std::fmt;
 
@@ -31,6 +33,9 @@ pub(in crate::lifecycle) enum Clause {
     E,
     /// A var and its entity's existence are on different sides (Definition 3).
     Sides,
+    /// A counted mark (`is_counted`) is in `S` or an input, or an action that writes one (a
+    /// raiser or the handler) is outside `T_a`.
+    Counter,
 }
 
 /// One fault of a split: its clause and what breaks it.
@@ -50,6 +55,7 @@ impl fmt::Display for SplitFault {
             Clause::D => "Lemma 5d",
             Clause::E => "Lemma 5e",
             Clause::Sides => "a var and its existence on two sides",
+            Clause::Counter => "a counted mark in the sub-lifecycle",
         };
         write!(f, "{clause}: {}", self.what)
     }
@@ -122,7 +128,8 @@ impl TransitionSystem {
     }
 
     /// Every fault of `split` as the split of this cone system for `seeds` (Lemma 5 of
-    /// docs/theory/cones.md, and the side rule of Definition 3); empty when it is one.
+    /// docs/theory/cones.md, the side rule of Definition 3, and the counted rule); empty when
+    /// it is one.
     pub(in crate::lifecycle) fn split_faults(
         &self,
         seeds: &[Seed],
@@ -236,6 +243,24 @@ impl TransitionSystem {
                 fault(Clause::Sides, format!("{} and {}", var(&v), var(&e)));
             }
         }
+        // The raisers and the handler of a counted mark are the actions that write it: each
+        // stays in `T_a`, and the mark in `T` and out of the inputs (claims A3, A12).
+        for v in self.var_ids().filter(|v| self.is_counted(*v)) {
+            if !t.contains(&v) || split.inputs.contains(&v) {
+                fault(
+                    Clause::Counter,
+                    format!("the counted {} is in S or an input", var(&v)),
+                );
+            }
+            for id in self.action_ids().filter(|a| writes[a.index()].contains(&v)) {
+                if !split.t_actions.contains(&id) || split.s_actions.contains(&id) {
+                    fault(
+                        Clause::Counter,
+                        format!("{} writes the counted {} outside T_a", act(&id), var(&v)),
+                    );
+                }
+            }
+        }
         out
     }
 }
@@ -274,6 +299,34 @@ mod tests {
             }
         }
         out
+    }
+
+    /// A gate cracked by a use case that raises a counted event, and opened by its handler.
+    const COUNTED_GATE: &str = r#"
+entity Gate "門" { id: Int @pk  status: Enum(shut, half, open) @default(shut) }
+entity Job "作業" { id: Int @pk  status: Enum(waiting, running) @default(waiting) }
+relate(Job, Gate, N:1)
+usecase Build "設置"
+usecase Crack "少し開ける"
+usecase Swing "開く"
+usecase Submit "投入"
+usecase Start "開始"
+event EvCracked "少し開いた"
+creates(Build, Gate)
+transitions(Crack, Gate.status, shut -> half)
+raises(Crack, EvCracked)
+triggers(EvCracked, Swing).counted(1)
+transitions(Swing, Gate.status, half -> open)
+creates(Submit, Job)
+transitions(Start, Job.status, waiting -> running)
+condition GateOpen "門が開いている"
+holds(GateOpen, Gate.status == open)
+applies_to(GateOpen, Start)
+"#;
+
+    /// The cone system of target `t`, with its seed.
+    fn sys_of(ts: &TransitionSystem, t: Target) -> (TransitionSystem, Vec<Seed>) {
+        ts.cone_system(&ts.target_cone(t), [ts.target_seed(t)])
     }
 
     /// The first var of `vars` in `set`.
@@ -375,6 +428,46 @@ mod tests {
                 assert!(planted == sys, "the cone is decided unreduced");
             }
         }
+        // The counted rule, on a gate whose crack's event is counted: the counter planted
+        // among the inputs, and a writer of it planted in S_a.
+        let counted = model_from(COUNTED_GATE);
+        let ts = TransitionSystem::build(&counted, Bounds::VERIFY, &Scope::ALL).ts;
+        for t in ts.targets() {
+            let (sys, seeds) = sys_of(&ts, t);
+            let split = sys.split_with(&seeds, true);
+            assert!(
+                sys.split_faults(&seeds, &split).is_empty(),
+                "the split as chosen passes"
+            );
+            let Some(counter) = sys.var_ids().find(|v| sys.is_counted(*v)) else {
+                continue;
+            };
+            let writer = sys
+                .action_ids()
+                .find(|a| {
+                    sys.action_writes(&sys.actions[a.index()])
+                        .contains(&counter)
+                })
+                .expect("a raiser");
+            let plants: [&dyn Fn(&mut Split); 2] = [
+                &|s| {
+                    s.inputs.insert(counter);
+                },
+                &|s| {
+                    s.s_actions.insert(writer);
+                },
+            ];
+            for plant in plants {
+                let mut split = sys.split_with(&seeds, true);
+                plant(&mut split);
+                let faults = sys.split_faults(&seeds, &split);
+                assert!(
+                    faults.iter().any(|f| f.clause == Clause::Counter),
+                    "the counted rule fails: {faults:?}"
+                );
+                fired.insert(Clause::Counter);
+            }
+        }
         let all = [
             Clause::Split,
             Clause::A,
@@ -383,6 +476,7 @@ mod tests {
             Clause::D,
             Clause::E,
             Clause::Sides,
+            Clause::Counter,
         ];
         assert_eq!(fired, all.into_iter().collect(), "every clause fails once");
         assert!(fell_back > 0, "a reduced cone falls back");

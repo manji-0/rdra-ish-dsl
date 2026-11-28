@@ -127,5 +127,6 @@ fn replay_error(v: &Violation, e: ReplayError) -> String {
             };
             format!("TLC's step back to state {to} (label {label}) matches no move of the model")
         }
+        ReplayError::Rebuilt => "the reduced cone's sub-lifecycle did not rebuild".to_string(),
     }
 }
