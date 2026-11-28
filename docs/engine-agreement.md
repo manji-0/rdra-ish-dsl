@@ -479,12 +479,17 @@ builds and tests never compile it.
 | `a_patch_is_the_pack` | `explore/packing.rs` | patching a packed state with the cells where another differs gives the other's bytes | the same 11 cells, every pair of states that fit |
 | `apply_of_a_composition_is_the_composition_of_applies` | `explore/symmetry/mod.rs` | `apply(g ∘ h) = apply(g) ∘ apply(h)`, keys relabelled on present rows only | a 2-slot parent and a 2-slot child with a key to it |
 | `lanes_are_exactly_the_equal_bytes` | `explore/table.rs` | the 8-lane tag match of the shared table sets the top bit of exactly the bytes equal to the tag | every 64-bit word, every tag |
+| `a_number_reads_back_and_never_wraps` | `types.rs` | `Domain::of_number` maps each number of `0..=int_max` to one value of an Int or nullable Int domain, below the domain's size, that `Domain::number` reads back as that number, whenever `Domain::admits` admits the domain's `Domain::column_values`; no other number has a value, and no two numbers share one | every `int_max`, every `i64`, with and without null |
+| `a_variant_reads_back_and_never_wraps` | `types.rs` | in an Enum or Bool domain, with or without null, that `Domain::admits` admits, each declared value has a value below the domain's size that `Domain::variant` reads back, never null, and no two share one; past a byte a declared value has no value | every declared count up to 65,535, every index |
+| `an_owner_value_names_its_slot` | `types.rs` | `Domain::slot` reads back the slot `Domain::of_slot` made an owner value from, and an optional owner's null names no slot | every slot below 255, optional or not |
 | `growth_keeps_room_for_one_more` | `explore/table.rs` | the shared table's growth rule is hashbrown's as `Seen::bytes_with` reads it: an insert keeps the capacity while there is room, else moves to a capacity of at least one more item whose buckets are a power of two | every length up to the capacity, buckets from 2^2 to 2^40 |
 
 A result holds up to its bound, and for one thread. The symmetry harness stays at 2 slots per
 class, where its group commutes, so the exhaustive unit test and the `canonical` twin check the
 canonical form. Under Kani a state packs one cell at a time (`Packing::by_words`), and the
-`packing` harnesses prove the two paths alike.
+`packing` harnesses prove the two paths alike. The domain harnesses prove the encoding and the
+count `admits` gates, not that the build calls them; `build/vars.rs::column_var` does, and
+the `DomainTooLarge` tests cited under claim N2 check that it refuses the columns past a byte.
 
 ### Running them
 

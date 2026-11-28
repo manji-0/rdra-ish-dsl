@@ -736,8 +736,8 @@ included, so they are lower bounds on that fraction.
 
 <!-- derived-from ../engine-agreement.md#kani-harnesses -->
 
-**Kani (T13) [read].** There are 16 `#[kani::proof]` harnesses, all in `core`: two in
-`expr.rs` (the comparison of D5), four in `explore/store.rs`, three in `explore/segments.rs`,
+**Kani (T13) [read].** There are 19 `#[kani::proof]` harnesses, all in `core`: two in
+`expr.rs` (the comparison of D5), three in `types.rs` (the value encoding of the domains), four in `explore/store.rs`, three in `explore/segments.rs`,
 three in `explore/packing.rs`, one in `explore/arena.rs`, two in `explore/table.rs`, one in
 `explore/symmetry/mod.rs`. Bounded model checking (CBMC, as Kani uses it) proves each
 statement for every input up to its bound. For agreement, the two `expr.rs` harnesses

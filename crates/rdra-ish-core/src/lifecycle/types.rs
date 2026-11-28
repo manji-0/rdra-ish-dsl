@@ -297,6 +297,38 @@ impl Domain {
         }
     }
 
+    /// How many values a column of this domain has under `bounds`, null included: the count
+    /// the build gates with `admits` and reports in `DomainTooLarge`. `None` for the
+    /// existence and owner domains, which no column has.
+    pub fn column_values(&self, bounds: &Bounds) -> Option<usize> {
+        match self {
+            Domain::Enum(names) => Some(Domain::enum_values(names.len(), false)),
+            Domain::NullableEnum(names) => Some(Domain::enum_values(names.len(), true)),
+            Domain::Bool | Domain::Nullable => Some(Domain::enum_values(2, false)),
+            Domain::NullableBool => Some(Domain::enum_values(2, true)),
+            Domain::Int => Some(Domain::int_values(bounds.int_max, false)),
+            Domain::NullableInt => Some(Domain::int_values(bounds.int_max, true)),
+            Domain::Existence | Domain::Instance { .. } => None,
+        }
+    }
+
+    /// The values of an Enum or Bool domain with `declared` declared values: one more for null.
+    pub fn enum_values(declared: usize, nullable: bool) -> usize {
+        declared + usize::from(nullable)
+    }
+
+    /// The values of an Int domain over `0..=int_max`: one more for null.
+    pub fn int_values(int_max: u8, nullable: bool) -> usize {
+        usize::from(int_max) + 1 + usize::from(nullable)
+    }
+
+    /// A domain of `values` values fits a `Value`, a byte: at most 256 values. The build gives
+    /// a column past it no var (`DomainTooLarge`); the Kani harnesses below prove that every
+    /// value of an admitted domain reads back and none wraps.
+    pub fn admits(values: usize) -> bool {
+        values <= usize::from(u8::MAX) + 1
+    }
+
     pub fn is_numeric(&self) -> bool {
         matches!(self, Domain::Int | Domain::NullableInt)
     }
@@ -1241,5 +1273,107 @@ mod tests {
         assert!(Domain::NullableBool.compares_with(&Domain::Bool));
         assert!(!nullable.compares_with(&Domain::Bool));
         assert!(!Domain::NullableBool.compares_with(&Domain::Nullable));
+    }
+}
+
+/// Kani harnesses (`cargo kani -p rdra-ish-core`): the value encoding of every column and
+/// owner domain, and the gate the build sizes a column's domain with. Each builds a `Bounds`
+/// or a `Domain` whose drop CBMC unrolls without limit unless bounded, hence `unwind(3)`.
+#[cfg(kani)]
+mod proofs {
+    use super::*;
+
+    /// At every `int_max`, a number of `0..=int_max` maps to one value of an Int or nullable
+    /// Int domain, below the domain's size, that reads back as that number, whenever the gate
+    /// admits the domain; no other number has a value, and two numbers never share one.
+    #[kani::proof]
+    #[kani::unwind(3)]
+    fn a_number_reads_back_and_never_wraps() {
+        let int_max: u8 = kani::any();
+        let n: i64 = kani::any();
+        let nullable: bool = kani::any();
+        let bounds = Bounds::uniform(NonZeroU8::MIN, int_max);
+        let d = if nullable {
+            Domain::NullableInt
+        } else {
+            Domain::Int
+        };
+        let values = d.column_values(&bounds).unwrap();
+        let in_range = (0..=i64::from(int_max)).contains(&n);
+        kani::cover!(nullable && int_max == 254 && n == 254 && Domain::admits(values));
+        match d.of_number(n, &bounds) {
+            Some(v) => {
+                assert!(usize::from(v.0) < values);
+                assert_eq!(d.number(v), Some(n));
+            }
+            None => assert!(!in_range || !Domain::admits(values)),
+        }
+        let m: i64 = kani::any();
+        if let (Some(a), Some(b)) = (d.of_number(n, &bounds), d.of_number(m, &bounds)) {
+            assert!(a != b || n == m);
+        }
+    }
+
+    /// In an Enum or Bool domain, with or without null, that the gate admits, the declared
+    /// value `i` has a value below the domain's size that reads back as `i`, is never null in a
+    /// nullable domain, and differs from every other declared value's. Past a byte a declared
+    /// value has no value, never a wrapped one. `of_variant` and `variant` do not read the
+    /// names, so the harness takes the declared count of an Enum as a number.
+    #[kani::proof]
+    #[kani::unwind(3)]
+    fn a_variant_reads_back_and_never_wraps() {
+        let kind: u8 = kani::any();
+        kani::assume(kind < 4);
+        let bounds = Bounds::uniform(NonZeroU8::MIN, 0);
+        let (d, declared) = match kind {
+            0 => (Domain::Enum(Vec::new()), usize::from(kani::any::<u16>())),
+            1 => (
+                Domain::NullableEnum(Vec::new()),
+                usize::from(kani::any::<u16>()),
+            ),
+            2 => (Domain::Bool, 2),
+            _ => (Domain::NullableBool, 2),
+        };
+        let values = match &d {
+            Domain::Enum(_) | Domain::NullableEnum(_) => {
+                Domain::enum_values(declared, d.has_null())
+            }
+            _ => d.column_values(&bounds).unwrap(),
+        };
+        kani::assume(Domain::admits(values));
+        let (i, j) = (
+            usize::from(kani::any::<u16>()),
+            usize::from(kani::any::<u16>()),
+        );
+        kani::assume(i < declared && j < declared);
+        kani::cover!(d.has_null() && declared == 255 && i == 254);
+        kani::cover!(!d.has_null() && declared == 256 && i == 255);
+        let v = d.of_variant(i);
+        assert!(usize::from(v.0) < values);
+        assert_eq!(d.variant(v), Some(i));
+        assert_eq!(d.variant_value(i), Some(v));
+        assert!(!d.has_null() || v != Value::NULL);
+        assert!(v != d.of_variant(j) || i == j);
+        let k = usize::from(kani::any::<u16>());
+        kani::assume(k + usize::from(d.has_null()) > usize::from(u8::MAX));
+        assert_eq!(d.variant_value(k), None);
+    }
+
+    /// An owner value names the slot it was made from, and an optional owner's null names
+    /// none. A slot is an index below a slot count, a `NonZeroU8`, so it is below 255.
+    #[kani::proof]
+    #[kani::unwind(3)]
+    fn an_owner_value_names_its_slot() {
+        let optional: bool = kani::any();
+        let d = Domain::Instance {
+            parent: EntId(0),
+            optional,
+        };
+        let slot: u8 = kani::any();
+        kani::assume(slot < u8::MAX);
+        assert_eq!(d.slot(d.of_slot(slot)), Some(slot));
+        if optional {
+            assert_eq!(d.slot(Value::NULL), None);
+        }
     }
 }
