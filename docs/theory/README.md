@@ -237,8 +237,8 @@ not a bound on what exists.
   the tests check what it assumes on the models and bounds they run. TLC checks the reduction
   step by step on the corpus's reduced cones only, one way (`C ⇒ R`), without fairness.
 - **A10.** Rests on Lemma 6 (A8).
-- **A11.** The fold equivalence is tested on the models and bounds of the fold tests only;
-  Lemma 6 is argued (A8).
+- **A11.** The fold equivalence is proved by Kani for one action at small bounds and tested
+  on the models and bounds of the fold tests otherwise; Lemma 6 is argued (A8).
 - **A13.** No test makes `reduced_with` reject a reduction past the TLA+ cell budget; that
   rejection is read from the code only.
 - **A14.** No test targets the cone of its own that a dropped check gets.

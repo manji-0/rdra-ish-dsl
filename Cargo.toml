@@ -61,3 +61,11 @@ overflow-checks = true
 [profile.mutants]
 inherits = "release"
 incremental = true
+
+# CBMC keeps the fields of an array apart only up to 64 elements by default, and past that it
+# does not resolve which variant an enum read from a `Vec`'s buffer is: `rdra-ish-core`'s `reduce/fold.rs`
+# harnesses, which read a `TransitionSystem`'s lists, then unwind `eval` through every kind of
+# `Pred` and grow past 20 GB. At 1024 they need about 2 GB.
+[workspace.metadata.kani]
+flags = { cbmc-args = ["--max-field-sensitivity-array-size", "1024"] }
+unstable = { unstable-options = true }

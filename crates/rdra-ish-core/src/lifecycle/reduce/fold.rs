@@ -7,7 +7,9 @@ use crate::lifecycle::expr::StateSlice;
 use crate::lifecycle::types::{ActId, At, CmpOp, Effect, EntId, ParamRole, Pred, Rhs, Term, VarId};
 use crate::lifecycle::TransitionSystem;
 
-#[cfg(any(debug_assertions, feature = "shadow"))]
+/// The twin, left out under Kani: the harnesses below hold `holds` to their own spec, and a
+/// planted bug must fail their assertion, not the twin's.
+#[cfg(all(any(debug_assertions, feature = "shadow"), not(kani)))]
 mod reference;
 
 /// An S action's reads of T folded into one input bit (#112): the action keeps its S params
@@ -123,7 +125,7 @@ impl Fold {
     /// (`fold/reference.rs`), which computes it with the allocations this one does without.
     pub(crate) fn holds(&self, ts: &TransitionSystem, s: &StateSlice, c: u8) -> bool {
         let held = self.holds_fast(ts, s, c);
-        #[cfg(any(debug_assertions, feature = "shadow"))]
+        #[cfg(all(any(debug_assertions, feature = "shadow"), not(kani)))]
         reference::check_holds(self, ts, s, c, held);
         held
     }
@@ -610,5 +612,467 @@ impl TransitionSystem {
             }
         }
         out
+    }
+}
+
+/// Step (a) of Lemma 6 (docs/theory/cones.md) for a `Param` fold, on a small system: the bit
+/// holds exactly when some binding of the T params, the key at `c` when it is one of them,
+/// puts each param on a candidate slot of its role and makes every folded guard true. The spec
+/// reads the state's bytes and evaluates the folded guards itself, with no call into the
+/// evaluator or the layout. The Kani harnesses prove it for every pick; the tests check that
+/// `fold_of` gives the fold the harnesses take, and the spec against `holds` without Kani.
+#[cfg(any(kani, test))]
+mod proofs {
+    use std::num::NonZeroU8;
+
+    use super::*;
+    use crate::lifecycle::types::{
+        Action, ActionOrigin, Birth, Bounds, Domain, EntityDecl, Guard, GuardWhy, ModelRef, Param,
+        Site, Start, Value, VarDecl, VarKind,
+    };
+    use crate::model::{EntityKey, FkId};
+
+    /// The most slots of a T entity, and the slots of the S entity.
+    const T_SLOTS: u8 = 3;
+    const S_SLOTS: u8 = 2;
+    /// Each T column is an `Enum` of this many values.
+    const VALUES: u8 = 2;
+    /// The state's width at the most slots: two vars per entity.
+    const WIDTH: usize = 2 * (2 * T_SLOTS as usize + S_SLOTS as usize);
+
+    /// The entities: the S entity, whose row is the action's own, and two T entities.
+    const S: EntId = EntId(0);
+    const T1: EntId = EntId(1);
+    const T2: EntId = EntId(2);
+    /// The vars, in layout order: each T entity's existence and one column, the S entity's
+    /// existence, and its owner of a `T1` row, which the link guard reads.
+    const T1_COL: VarId = VarId(1);
+    const T2_COL: VarId = VarId(3);
+    const S_OWNER: VarId = VarId(5);
+
+    #[cfg(test)]
+    const OPS: [CmpOp; 6] = [
+        CmpOp::Eq,
+        CmpOp::Ne,
+        CmpOp::Lt,
+        CmpOp::Le,
+        CmpOp::Gt,
+        CmpOp::Ge,
+    ];
+
+    /// The roles `fold_of` reads of a T param: the three that need a present row, and
+    /// `Earlier`, which binds any slot. (A T param of an `S_a` action is never `New` or
+    /// `Earlier`, cones.md's folded table; `Earlier` is kept for the `false` mark.)
+    fn roles() -> [ParamRole; 4] {
+        [
+            ParamRole::Existing,
+            ParamRole::Parent { key: FkId::at(0) },
+            ParamRole::Triggered,
+            ParamRole::Earlier { step: 0 },
+        ]
+    }
+
+    /// What varies: the slots of each T entity, the role of each T param, the values each of
+    /// the first two folded guards admits (any set of the column's values: `VALUES`, no value
+    /// of the column, leaves a place empty), and the third guard's operator.
+    #[derive(Clone, Copy, Debug)]
+    struct Pick {
+        n1: u8,
+        n2: u8,
+        roles: [ParamRole; 2],
+        sets: [[u8; VALUES as usize]; 2],
+        op: CmpOp,
+    }
+
+    /// The action `A(s: S Existing, t1: T1, t2: T2)`, with the folded guards
+    /// `t1.c in sets[0]`, `t2.c in sets[1]` and `t1.c op t2.c`, and, when
+    /// `linked`, the link `s.owner = t1`, which makes `t1` the key. Without it the key is `s`,
+    /// the acting row, and both T params are free.
+    ///
+    /// The system is built whole, its layout written out rather than computed (the tests check
+    /// it is `layout`'s), so that CBMC unwinds no drop of the empty system's lists.
+    fn system(pick: &Pick, linked: bool) -> TransitionSystem {
+        let entity = |id: &str, slots: u8, exists: u16, columns: Vec<VarId>| EntityDecl {
+            key: EntityKey::default(),
+            id: id.to_owned(),
+            label: String::new(),
+            birth: Birth::Created,
+            slots: NonZeroU8::new(slots).expect("an entity has a slot"),
+            exists: VarId(exists),
+            columns,
+            owners: Vec::new(),
+        };
+        let entities = vec![
+            entity("S", S_SLOTS, 4, vec![S_OWNER]),
+            entity("T1", pick.n1, 0, vec![T1_COL]),
+            entity("T2", pick.n2, 2, vec![T2_COL]),
+        ];
+        let var = |kind: VarKind, domain: Domain| VarDecl {
+            kind,
+            domain,
+            base: Value(0),
+            start: Start::Base,
+            site: Site::bare(ModelRef::Synthesized),
+            ends: Vec::new(),
+        };
+        let column = |entity: EntId| VarKind::Column {
+            entity,
+            column: String::new(),
+            lifecycle: false,
+            variation: false,
+        };
+        // `compare` never reads an `Enum`'s names, so the columns have none.
+        let vars = vec![
+            var(VarKind::Exists(T1), Domain::Existence),
+            var(column(T1), Domain::Enum(Vec::new())),
+            var(VarKind::Exists(T2), Domain::Existence),
+            var(column(T2), Domain::Enum(Vec::new())),
+            var(VarKind::Exists(S), Domain::Existence),
+            var(
+                VarKind::Owner {
+                    child: S,
+                    parent: T1,
+                    fk: FkId::at(0),
+                    role: None,
+                },
+                Domain::Instance {
+                    parent: T1,
+                    optional: true,
+                },
+            ),
+        ];
+        let (n1, n2, ns) = (
+            usize::from(pick.n1),
+            usize::from(pick.n2),
+            usize::from(S_SLOTS),
+        );
+        let offsets = vec![
+            0,
+            n1,
+            2 * n1,
+            2 * n1 + n2,
+            2 * (n1 + n2),
+            2 * (n1 + n2) + ns,
+        ];
+        let width = 2 * (n1 + n2 + ns);
+        let slot = |var: VarId, p: u8| Term::Slot {
+            var,
+            at: At::Param(p),
+        };
+        let guard = |pred: Pred, why: GuardWhy| Guard {
+            pred,
+            why,
+            site: Site::bare(ModelRef::Synthesized),
+        };
+        let set = |k: usize| pick.sets[k].iter().map(|v| Term::Lit(Value(*v))).collect();
+        let mut guards = Vec::with_capacity(4);
+        guards.push(guard(
+            Pred::In(slot(T1_COL, 1), set(0)),
+            GuardWhy::TransitionFrom,
+        ));
+        guards.push(guard(
+            Pred::In(slot(T2_COL, 2), set(1)),
+            GuardWhy::TransitionFrom,
+        ));
+        guards.push(guard(
+            Pred::Cmp(slot(T1_COL, 1), pick.op, slot(T2_COL, 2)),
+            GuardWhy::TransitionFrom,
+        ));
+        if linked {
+            guards.push(guard(
+                Pred::Cmp(slot(S_OWNER, 0), CmpOp::Eq, Term::Index(At::Param(1))),
+                GuardWhy::Link,
+            ));
+        }
+        let param = |entity: EntId, role: ParamRole| Param {
+            entity,
+            role,
+            via_api: None,
+        };
+        let actions = vec![Action {
+            name: "A".to_owned(),
+            source: ActId(0),
+            origin: ActionOrigin::Clock,
+            site: Site::bare(ModelRef::Synthesized),
+            params: vec![
+                param(S, ParamRole::Existing),
+                param(T1, pick.roles[0]),
+                param(T2, pick.roles[1]),
+            ],
+            guards,
+            effects: Vec::new(),
+        }];
+        TransitionSystem {
+            bounds: Bounds::VERIFY,
+            entities,
+            vars,
+            actions,
+            invariants: Vec::new(),
+            after: Vec::new(),
+            properties: Vec::new(),
+            reach: Vec::new(),
+            now: None,
+            offsets,
+            width,
+            api_ids: std::collections::BTreeMap::new(),
+            reduction: None,
+            plans: crate::lifecycle::explore::Plans::default(),
+        }
+    }
+
+    /// The fold `fold_of` gives the action (`fold_of_folds_the_harness_action`): keyed by
+    /// `s`, or by `t1` when linked, with both T params, each marked by whether its role needs
+    /// a row, and the three guards on T.
+    fn fold(pick: &Pick, linked: bool) -> Fold {
+        Fold {
+            act: ActId(0),
+            key: FoldKey::Param(u8::from(linked)),
+            t_params: vec![(1, needs_row(pick.roles[0])), (2, needs_row(pick.roles[1]))],
+            guards: vec![0, 1, 2],
+        }
+    }
+
+    /// The T side of the cone: both T entities.
+    #[cfg(test)]
+    fn t_vars() -> VarSet {
+        (0..4).map(VarId).collect()
+    }
+
+    /// Whether a param of this role binds only a present row (`candidate_slots`).
+    fn needs_row(role: ParamRole) -> bool {
+        matches!(
+            role,
+            ParamRole::Existing | ParamRole::Parent { .. } | ParamRole::Triggered
+        )
+    }
+
+    fn cmp(a: u8, op: CmpOp, b: u8) -> bool {
+        match op {
+            CmpOp::Eq => a == b,
+            CmpOp::Ne => a != b,
+            CmpOp::Lt => a < b,
+            CmpOp::Le => a <= b,
+            CmpOp::Gt => a > b,
+            CmpOp::Ge => a >= b,
+        }
+    }
+
+    /// The spec's reading of a state: each T entity's existence and column bytes, in the
+    /// layout order of `system`.
+    struct Rows<'a> {
+        exists1: &'a [u8],
+        col1: &'a [u8],
+        exists2: &'a [u8],
+        col2: &'a [u8],
+    }
+
+    impl<'a> Rows<'a> {
+        fn of(pick: &Pick, bytes: &'a [u8]) -> Self {
+            let (n1, n2) = (usize::from(pick.n1), usize::from(pick.n2));
+            Rows {
+                exists1: &bytes[..n1],
+                col1: &bytes[n1..2 * n1],
+                exists2: &bytes[2 * n1..2 * n1 + n2],
+                col2: &bytes[2 * n1 + n2..2 * (n1 + n2)],
+            }
+        }
+
+        /// Whether `t1` at `i` and `t2` at `j` are candidate slots of their roles and make
+        /// every folded guard true.
+        fn binds(&self, pick: &Pick, i: usize, j: usize) -> bool {
+            (!needs_row(pick.roles[0]) || self.exists1[i] == Value::PRESENT.0)
+                && (!needs_row(pick.roles[1]) || self.exists2[j] == Value::PRESENT.0)
+                && pick.sets[0].contains(&self.col1[i])
+                && pick.sets[1].contains(&self.col2[j])
+                && cmp(self.col1[i], pick.op, self.col2[j])
+        }
+
+        /// The bit at slot `c` of the key: some binding of the T params, with `t1` at `c`
+        /// when linked, binds.
+        fn bit(&self, pick: &Pick, linked: bool, c: usize) -> bool {
+            let mut found = false;
+            for i in 0..usize::from(pick.n1) {
+                for j in 0..usize::from(pick.n2) {
+                    found |= (!linked || i == c) && self.binds(pick, i, j);
+                }
+            }
+            found
+        }
+    }
+
+    #[cfg(kani)]
+    mod harness {
+        use super::*;
+
+        fn any_of<T: Copy>(xs: &[T]) -> T {
+            let k: usize = kani::any();
+            kani::assume(k < xs.len());
+            xs[k]
+        }
+
+        /// Any pick with up to `most` slots per T entity.
+        fn any_pick(most: u8) -> Pick {
+            let n1: u8 = kani::any();
+            let n2: u8 = kani::any();
+            kani::assume((1..=most).contains(&n1) && (1..=most).contains(&n2));
+            let sets: [[u8; VALUES as usize]; 2] = kani::any();
+            for set in &sets {
+                kani::assume(set.iter().all(|v| *v <= VALUES));
+            }
+            let roles = roles();
+            Pick {
+                n1,
+                n2,
+                roles: [any_of(&roles), any_of(&roles)],
+                sets,
+                // `expr.rs`'s harnesses prove `compare` for every operator.
+                op: CmpOp::Le,
+            }
+        }
+
+        /// `holds` of the action's fold at any slot `c` of its key, on any state whose columns
+        /// hold values of their domain, is the spec's bit.
+        ///
+        /// The bound is one past the most bindings `holds` walks. The state's bytes come from
+        /// one `u128` (`WIDTH` is 16), with no loop.
+        fn check(linked: bool, most: u8) {
+            let pick = any_pick(most);
+            let ts = system(&pick, linked);
+            let fold = fold(&pick, linked);
+            let bytes: [u8; WIDTH] = kani::any::<u128>().to_le_bytes();
+            let state = &bytes[..ts.width];
+            let rows = Rows::of(&pick, state);
+            kani::assume(rows.col1.iter().all(|v| *v < VALUES));
+            kani::assume(rows.col2.iter().all(|v| *v < VALUES));
+            let c: u8 = kani::any();
+            kani::assume(usize::from(c) < ts.slots(fold.key_entity(&ts)));
+
+            let held = fold.holds(&ts, StateSlice::new(state), c);
+            assert_eq!(held, rows.bit(&pick, linked, usize::from(c)));
+
+            // A true bit whose every binding is past slot 0 of each free T param, at equal
+            // slot counts of 2 or more (where a wrong radix shows); and one bound to an absent
+            // row by a param whose role needs none.
+            let (n1, n2) = (usize::from(pick.n1), usize::from(pick.n2));
+            let past_0 = (0..n1).all(|i| !rows.binds(&pick, i, 0))
+                && (linked || (0..n2).all(|j| !rows.binds(&pick, 0, j)));
+            kani::cover!(held);
+            kani::cover!(!held);
+            kani::cover!(held && past_0 && n1 == n2 && n1 >= 2);
+            kani::cover!(
+                held && !needs_row(pick.roles[1])
+                    && rows.exists2.iter().all(|e| *e != Value::PRESENT.0)
+            );
+            std::mem::forget(fold);
+            std::mem::forget(ts);
+        }
+
+        /// The key is the acting S row, and both T params range over entities of up to 2
+        /// slots: up to 4 bindings. At 3 slots CBMC's symbolic execution alone passes ten
+        /// minutes.
+        #[kani::proof]
+        #[kani::unwind(5)]
+        fn a_fold_keyed_by_its_s_row_holds_where_some_t_binding_does() {
+            check(false, 2);
+        }
+
+        /// The key is the linked T param, fixed at `c`, and the other T param ranges: up to 3
+        /// bindings.
+        #[kani::proof]
+        #[kani::unwind(4)]
+        fn a_fold_keyed_by_a_linked_t_row_holds_where_some_t_binding_does() {
+            check(true, T_SLOTS);
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        /// Every slot count, pair of roles, and key, at one choice of operators and literals.
+        fn picks() -> Vec<(Pick, bool)> {
+            let mut out = Vec::new();
+            for n1 in 1..=T_SLOTS {
+                for n2 in 1..=T_SLOTS {
+                    for r1 in roles() {
+                        for r2 in roles() {
+                            for linked in [false, true] {
+                                let pick = Pick {
+                                    n1,
+                                    n2,
+                                    roles: [r1, r2],
+                                    sets: [[0, VALUES], [1, 1]],
+                                    op: CmpOp::Le,
+                                };
+                                out.push((pick, linked));
+                            }
+                        }
+                    }
+                }
+            }
+            out
+        }
+
+        /// The harnesses take the fold `fold_of` gives, on the layout `layout` gives.
+        #[test]
+        fn fold_of_folds_the_harness_action() {
+            for (pick, linked) in picks() {
+                let ts = system(&pick, linked);
+                let got = ts.fold_of(ActId(0), &t_vars()).expect("the action folds");
+                assert_eq!(got, fold(&pick, linked), "{pick:?}, linked {linked}");
+                let mut laid = ts.clone();
+                laid.layout();
+                assert_eq!((&laid.offsets, laid.width), (&ts.offsets, ts.width));
+            }
+        }
+
+        /// The spec and `holds` agree on sampled operators, literals and states of every
+        /// pick of `picks`, and both values of the bit occur.
+        #[test]
+        fn the_spec_is_the_bit() {
+            let mut seed: u64 = 0x9e37_79b9_7f4a_7c15;
+            let mut next = move || {
+                seed ^= seed << 13;
+                seed ^= seed >> 7;
+                seed ^= seed << 17;
+                seed
+            };
+            let small = |r: u64, shift: u32, n: u64| u8::try_from((r >> shift) % n).unwrap();
+            let (mut held, mut not_held) = (0, 0);
+            for (base, linked) in picks() {
+                for _ in 0..200 {
+                    let r = next();
+                    let pick = Pick {
+                        sets: [0, 1].map(|k| [0, 1].map(|v| small(r, 8 * k + 2 * v, 4))),
+                        op: OPS[usize::from(small(r, 24, 6))],
+                        ..base
+                    };
+                    let ts = system(&pick, linked);
+                    let fold = ts.fold_of(ActId(0), &t_vars()).expect("the action folds");
+                    let r = next();
+                    let mut bytes = [0u8; WIDTH];
+                    for (k, b) in (0u32..).zip(bytes.iter_mut()) {
+                        *b = small(r, 2 * k, 4);
+                    }
+                    let (n1, n2) = (usize::from(pick.n1), usize::from(pick.n2));
+                    let columns = (n1..2 * n1).chain(2 * n1 + n2..2 * (n1 + n2));
+                    for k in columns {
+                        bytes[k] %= VALUES;
+                    }
+                    let state = &bytes[..ts.width];
+                    let rows = Rows::of(&pick, state);
+                    for c in 0..ts.slots(fold.key_entity(&ts)) {
+                        let got = fold.holds(&ts, StateSlice::new(state), id8(c));
+                        let want = rows.bit(&pick, linked, c);
+                        assert_eq!(got, want, "{pick:?}, linked {linked}, {state:?}, slot {c}");
+                        match got {
+                            true => held += 1,
+                            false => not_held += 1,
+                        }
+                    }
+                }
+            }
+            assert!(held > 0 && not_held > 0, "{held} true, {not_held} false");
+        }
     }
 }

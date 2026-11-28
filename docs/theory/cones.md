@@ -1112,7 +1112,8 @@ leaves) and the random-graph test below, which also certifies every worklist par
   keeps `X` finite and small. It is used in A15 (case 3 and `s_cycles`). M: Lean proves Lemma 5
   (c)(d) (`proofs/lean/RdraIsh/Split.lean::lemma5_of_closed`, Lemma 5's evidence above).
 - **A11** (folds): Lemma 6, whose step (a) derives the fold equivalence from `fold_of` and
-  `Fold::holds`, which the `Twin::FoldHolds` twin checks against its reference. A count that reads `T` is never
+  `Fold::holds`, which the `Twin::FoldHolds` twin checks against its reference. Two Kani
+  harnesses (`reduce/fold.rs::proofs`) prove step (a) for one action at small bounds. A count that reads `T` is never
   node-folded (counting-rules.md): `reduce/fold.rs::as_node` makes a node only of an existential (or an
   And/Or of them), and `strip_links` returns `None` on a `Pred::Count` in its body.
 - **A12** (counters on `T`): `split_at` seeds `T_v` with every counter, and `monotone_vars` marks

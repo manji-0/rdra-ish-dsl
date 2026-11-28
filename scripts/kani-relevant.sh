@@ -28,6 +28,13 @@ while IFS= read -r path; do
     crates/rdra-ish-core/src/lifecycle/prove/encode.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/prove/smt.rs) relevant=true ;;
     crates/rdra-ish-core/src/lifecycle/build/sets.rs) relevant=true ;;
+    # The fold harnesses, and what `Fold::holds` reads of the system they build: `slots`,
+    # `entity`, `offset` and `var` (lifecycle/mod.rs, whose struct the fixture fills) and
+    # `id8` (narrow.rs). The reference twin is left out under Kani, so `fold/reference.rs`
+    # changes no proof.
+    crates/rdra-ish-core/src/lifecycle/reduce/fold.rs) relevant=true ;;
+    crates/rdra-ish-core/src/lifecycle/mod.rs) relevant=true ;;
+    crates/rdra-ish-core/src/lifecycle/narrow.rs) relevant=true ;;
     # The canonical form: `symmetry/mod.rs` builds it into the harness's module, though the
     # harness proves `Group::apply` and `Group::compose` and calls no function of it.
     crates/rdra-ish-core/src/lifecycle/explore/symmetry/canon.rs) relevant=true ;;
