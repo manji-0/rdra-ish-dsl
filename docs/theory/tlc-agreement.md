@@ -21,7 +21,8 @@ the printed module denotes the system the build returned, which is `T_β(M)` (D1
 [I1](./claims.md#0-the-build) holds, (2) runtime agreement rules that turn a detected
 difference into a tool error, (3) differential tests that run both engines on fixed inputs,
 (4) a few mechanised checks of leaf functions, none of which touches the printer, and (5) CI
-jobs, none of which is a required check. Each statement below is tagged:
+jobs, which no repository rule requires to pass
+([README, Known limitations](./README.md#known-limitations)). Each statement below is tagged:
 
 - **[paper]**: argued in this document from the code as read; a reader can check it against
   the cited functions. It is not machine-checked.
@@ -303,7 +304,15 @@ fixtures `bfs_and_tlc_agree_on_null_in_a_check` and `bfs_and_tlc_agree_on_set_me
 `Bounds` value: `Domain::Int` is `[m+1]` natively, and the module prints `IntRange ==
 0..m` from `ts.bounds.int_max`. Literals and `@default`s outside the range are build errors
 (`IntLiteralOutOfBounds`), so no effect writes outside the range. `Tick` stops at `m` in
-both through the same guard.
+both through the same guard. Tests that run both engines on Int-like columns and `now`
+[test]: the corpus cases `z3_int_and_now_boundary` (Int `0..5`) and `z3_now_past_the_top`
+(`--int-range-max 6`), whose headers give TLC verdicts that rules 1 to 3 hold TLC to; the
+fixtures `bfs_and_tlc_agree_on_a_date_sets` (a `Date` column on the `now` clock) and
+`bfs_and_tlc_agree_on_two_actions_of_one_name` (its `tick_use_case` model, a deadline passed
+by `Tick`), graph comparisons at 1 and 2 instances and Int `0..5`; and the sample graph
+comparison, which decodes every Int column of every reached state. TLC runs beside BFS at no
+`--int-range-max` but 5 (the default), the 6 and 7 of four `z3_` corpus cases, and the 255 of
+`width_nullable_int_top`, which the build rejects.
 
 **Split use cases and run marks [paper; test].** The run mark is a variable like any
 other: `UC_1` guards it at `none` and sets `1`, `UC_i` binds the `Earlier` row by the mark
@@ -391,8 +400,7 @@ from inputs and bits to the next class. TLC therefore explores the quotient as t
 code computed it. It checks the native exploration of that quotient, not the quotient's
 soundness (A8). This document gives no paper argument that the printed class move (the
 `is_class_move` branch of `action`), the `Rise` lookup, and the bits denote the native
-reduced step (`moves_of_into` with a reduction); `bits`, `rise_expr`, and the native reduced
-step were not read for it. Step 3 on reduced systems therefore rests on the graph comparison
+reduced step (`moves_of_into` with a reduction). Step 3 on reduced systems therefore rests on the graph comparison
 of reduced sample cones alone. The sample comparison does compare the reduced cone's violated
 checks with the unreduced cone's, through TLC on both
 ([Sample comparison](#the-sample-comparison)), but only on cones whose unreduced BFS fits
@@ -491,8 +499,6 @@ harness reads the printed verdicts, so it inherits the run-time comparison above
 <!-- derived-from ../engine-agreement.md#the-corpus -->
 <!-- derived-from ../engine-agreement.md#the-sample-comparison -->
 <!-- derived-from ../engine-agreement.md#the-reduction-on-random-models -->
-<!-- derived-from ../engine-agreement.md#batch-jvms -->
-<!-- derived-from ../engine-agreement.md#mutation-run -->
 <!-- derived-from ../cli-reference.md#partial-runs -->
 
 Differential testing (McKeeman 1998) runs two implementations of one specification on the
@@ -568,8 +574,9 @@ model's TLC verdict. It compares verdicts, not graphs. Its native `WfNext` run i
 `Fairness::WfNext` on the unreduced cone, as TLC's is; it never calls
 `decide_liveness_reduced`, so the reduced-graph `_WF` search is compared with TLC only under
 `verify --with-tlc` (the corpus harness passes `--with-tlc` to every case but
-`cap_memory_limit`; the `cone_reduced_*` cases are written for A15, and the path through
-`cone_reduced_no_loop_capped` was traced by reading).
+`cap_memory_limit`; the `cone_reduced_*` cases are written for A15). That
+`cone_reduced_no_loop_capped` reaches `decide_liveness_reduced` follows from the code; no test
+asserts it.
 
 ### `verify --with-tlc` on the sample roots
 
@@ -597,8 +604,8 @@ state models under TLC only when its BFS completed within `STATE_MODEL_TLC_STATE
 (100,000) states (`verify/bfs.rs::state_model_cones`), which a fallback cone, past 300,000
 states at 2 instances, does not. So the 7 entity cones among the 12 meet TLC at 1 instance
 only, in `engine_equivalence`, unless one has the same variables as an invariant or `after`
-cone of the run, whose TLC job then explores the same module; that was not checked cone by
-cone. This is read from the code, not from a run.
+cone of the run, whose TLC job then explores the same module. Which of the 7 do is open; the
+gap is claims row [T5](./claims.md#d-agreement-with-tlc).
 
 ### Random models
 
@@ -618,19 +625,41 @@ generator mode, `reduction-diff.py --counted` (`.counted(k)` with `k` of 1 or 2 
 
 ### Batch JVMs
 
-`RDRA_TLC_BATCH=both` (T11) runs each `engine_equivalence` job routed to a batch JVM
-(`Route::Batch`, which every cone of at most `BATCH_STATES`, 5,000, states takes, every
-state-model run and the other runs through `run_tlc`, and a property cone's
-`Cone_P`, `Cone_P_Full` and `Cone_P_WF` runs) and again as a process with the same fingerprint
-and seed, and fails on any difference in exit status, log, parsed run, invariant scan, or
-dumped graph (`assert_same_run`). A larger cone and a property's whole-model run are
-routed to a process from the start (`Route::Process`, `check_cone`), so they are never
-compared this way. The main-only `tlc-batch-both` job of `ci.yml` runs `engine_equivalence`
-that way (scheduled or by hand, never on a pull request). The `#[ignore]`d
-`recorded_tlc_runs_are_the_same_in_a_batch_jvm` replays recorded `verify` runs the same way,
-also by hand. In CI, `RDRA_REQUIRE_TLC_BATCH=1` only requires that some job ran batched
-without falling back. This bears on the test harness only: `verify --with-tlc` does not use
-batch JVMs.
+Most of `engine_equivalence`'s TLC runs take milliseconds inside a JVM that takes far longer
+to start. The flake's `tlc-batch` (`nix/tlc-batch/RdraTlcBatch.java`) keeps a JVM up and runs
+one TLC job after another in it; `cli/src/tlc_batch.rs` pools one JVM per test thread. This
+bears on the test harness only: `verify --with-tlc` does not use batch JVMs.
+
+- **Isolation.** Each job loads TLC through a class loader of its own and runs in a thread of
+  its own, and the driver removes TLC's MBeans and its RMI export afterwards. The JVM, its JIT
+  code, and its `java.io.tmpdir` are shared, one job at a time.
+- **Which runs.** A job routed to a batch JVM (`Route::Batch`): every cone of at most
+  `BATCH_STATES` (5,000) states, every state-model run and the other runs through `run_tlc`,
+  whose size is not known up front (fixtures among them), and a property cone's `Cone_P`,
+  `Cone_P_Full` and `Cone_P_WF` runs. A larger cone and a property's whole-model run are
+  processes from the start (`Route::Process`, `check_cone`).
+- **Memory.** A batch JVM gets 512 MiB of heap, and the pool has at most as many JVMs as the
+  test has workers. The JVM needs `-XX:SoftRefLRUPolicyMSPerMB=0`, because the RMI runtime
+  keeps the classes of every exported object behind a soft reference.
+- **Fallback.** A job with no answer runs again as a process: the driver did not start, the JVM
+  ended under the job, or the job took over 300 s (`BATCH_LIMIT`). After three lost jobs in a
+  row every later job is a process. A JVM is replaced after 400 jobs, or when its jobs have
+  left 8 threads behind (TLC 1.7.4 never shuts down the executor of a liveness
+  counterexample).
+- **Comparison (T11).** `RDRA_TLC_BATCH=both` runs each batch-routed job in a batch JVM and
+  then as a process with the fingerprint and seed the first run drew (`-fp`, `-seed`), and
+  fails on any difference in exit status, log, parsed run, invariant scan, or dumped graph
+  (`assert_same_run`), apart from timestamps, timings, process ids, temp paths, timer output,
+  and the heap size. A job routed to a process from the start is never compared this way.
+  `RDRA_TLC_BATCH=twice` compares two process runs the same way, and `RDRA_TLC_BATCH=0` runs
+  every job as a process. The `#[ignore]`d `recorded_tlc_runs_are_the_same_in_a_batch_jvm`
+  replays recorded `verify` runs the same way, by hand.
+- **In CI.** The main-only `tlc-batch-both` job of `ci.yml` runs `engine_equivalence` under
+  `RDRA_TLC_BATCH=both` (scheduled or by hand, never on a pull request).
+  `RDRA_REQUIRE_TLC_BATCH=1` (`engine_equivalence.rs::assert_batch_ran`) fails the test unless
+  some job was answered in a batch JVM and the pool stayed sound (`tlc_batch.rs::Pool::sound`):
+  every lost job was one past the time limit, and the pool switched to processes for no other
+  reason.
 
 Every TLC run `engine_equivalence.rs::run_tlc_on` starts, batched or a process, passes
 `-lncheck final` (`LIVENESS_AT_THE_END`); that includes every cone, state-model and property
@@ -650,21 +679,39 @@ leaves those runs unchanged is likewise assumed (TLC).
 ### Mutation run
 
 `cargo mutants` (T15) runs by hand only (`mutants.yml`, `workflow_dispatch`), in two
-configurations (docs/engine-agreement.md, "Mutation run"):
+configurations; how to start one and read its summary is in
+[engine-agreement.md, "Mutation run"](../engine-agreement.md#mutation-run). The kill rate is
+the caught and timed-out mutants over the viable ones (all but `unviable`).
 
-- **The liveness ladder** (`.cargo/mutants.toml`): mutants of `property_cone.rs`,
-  `verify/native.rs`, `core/cone.rs` and `core/explore/liveness.rs`, killed by the corpus
-  with `tlc` and `z3` off `PATH` (the workflow checks that they are gone). It measures how
-  well the corpus headers alone catch faults in the cone ladder and the liveness search, not
-  agreement with TLC. Two kill rates are recorded: 139 of 209 viable mutants (66.5%) at
-  `b0f593ba` and 151 of 240 (62.9%) at `6f2d29a1`.
-- **The TLC side** (`-f config=tlc`, `.cargo/mutants-tlc.toml`): 548 mutants of the TLA+
-  printer (`emit/tla/{mod,module,names,pred}.rs`), the comparison (`verify/compare.rs`), and
-  the TLC readers (`tlc_output.rs`, `tlc_replay.rs`), killed with `tlc` and `z3` on `PATH` by
-  the corpus, the unit tests of the TLC output reader, the comparison and the TLC driver, and
-  the `verify_cli` tests that run TLC beside the native checker. `verify/tlc.rs` itself is not
-  mutated. This is the run that measures how well agreement catches a fault on the TLC side.
-  Its kill rate is not recorded: the run at `cb1beccb` is listed with no result.
+- **The liveness ladder** (`.cargo/mutants.toml`): mutants of `cli/src/property_cone.rs`,
+  `cli/src/verify/native.rs`, `core/cone.rs` and `core/explore/liveness.rs`, 309 on this tree
+  (`cargo mutants --list`), killed by the whole `engine_corpus` test with `tlc` and `z3` off
+  `PATH` (the workflow checks that they are gone). A mutant is caught only when a stated
+  verdict or the capped-graph test fails: the check that sees a wrong `ok` the native checker
+  and TLC share through the cone ladder. It measures how well the corpus headers alone catch
+  faults in the cone ladder and the liveness search, not agreement with TLC.
+- **The TLC side** (`-f config=tlc`, `.cargo/mutants-tlc.toml`): 571 mutants on this tree
+  (`cargo mutants --config .cargo/mutants-tlc.toml --list`) of the TLA+ printer
+  (`emit/tla/{mod,module,names,pred}.rs`), the comparison (`cli/src/verify/compare.rs`), and
+  the TLC readers (`cli/src/tlc_output.rs`, `cli/src/tlc_replay.rs`), killed with `tlc` and
+  `z3` on `PATH` (`RDRA_REQUIRE_TLC=1`, `RDRA_REQUIRE_Z3=1`) by the corpus, the unit tests of
+  the TLC output reader, the comparison and the TLC driver, and the `verify_cli` tests that
+  run TLC beside the native checker, as the config's `additional_cargo_test_args` filters
+  name them. `verify/tlc.rs` itself is not mutated, and `rdra-ish-emit`'s own tests are left
+  out: their snapshots fail on any change to the printed text, which says nothing about
+  whether agreement catches it. This is the configuration that measures how well agreement
+  catches a fault on the TLC side. No run of it has completed, so it has no kill rate.
+
+The completed full runs, all of the liveness configuration (each row's mutant count is that
+of its commit):
+
+| Run | Commit | Date | Mutants | Caught | Timeout | Missed | Unviable | Kill rate |
+|---|---|---|---|---|---|---|---|---|
+| [45212589802](https://github.com/manji-0/rdra-ish-dsl/actions/runs/45212589802) | `b0f593ba` | 2026-11-23 | 251 | 137 | 2 | 70 | 42 | 139 of 209, 66.5% |
+| [46034352562](https://github.com/manji-0/rdra-ish-dsl/actions/runs/46034352562) | `6f2d29a1` | 2026-11-27 | 298 | 147 | 4 | 89 | 58 | 151 of 240, 62.9% |
+
+The missed mutants by file (`cone.rs`, `explore/liveness.rs`, `verify/native.rs`,
+`property_cone.rs`): 27, 26, 12 and 5 in the first run; 32, 38, 17 and 2 in the second.
 
 Mutation analysis in the sense of DeMillo, Lipton and Sayward (1978) reports the fraction of
 non-equivalent mutants killed; the recorded rates count every viable mutant, equivalent ones
@@ -682,8 +729,8 @@ included, so they are lower bounds on that fraction.
 | Temporal cone comparison | liveness and ladder verdicts | same | same | no | 23 cases, 2 instances |
 | `verify --with-tlc` in CI | verdicts | verdicts | verdicts | no | 5 domain roots and flagged header lines, header bounds |
 | Random models with TLC | verdicts | verdicts | verdicts | no | 45 fixed seeds, main only |
-| Mutation run, liveness | cone ladder and liveness only, through headers | no | no | ladder only | corpus, by hand, 66.5% and 62.9% recorded |
-| Mutation run, TLC side | no | printer, comparison, TLC readers | no | no | corpus and CLI tests with TLC, by hand, rate not recorded |
+| Mutation run, liveness | cone ladder and liveness only, through headers | no | no | ladder only | corpus, by hand, rates in [Mutation run](#mutation-run) |
+| Mutation run, TLC side | no | printer, comparison, TLC readers | no | no | corpus and CLI tests with TLC, by hand, no completed run |
 
 ## 4. Mechanised evidence
 
@@ -709,16 +756,20 @@ them on samples and corpus cases larger than the TLC comparison covers, below ea
 
 <!-- derived-from ../engine-agreement.md#mutation-run -->
 
-[read] for this section; the branch-protection statement is from one `gh api` query.
+[read] for this section.
 
 | Job (`.github/workflows/ci.yml`) | Runs on a pull request | Runs on main | Compares with TLC |
 |---|---|---|---|
-| `engine-equivalence`: `engine_equivalence` and `engine_corpus` with `RDRA_REQUIRE_TLC=1`, and `proof_equivalence` (z3 against BFS, no TLC) | when `changes` says `verify` | every 3 hours, skipped when the commit was checked | yes |
-| `formal-verify`: `verify-samples.sh --with-tlc --tlc-roots`, reduced against unreduced on random models | when `changes` says `verify`; random models without TLC | with TLC on 45 seeds | yes |
-| `shadow` | as `changes` decides | yes | yes: the corpus on a `shadow` build with `RDRA_REQUIRE_TLC=1` |
+| `engine-equivalence`: `engine_equivalence` and `engine_corpus` with `RDRA_REQUIRE_TLC=1`, and `proof_equivalence` (z3 against BFS, no TLC) | when `changes` says `verify` | yes | yes |
+| `formal-verify`: `verify-samples.sh --with-tlc --tlc-roots`, reduced against unreduced on random models | when `changes` says `verify`; random models without TLC | yes; random models with TLC on 45 seeds | yes |
+| `shadow` | when `changes` says `verify` | yes | yes: the corpus on a `shadow` build with `RDRA_REQUIRE_TLC=1` |
 | `tlc-batch-both`: `engine_equivalence` with `RDRA_TLC_BATCH=both` | never | yes | yes: batch JVM against a TLC process |
-| `kani` | when `scripts/kani-relevant.sh` matches a changed file | yes | no |
+| `kani` | when `changes` says `kani` (`scripts/kani-relevant.sh` matches a changed file) | yes | no |
 | `mutants.yml` | never | never; by hand | with `-f config=tlc` |
+
+On main, `changes` says yes to every job on a run started by hand and on each scheduled run
+(every 3 hours), except a scheduled run whose commit the last finished run on main checked,
+which skips every job.
 
 Every TLC run in CI is in the flake's devShell. `ci.yml` sets `shell: nix develop --command
 bash -eo pipefail {0}` as the default, and only two jobs override it with plain `bash`, the
@@ -731,21 +782,18 @@ requires it in the TLC one, `portability.yml` runs with no nix and no TLC (its c
 jar (build of 2026-11-19, rev `bc1b506`, by the flake's comment) on JDK 25. The CI evidence
 is about that TLC; the notes also name 1.7.4, which nixpkgs ships.
 
-**None of these is a required check.** `gh api repos/manji-0/rdra-ish-dsl/branches/main/protection`
-answers "Branch not protected", and the repository has no rulesets. A merge with a red or
-skipped job is possible; the project's practice is to merge on green pull-request checks,
-which is a convention, not a gate. Main runs on a 3-hour schedule, so a merge reaches the
-main-only steps (random models with TLC, the full `kani` set) hours later or, if GitHub
-drops a scheduled run, later still.
+**No job gates a merge** ([README, Known limitations](./README.md#known-limitations)). Main
+runs on a 3-hour schedule, so a merge reaches the main-only steps (random models with TLC,
+`tlc-batch-both`, the full `kani` set) hours later or, if GitHub drops a scheduled run, later
+still.
 
-**The release gate's TLC items.** The CHANGELOG entry for v3.0.0 records item 2 of the gate
-("`verify --with-tlc` on every root of `samples.txt` reports no disagreement") as held on the
-evidence that `formal-verify` ran the TLC roots with `--with-tlc`, which is five roots and the
-flagged header lines, not every root; the other roots are compared through
-`engine_equivalence` instead, and an erratum under that entry says so. Item 3 (seeds `0:2000`
-with TLC) was waived for v3.0.0. The `--with-tlc` step runs in `formal-verify`;
-`release.yml` runs no `verify`, and native-temporal-verification.md says so. Branch protection
-and the gate proposal wait on the owner's decision.
+**The release gate's TLC items.** The release gate of
+[native-temporal-verification.md, "Migration"](../design/native-temporal-verification.md#migration)
+asks in item 2 for `verify --with-tlc` on every root of `samples.txt` with no disagreement.
+CI's `--with-tlc` step (`formal-verify`) covers the five roots of `scripts/tlc-roots.txt` and
+the flagged header lines; the other roots meet TLC only through `engine_equivalence`. Item 3
+(`reduction-diff.py` with TLC on seeds `0:2000` at 2 and 3 instances) runs in no workflow, and
+`release.yml` runs no `verify`.
 
 ## Residual risk
 
@@ -769,13 +817,9 @@ the sections it cites, and carries the tag of the statements it rests on.
    [test]. It reads a subset of the language from the `SemanticModel` without
    `TransitionSystem::build`, explores it by brute force on plain values (`i64` integers,
    Enum values by name, no packing, cone, reduction or symmetry), and compares the initial
-   states, reachable states, edges labelled by use case, rule names and violated rules with
-   the native run of the whole model. The subset is entities with Enum, Bool, Int-typed and
-   nullable String columns (`@null`, `@default`, `@check`); `creates`, `updates` and
-   `deletes` of one entity per use case, so one transaction group, and not both a create and a
-   delete; literal, `null` and `present` `sets`, with `.when`; `transitions` with choices and
-   `.when`; `applies_to` guards on the written entity; and the four single-entity rule forms
-   with `.when`. It runs on the corpus cases and formal-verification samples in the subset at
+   states, reachable states, edges, rule names and violated rules with the native run of the
+   whole model. Its subset of the language is the one claim
+   [I1](./claims.md#0-the-build) lists. It runs on the corpus cases and formal-verification samples in the subset at
    three bounds, on 300 random models of the subset in every pull request and 2,700 more on
    main. With z3 present (CI requires it) it also checks the rules z3 proves at `m`, with
    lemmas mined without a twin, against the reference at `m + 1` and `m + 3`: two fixed models
@@ -823,12 +867,10 @@ the sections it cites, and carries the tag of the statements it rests on.
    `safety_at_most_bound` alone, at 4), on the one sample header line that raises a count,
    `verify --instances Loan=4` of `samples/formal-verification/counting_rules.rdra`, in
    `formal-verify` (verdicts only), and on the 3-instance seeds among the 45 main random
-   seeds. It never runs on the 25 fallback cones at 2 instances in `engine_equivalence`.
-   `verify --with-tlc` runs the 5 invariant and `after` cones among the 12 of clinic-ops,
-   patent-ops, food-permit-ops, and insurance-claim-ops at 2 instances, verdicts only, and,
-   by the reading of [the sample-roots section](#verify---with-tlc-on-the-sample-roots), none
-   of their 7 entity cones; the 13 of oidc-auth run at 1 instance only, so those 20 never meet
-   TLC at 2 instances. TLC never runs as a graph comparison on unreduced cones above 300,000
+   seeds. It never runs on the 25 fallback cones at 2 instances in `engine_equivalence`, and
+   `verify --with-tlc` runs only 5 of them at 2 instances, verdicts only; the other 20 never
+   meet TLC at 2 instances ([the sample roots](#verify---with-tlc-on-the-sample-roots), T5).
+   TLC never runs as a graph comparison on unreduced cones above 300,000
    states. Open issue #202 proposes comparing large cones with TLC at 2 instances by random
    walks. A divergence that needs more rows than the tested bounds is invisible to every
    differential source.
@@ -843,7 +885,7 @@ the sections it cites, and carries the tag of the statements it rests on.
    checked only through a liveness verdict, on 23 temporal cases and the `fair_*` corpus cases.
 6. **The comparison code itself [read].** `compare.rs`, `tlc_output.rs`, `tlc_replay.rs` and
    `TlaNames` have no Kani harness and no shadow twin. The TLC-side mutation run mutates them
-   (`names.rs` for `TlaNames`), but it runs by hand and its kill rate is not recorded. A
+   (`names.rs` for `TlaNames`), but it runs by hand and no run of it has completed. A
    disagreement in violated sets that goes unreported, or a per-run comparison of runs on two
    different systems, would be faults of this kind; `unreplayed` and the pairing by `RunOn`
    exclude both as read ([§2](#2-the-agreement-rules)), and only tests and the hand-run
@@ -883,8 +925,9 @@ the sections it cites, and carries the tag of the statements it rests on.
   `bfs_and_tlc_*` tests of `engine_equivalence.rs`, and 45 random models with TLC. The samples
   were written alongside the tools, so they exercise what the authors thought of. The random
   generator has a fixed shape (no counts, three to five entities).
-- **Conclusion.** No measured number in this document was re-measured; the counts were
-  counted from the code.
+- **Conclusion.** The counts are counted from the code at this commit. The measured numbers
+  (the kill rates, and the 284 and 33 reducing seeds of a `ci.yml` comment) are records of
+  single runs that no test repeats.
 
 ## Related work
 

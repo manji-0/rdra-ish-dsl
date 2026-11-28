@@ -28,8 +28,9 @@ case, whatever the case's header says.
    engine is no disagreement. TLC has no run for `can_reach` (`AG EF`) or for a use case
    that never runs. The other checks that BFS decides alone get a TLC run of their own:
    - `stable`, `unchanged`, and `precedes` run on the unreduced cone (`Cone_<Property>`).
-     When that cone frees slots, a counterexample there goes to the whole-model run
-     (`RdraSpec_<Property>`) in both engines. The final verdicts must agree.
+     When that cone frees slots or leaves a raised mark out (`property_cone::inexact`), a
+     counterexample there goes to the whole-model run (`RdraSpec_<Property>`) in both
+     engines. The final verdicts must agree.
    - The state models of each entity cone that BFS explored to the end, up to 100,000
      states, run on the `StateModel_<E>` specs
      ([State models with TLC alone](./formal-verification.md#state-models-with-tlc-alone)).
@@ -329,8 +330,8 @@ verdicts in both engines at once, rules 1 to 3 saw nothing, and only the stated 
 
 <!-- constrained-by ./design/instance-symmetry.md#verifying-the-reduction -->
 
-Phase 1 of [instance symmetry](./design/instance-symmetry.md) planted these bugs one at a
-time and ran the symmetry unit tests (the exhaustive test over every state of four small
+These bugs were planted in [instance symmetry](./design/instance-symmetry.md) one at a
+time, and each run ran the symmetry unit tests (the exhaustive test over every state of four small
 systems), the `sym_` cases under rule 8 in a release build, and the `sym_` cases at 1, 2,
 and 3 instances on a `shadow` build.
 
@@ -347,11 +348,11 @@ and 3 instances on a `shadow` build.
 
 Rule 8 misses the uncoupled identity pair and the permuted absent slots, since the wrong
 canonical form still gives the plain verdicts; only the exhaustive test and the `canonical` twin
-see them. Phase 3 (a reduced safety cone up to `G_T`) planted one more: dropping the input, key,
-and S-action rules of `Reduction::fixed_why` together is caught by the `reduced_orbit_run` twin
-on a `shadow` build and by `reduced_domain_cones_decide_what_the_cones_decide`. Phase 4's entity
-cones planted five bugs in `orbit/findings.rs`, caught by the `orbit_state_models` twin and
-the case `sym_arm_reorders`.
+see them. For a reduced safety cone up to `G_T`, dropping the input, key, and S-action rules
+of `Reduction::fixed_why` together was planted as well; the `reduced_orbit_run` twin on a
+`shadow` build and `reduced_domain_cones_decide_what_the_cones_decide` catch it. For entity
+cones up to symmetry, five bugs were planted in `orbit/findings.rs`; the `orbit_state_models`
+twin and the case `sym_arm_reorders` catch them.
 
 ## The sample comparison
 
@@ -414,45 +415,22 @@ nix develop -c python3 -I scripts/reduction-diff.py --timeout 120 \
 
 ### Batch JVMs
 
-Most of `engine_equivalence`'s TLC runs take milliseconds inside a JVM that takes far longer
-to start. The flake's `tlc-batch` (`nix/tlc-batch/RdraTlcBatch.java`) keeps a JVM up and
-runs one TLC job after another in it; `crates/rdra-ish-cli/src/tlc_batch.rs` pools one JVM per
-test thread. `verify --with-tlc` does not use it.
-
-- **Isolation.** Each job loads TLC through a class loader of its own and runs in a thread of
-  its own, and the driver removes TLC's MBeans and its RMI export afterwards. The JVM, its JIT
-  code, and its `java.io.tmpdir` are shared, one job at a time.
-- **Which runs.** A cone BFS found to have at most 5,000 states, and the runs whose size is not
-  known up front (a property's cone, state models, fixtures). Larger cones and whole-model runs
-  are processes of their own.
-- **Memory.** A batch JVM gets 512 MiB of heap, and the pool has at most as many JVMs as the
-  test has workers. The JVM needs `-XX:SoftRefLRUPolicyMSPerMB=0`, because the RMI runtime
-  keeps the classes of every exported object behind a soft reference.
-- **Fallback.** A job with no answer runs again as a process: the driver did not start, the JVM
-  ended under the job, or the job took over 300 s. After three lost jobs in a row every later
-  job is a process. A JVM is replaced after 400 jobs, or when its jobs have left 8 threads
-  behind (TLC 1.7.4 never shuts down the executor of a liveness counterexample).
-- **Comparison.** `RDRA_TLC_BATCH=both` runs each job in a batch JVM and then as a process with
-  the fingerprint and seed the first run drew (`-fp`, `-seed`), and fails on any difference in
-  the exit status, the log, the parsed run, or the dumped state graph, apart from timestamps,
-  timings, process ids, temp paths, timer output, and the heap size. `RDRA_TLC_BATCH=twice`
-  compares two process runs the same way, and `RDRA_TLC_BATCH=0` runs every job as a process.
-- **In CI.** `RDRA_REQUIRE_TLC_BATCH=1` fails the test when no job ran in a batch JVM or one
-  fell back for any reason but the time limit. On `main` (scheduled or started by hand), the
-  `tlc-batch-both` job runs `engine_equivalence` once more under `RDRA_TLC_BATCH=both`; a pull
-  request does not run it.
+Most of `engine_equivalence`'s TLC runs go to a pool of long-lived JVMs (`tlc-batch`) instead
+of a process each; `verify --with-tlc` does not use them. How the pool isolates, routes,
+falls back and is compared with processes, and the environment variables that steer it, are
+in [tlc-agreement.md, "Batch JVMs"](./theory/tlc-agreement.md#batch-jvms).
 
 ## Mutation run
 
 <!-- derived-from #what-the-corpus-catches -->
 <!-- constrained-by ./design/native-temporal-verification.md#phases -->
 
-The mutation run repeats the planted bugs for every mutant `cargo mutants` makes in
-`property_cone.rs`, `verify/native.rs`, `cone.rs`, and `explore/liveness.rs`.
-`.cargo/mutants.toml` holds the files and the test command, the whole `engine_corpus` test. The
-run keeps `tlc` and `z3` off `PATH`, so a mutant is caught only when a stated verdict or the
-capped-graph test fails: the check that sees a wrong `ok` the native checker and TLC share
-through the cone ladder.
+The mutation run repeats the planted bugs for every mutant `cargo mutants` makes in two
+configurations: `.cargo/mutants.toml` (the liveness ladder, with `tlc` and `z3` off `PATH`)
+and `.cargo/mutants-tlc.toml` (the TLA+ printer and the TLC reading code, with both on
+`PATH`). What each configuration mutates, which tests kill its mutants, and the record of
+every full run with its kill rate are in
+[tlc-agreement.md, "Mutation run"](./theory/tlc-agreement.md#mutation-run).
 
 It starts only by hand, before a release gate of the
 [native verification plan](./design/native-temporal-verification.md#phases):
@@ -460,47 +438,23 @@ It starts only by hand, before a release gate of the
 ```sh
 gh workflow run mutants.yml                 # every mutant, over 4 shards
 gh workflow run mutants.yml -f re=liveness  # only the mutants whose name matches
-gh workflow run mutants.yml -f config=tlc -f shards=14   # the TLC-side run below
+gh workflow run mutants.yml -f config=tlc -f shards=14   # the TLC-side configuration
 ```
-
-**The TLC-side run.** `-f config=tlc` reads `.cargo/mutants-tlc.toml` instead: it mutates the
-TLA+ printer (`emit/src/tla/{mod,module,names,pred}.rs`), `verify/compare.rs`,
-`tlc_output.rs`, and `tlc_replay.rs`, 548 mutants, and runs with `tlc` and `z3` on `PATH`
-(`RDRA_REQUIRE_TLC=1`, `RDRA_REQUIRE_Z3=1`). Each mutant runs the corpus under TLC and z3,
-the unit tests of the TLC output reader, the comparison and the TLC driver, and the
-`verify_cli` tests that run TLC beside the native checker, as the `additional_cargo_test_args`
-filters name them. `rdra-ish-emit`'s own tests are left out: their snapshots fail on any
-change to the printed text, which says nothing about whether agreement catches it. The
-unmutated tests take about 2.5 minutes, so a mutant times out at 15 minutes, and the run has
-no address-space cap, which the JVM cannot start under. At 14 shards it takes several hours
-and holds 14 runners.
 
 The `summary` job lists the `missed` and `timeout` mutants, and each shard's `mutants.out` is an
 artifact with each mutant's diff and log. Kill a missed mutant with a corpus case it gets wrong,
-or record why it is equivalent. In the liveness run, a timeout is a mutant whose corpus ran past 60 seconds, a hang,
-which needs no new case, and each test process runs under a 2 GiB address-space cap, so a
-mutant that allocates without end fails at the cap. The TLC-side run's limits are the
-15 minutes and no cap above. A shard that uploads no results is named at the top
-of the summary.
+or record why it is equivalent. In the liveness run, a timeout is a mutant whose corpus ran past
+60 seconds, a hang, which needs no new case, and each test process runs under a 2 GiB
+address-space cap, so a mutant that allocates without end fails at the cap. In the TLC-side
+run a mutant times out at 15 minutes (`--timeout 900`; the workflow's comment says the
+unmutated tests take minutes), and the run has no address-space cap, which the JVM cannot
+start under; at 14 shards it holds 14 runners. A shard that uploads no results is named at
+the top of the summary.
 
 **Kill rate.** The kill rate is the caught and timed-out mutants over the viable ones (all
-but `unviable`). Record each full run here, and the run before a release in its changelog
-entry, so that a fall shows:
-
-| Run | Commit | Date | Mutants | Caught | Timeout | Missed | Unviable | Kill rate |
-|---|---|---|---|---|---|---|---|---|
-| [45212589802](https://github.com/manji-0/rdra-ish-dsl/actions/runs/45212589802) | `b0f593ba` | 2026-11-23 | 251 | 137 | 2 | 70 | 42 | 139 of 209, 66.5% |
-| [46034352562](https://github.com/manji-0/rdra-ish-dsl/actions/runs/46034352562) | `6f2d29a1` | 2026-11-27 | 298 | 147 | 4 | 89 | 58 | 151 of 240, 62.9% |
-
-The missed mutants of the first run: 27 in `cone.rs`, 26 in `explore/liveness.rs`, 12 in
-`verify/native.rs`, 5 in `property_cone.rs`; of the second: 32, 38, 17 and 2. The second run
-lists 47 more mutants, from code added since, and its missed ones grow mostly in
-`explore/liveness.rs`. These runs mutate only those four files and keep `tlc` off `PATH`; the
-TLA+ printer and the TLC reading code are the TLC-side run's:
-
-| Run | Commit | Date | Mutants | Caught | Timeout | Missed | Unviable | Kill rate |
-|---|---|---|---|---|---|---|---|---|
-| [46052978676](https://github.com/manji-0/rdra-ish-dsl/actions/runs/46052978676) (`config=tlc`) | `cb1beccb` | 2026-11-28 | 548 | pending | | | | |
+but `unviable`). Record each full run in the table of
+[tlc-agreement.md, "Mutation run"](./theory/tlc-agreement.md#mutation-run), and the run before
+a release in its changelog entry, so that a fall shows.
 
 ## Kani harnesses
 
