@@ -200,6 +200,8 @@ documents arrive at them from their own side.
 
 <a id="open-problems"></a>
 
+<!-- derived-from ./claims.md -->
+
 Each item is open at this commit, and each names the claims rows that state it. The list is
 what has been found, not a bound on what exists.
 
@@ -273,8 +275,10 @@ what has been found, not a bound on what exists.
 
 - None of the CI checks is required: main has no branch protection and the repository no
   ruleset (`gh api`, checked 2026-11-28), so merging on green checks is a convention
-  ([tlc-agreement.md, "Process gates"](./tlc-agreement.md#5-process-gates)). The release-gate
-  proposal for items 2, 3 and 7 awaits the owner's decision.
+  (T9, T11, T15; [tlc-agreement.md, "Process gates"](./tlc-agreement.md#5-process-gates)).
+- The proposal to restate items 2, 3 and 7 of the release gate to match what runs
+  ([native-temporal-verification.md, "Migration", "The release gate"](../design/native-temporal-verification.md#migration))
+  awaits the owner's decision.
 
 ## Documents
 
