@@ -990,9 +990,46 @@ cone is a class move or a rise of the printed reduced module, or a stutter. With
 parameters left unbound and the stub check off, it fails on both stub cases at the step `X`
 drops (`Issue`, and `Note`'s rise).
 
-This is evidence on
-these models and bounds, not a proof of Lemma 6; cone-soundness.md, "Proof obligation", states
-the lemma in points 2, 3, and 5.
+M: `proofs/lean/RdraIsh/Lemma6.lean` proves the lemma over the action-level model of Lemma 5's
+evidence, for an `X` built as this definition builds it (`Restrict.lean`). A role is a guard
+conjunct on its entity's existence (`candidate_slots`). Each parameter has a side, and `X` gives
+it a role: kept on `S` and on an input, `Earlier { step: 0 }` for a fold's key off `S`
+(`fold_param`) and for a stub parameter that needs a present row of a rise or a folded action
+(`bind_stub_params`), dropped on a dropped entity and for `New` on a stub. `X` keeps the
+conjuncts `restrict_to` keeps and reads one bit per fold at the key's slot; a rise writes the
+raw inputs, a flip one bit, and `stages` lists the raw inputs and then each bit that changes.
+From `Lemma6Hyp` it proves both `S_a` halves, with the cone's binding equal to the edge's
+outside the fold's free `T` parameters (`s_fwd`, `s_back`), and the rise half through the
+stages (`rise_fwd`). So the hypotheses `Lemma6By`, `Lemma6Staged` and `Lemma6` of the Lean
+proof of Theorem A8 are theorems (`lemma6_by`, `lemma6_staged`, `lemma6`). `Lemma6Hyp` holds
+per-action facts read from the code:
+
+- `Local` and Lemma 5 (a)–(c), which `split_faults` certifies;
+- a `New` parameter's existence is written;
+- the conjuncts `X` keeps read `S_v ∪ inputs`, and every other conjunct of an `S_a` action is
+  folded;
+- step (a): `Fold::holds` computes the bit exactly (`exact`);
+- what the folded conjuncts, the other conjuncts and the effects name (`fold_of`);
+- a folded action's effect reads `S_v ∪ inputs`;
+- step (c): a rise's effect on the inputs reads `S_v ∪ inputs`.
+
+The stub and dropped cells of an unfolded `S_a` action, and a `New` `T` parameter of a folded
+one, are derived from Lemma 5 (a)(c) (`unfolded_side`). The cone is the cone without the steps
+of an action that writes nothing and is not kept, which `X` does not hold either: such steps
+stutter, and the two reach the same states (`coneW_reach_iff`). `Lemma6Example.lean`
+discharges `Lemma6Hyp` on a model with a folded action whose free `T` parameter is on a stub,
+an unfolded action with a kept conjunct, and a rise with a parameter on a stub. With
+`bind_stub_params` off, the `C ⇒ X` half fails there (`stub_bug`).
+
+The model leaves out node folds, groups of folds sharing a bit, the renumbering of step (b)
+(a binding of `X` keeps the cone's positions, and nothing states that `X`'s conjuncts and
+effects ignore the slots of dropped parameters), and the nested case. It takes `X`'s initial
+states to be the projections of the cone's, and does not derive them from `restrict_to` and
+`fold_initial`. It reads the model, not `Extended::build`.
+
+The tests above are evidence on these models and bounds, and the Lean proof is a proof over the
+model, not over the code. cone-soundness.md, "Proof obligation", states the lemma in points 2,
+3, and 5.
 
 **Theorem A8 (the reduced cone is stuttering equivalent to the cone).** Assume (B1) to (B3) for
 `B` and Lemma 6. Let `(t, s) ~ (t, ρ)` when `ρ` is the representative of the block of `x(t, s)`.
@@ -1056,7 +1093,7 @@ the next section treats it.
 Lemma 5: `split_at`, `split_with`, certified by `reduce/lemma5.rs::split_faults` before use; Lemma 6: `Extended::build`, `reduce/fold.rs`; the checks a
 reduced cone keeps: `drop_unreadable_checks` (A14).
 
-*Evidence.* P-sketch (Lemma 6 is argued, not proved; Lemma 5 is checked at run time on each split
+*Evidence.* P-sketch (Lemma 6 is argued for the code and proved in Lean over an action model; Lemma 5 is checked at run time on each split
 and (B1)–(B3) on each partition the reduction uses, R). For Lemma 5:
 `reduce/lemma5.rs::a_planted_split_fails_the_clause_it_breaks` plants a split that breaks
 each clause and the side rule in turn, and the last through the switch `split_sides`, on which a
@@ -1071,7 +1108,7 @@ bisimulation that keeps every `T_a` label, with its binding), `a8_edges_iff` (co
 `a8_stuck_iff` (consequence 3), `Plain.lean::a8_plain_iff` (consequence 4, for
 `□(trig ⇒ ◇goal)` under `Fair_P` over infinite behaviours), `Stages.lean::a8_staged` (point
 5 with `recanon` over the stages), and `Nested.lean::a8_nested` (a nested `X`, by induction
-on depth). It does not derive Lemma 6 from the code. In the nested case its outer
+on depth). `Lemma6.lean::a8_actions` derives the hypotheses `Split`, Lemma 6 and the shape of `X` over the action model (Lemma 6's evidence), so A8 with `recanon` holds there from `Lemma6Hyp`, (B1)–(B3) and the rise table; it does not derive Lemma 6 from the code. In the nested case its outer
 representative is a reachable state of `X` and its outer class moves and rises are read on
 `X`, where the code takes an inner representative and reads them on the inner run.
 D: `core/tests/reduce.rs::reduced_cones_decide_what_the_cones_decide`,
