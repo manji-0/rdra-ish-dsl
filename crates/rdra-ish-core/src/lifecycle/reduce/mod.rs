@@ -73,6 +73,9 @@ enum Unreduced {
     OverBudgetWithInputs,
     /// Nothing reduces.
     Nothing,
+    /// The extended sub-lifecycle failed the check every build makes on it (`StubCheck`), so
+    /// no quotient of it is trusted: a tool bug, and the cone is decided unreduced.
+    Untrusted,
 }
 
 /// A step of a path: the action, its params, and the state it enters.
@@ -636,7 +639,7 @@ impl TransitionSystem {
             Err(Unreduced::OverBudgetWithInputs) => self
                 .reduced_with(seeds, caps, false, cache, &mut clean)
                 .unwrap_or_else(|_| self.clone()),
-            Err(Unreduced::Nothing) => self.clone(),
+            Err(Unreduced::Nothing | Unreduced::Untrusted) => self.clone(),
         };
         (out, clean)
     }
@@ -657,6 +660,20 @@ impl TransitionSystem {
             return Err(Unreduced::Nothing);
         }
         let ext = Extended::of(self, &split);
+        // Claim A8: a param on a stub that needs a present row never binds, so its action
+        // never runs in the extended sub-lifecycle though it runs in the cone. No quotient is
+        // run or cached for such a sub-lifecycle; a debug or `shadow` build stops here unless
+        // a test planted the fault (`dropped`).
+        if let Some(fault) = &ext.stubs.fault {
+            crate::shadow_assert!(
+                dropped("bind_stub_params"),
+                "shadow: Extended::build: {fault}"
+            );
+            eprintln!(
+                "warning: the extended sub-lifecycle of a cone failed its stub check ({fault}); deciding the cone unreduced (a tool bug)"
+            );
+            return Err(Unreduced::Untrusted);
+        }
         // Past the budget, the split without inputs is worth a try when this one had any.
         let over_budget = || match split.inputs.is_empty() && split.folds.is_empty() {
             true => Unreduced::Nothing,
@@ -748,6 +765,24 @@ impl TransitionSystem {
         out.reduction = Some(Arc::new(reduction));
         out.drop_unreadable_checks(&split);
         Ok(out)
+    }
+
+    /// The extended sub-lifecycle `reduced_with` builds for `seeds`, with or without the
+    /// inputs of S, and its check (claim A8): `None` when that attempt builds none, else the
+    /// params on a stub `bind_stub_params` bound to any slot, and the check's fault.
+    #[cfg(test)]
+    pub(crate) fn stub_check(
+        &self,
+        seeds: &[Seed],
+        inputs: bool,
+    ) -> Option<(usize, Option<String>)> {
+        let split = self.split_with(seeds, inputs);
+        if split.s.is_empty() || split.s.is_subset(&split.obs) {
+            return None;
+        }
+        let ext = Extended::of(self, &split);
+        let fault = ext.stubs.fault.as_ref().map(ToString::to_string);
+        Some((ext.stubs.rebound, fault))
     }
 
     /// Drops the checks the reduced cone cannot evaluate: an invariant or after-assert that

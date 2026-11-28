@@ -38,6 +38,49 @@ pub(super) struct Extended {
     /// stub of a T parent ("stub"); and one whose rows a key of the cone's T can name ("named
     /// by T"). `fixed` gives the set `Group::fixing` leaves out.
     pub(super) fixed_why: BTreeMap<EntId, Vec<&'static str>>,
+    /// The check of claim A8 every build makes on `system` (`StubCheck`).
+    pub(super) stubs: StubCheck,
+}
+
+/// What every build checks on the extended sub-lifecycle once it is built (claim A8 of
+/// docs/theory/claims.md, Lemma 6 of docs/theory/cones.md): no param of any action, a folded
+/// or unfolded S action, a rise, or a bit's flip, needs a present row (`Existing`, `Parent`,
+/// `Triggered`) of a stub, which is absent in every state and so would never bind. A fault
+/// makes `reduced_with` decide the cone unreduced.
+#[derive(Debug, Default)]
+pub(super) struct StubCheck {
+    /// The params on a stub that `bind_stub_params` bound to any slot.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub(super) rebound: usize,
+    /// The first param found that breaks the check.
+    pub(super) fault: Option<StubParam>,
+}
+
+/// A param on a stub that needs a present row of it, or that `bind_stub_params` would bind
+/// freely though neither a fold nor a rise stands for it: the param `param` of action
+/// `action` of the extended sub-lifecycle.
+#[derive(Debug)]
+pub(super) struct StubParam {
+    pub(super) action: String,
+    pub(super) param: usize,
+    /// It is an unfolded S action's, or a T param of a folded one outside the fold.
+    pub(super) unfolded: bool,
+}
+
+impl std::fmt::Display for StubParam {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let (action, param) = (&self.action, self.param);
+        match self.unfolded {
+            true => write!(
+                f,
+                "param {param} of S action {action} is on a stub, and no fold stands for it"
+            ),
+            false => write!(
+                f,
+                "param {param} of {action} needs a present row of a stub, which never binds"
+            ),
+        }
+    }
 }
 
 impl Extended {
@@ -87,7 +130,10 @@ impl Extended {
                 acts[to.index()] = Some(ActId::at(from));
             }
         }
-        bind_stub_params(&mut system, &map, &acts, all.len(), s_actions, folds);
+        let mut stubs = match dropped("bind_stub_params") {
+            true => StubCheck::default(),
+            false => bind_stub_params(&mut system, &map, &acts, all.len(), s_actions, folds),
+        };
         let t: VarSet = cone.var_ids().filter(|v| !s.contains(v)).collect();
         let mut groups = BitGroups::default();
         let mut drop: Vec<bool> = vec![false; system.actions.len()];
@@ -123,6 +169,9 @@ impl Extended {
             acts.extend([None, None]);
         }
         system.layout();
+        if stubs.fault.is_none() {
+            stubs.fault = stub_param(&system, all.len());
+        }
         let rise = acts
             .iter()
             .map(|a| a.is_none_or(|a| !s_actions.contains(&a)))
@@ -179,6 +228,7 @@ impl Extended {
             variants: groups.variants,
             params: map.params,
             fixed_why,
+            stubs,
         }
     }
 
@@ -399,7 +449,9 @@ impl BitGroups {
 ///
 /// An unfolded S action keeps none: its raw reads hold the existence of each entity it binds
 /// (`raw_reads`, and for a `Triggered` param that of its mark, through `existences`), so that
-/// entity is no stub. A `shadow` build checks it.
+/// entity is no stub. One that does keep one, or a folded S action's T param outside its
+/// fold, is left as it is and returned as the check's fault, in every build. Returns how many
+/// params it bound, and that fault.
 fn bind_stub_params(
     system: &mut TransitionSystem,
     map: &Remap,
@@ -407,7 +459,8 @@ fn bind_stub_params(
     width: usize,
     s_actions: &BTreeSet<ActId>,
     folds: &[Fold],
-) {
+) -> StubCheck {
+    let mut out = StubCheck::default();
     for (k, act) in acts.iter().enumerate() {
         let Some(act) = *act else { continue };
         let fold = folds.iter().find(|f| f.act == act);
@@ -428,15 +481,35 @@ fn bind_stub_params(
             if !on_stub || param.role.binds_exists() != Some(Value::PRESENT) {
                 continue;
             }
-            crate::shadow_assert!(
-                !s_actions.contains(&act) || folded(p),
-                "shadow: bind_stub_params: S action {} binds a stub by param {p}, which no \
-                 fold stands for",
-                system.actions[k].name
-            );
+            if s_actions.contains(&act) && !folded(p) {
+                out.fault.get_or_insert_with(|| StubParam {
+                    action: system.actions[k].name.clone(),
+                    param: p,
+                    unfolded: true,
+                });
+                continue;
+            }
             system.actions[k].params[p].role = ParamRole::Earlier { step: 0 };
+            out.rebound += 1;
         }
     }
+    out
+}
+
+/// The first param of `system`'s actions on a stub (an entity whose existence is not among
+/// its first `width` vars) whose role needs a present row of it.
+fn stub_param(system: &TransitionSystem, width: usize) -> Option<StubParam> {
+    system.actions.iter().find_map(|a| {
+        let param = a.params.iter().position(|p| {
+            system.entities[p.entity.index()].exists.index() >= width
+                && p.role.binds_exists() == Some(Value::PRESENT)
+        })?;
+        Some(StubParam {
+            action: a.name.clone(),
+            param,
+            unfolded: false,
+        })
+    })
 }
 
 /// Param `p` of a fold's cone action, in the extended sub-lifecycle's numbering.
@@ -508,4 +581,60 @@ fn flips(k: usize, var: VarId, entity: EntId, source: usize) -> [Action; 2] {
             site: Site::bare(ModelRef::Synthesized),
         }],
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::lifecycle::tests::model_from;
+    use crate::lifecycle::{Bounds, Scope};
+
+    /// The other half of the check (claim A8): `bind_stub_params` binds a param on a stub
+    /// only for a fold or a rise. With the rise of `cone_rise_param_on_a_stub` (`Note`, whose
+    /// `Parent` Order param is on a stub) counted among the S actions, as though it were an
+    /// unfolded S action, its param keeps its role and is the check's fault, in every build.
+    #[test]
+    fn a_stub_param_no_fold_or_rise_stands_for_is_left_and_reported() {
+        let src = include_str!(
+            "../../../../rdra-ish-cli/tests/engine_corpus/cone_rise_param_on_a_stub.rdra"
+        );
+        let ts = TransitionSystem::build(&model_from(src), Bounds::VERIFY, &Scope::ALL).ts;
+        let mut reported = 0;
+        for t in ts.targets() {
+            let (sys, local) = ts.cone_system(&ts.target_cone(t), [ts.target_seed(t)]);
+            let mut split = sys.split_with(&local, true);
+            if split.s.is_empty() || split.s.is_subset(&split.obs) {
+                continue;
+            }
+            let ext = Extended::of(&sys, &split);
+            assert!(
+                ext.stubs.fault.is_none(),
+                "{t:?}: the check passes as built"
+            );
+            let Some(note) = sys
+                .action_ids()
+                .find(|a| sys.actions[a.index()].name == "Note")
+            else {
+                continue;
+            };
+            let Some(k) = ext.acts.iter().position(|a| *a == Some(note)) else {
+                continue;
+            };
+            if !ext.rise[k] {
+                continue;
+            }
+            split.s_actions.insert(note);
+            let ext = Extended::of(&sys, &split);
+            let fault = ext.stubs.fault.as_ref().expect("the check fails");
+            assert!(fault.unfolded && fault.action == "Note", "{t:?}: {fault}");
+            let param = &ext.system.actions[k].params[fault.param];
+            assert_eq!(
+                param.role.binds_exists(),
+                Some(Value::PRESENT),
+                "{t:?}: the param keeps its role"
+            );
+            reported += 1;
+        }
+        assert!(reported > 0, "a cone keeps Note as a rise");
+    }
 }
