@@ -164,31 +164,13 @@ impl<'m> Builder<'m> {
         }
     }
 
-    /// An action outside the slot syntax the Lean proofs take (`build/syntax.rs`) fails the
-    /// build with `BuildFault`: the builder is at fault, and no engine runs on it.
-    fn in_slot_syntax(&mut self) {
-        let found: Vec<(String, String, Site, Vec<EntityKey>)> = (self.ts.slot_syntax_faults())
-            .into_iter()
-            .map(|f| {
-                let a = &self.ts.actions[f.action];
-                let entities = (a.params.iter())
-                    .map(|p| self.ts.entity(p.entity).key)
-                    .collect();
-                (a.name.clone(), f.to_string(), a.site.clone(), entities)
-            })
-            .collect();
-        for (usecase, what, site, entities) in found {
-            crate::shadow_assert!(
-                super::explore::symmetry::dropped("slot_syntax"),
-                "shadow: build: {what}"
-            );
-            self.diag(
-                entities,
-                StateDiag::BuildFault {
-                    usecase,
-                    what,
-                    site,
-                },
+    /// An action outside the slot syntax the Lean proofs take (`build/syntax.rs`) stops the
+    /// build as a tool error: the builder is at fault, not the model, and no engine runs on
+    /// a system the proofs do not cover.
+    fn in_slot_syntax(&self) {
+        if let Some(fault) = self.ts.slot_syntax_faults().first() {
+            panic!(
+                "tool error: the built step of {fault}, outside the slot syntax the proofs take (a tool bug, not a finding about the model)"
             );
         }
     }

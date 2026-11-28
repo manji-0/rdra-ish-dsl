@@ -162,12 +162,13 @@ Every run, in every build:
   that can bind one slot and write one var there with values that can differ
   (`ConflictingEffects`) (I1, N2, T1);
 - checks, at build time, that every action is in the slot syntax the Lean proofs take
-  (`WF`, `Built`), and fails the build with `BuildFault` when one is not
-  (`build/syntax.rs`, A8, A18);
-- checks every cone it chooses against what Theorems A1 and A2 need (closed, holding its
-  seed, and exact where its use needs it) and decides on the whole system when one fails,
-  and checks every restriction to a cone against what Definition 2 lets it drop, stopping
-  the run as a tool error when one does not (`cone_check.rs`, A1);
+  (`WF`, `Built`), and stops as a tool error when one is not (`build/syntax.rs`, A8,
+  A18);
+- checks every cone `target_cone`, `property_cone` and `exact_target_cone` return against
+  what Theorems A1 and A2 need (closed, holding its seed, and exact where its use needs it)
+  and decides on the whole system when one fails, and checks every restriction to a cone
+  against what Definition 2 lets it drop, stopping the run as a tool error when one does not
+  (`cone_check.rs`, A1);
 - panics on an edge number past `u32` instead of wrapping it (`core/explore/edges.rs::edge_number`,
   and the orbit self-edge index of `core/explore/bfs.rs::Bfs::take`, N1);
 - certifies the stability of the reduction's partition and falls back to the sweeps'
@@ -197,8 +198,8 @@ documents arrive at them from their own side.
    prover's encoding that no sample or corpus case exercises is not common-mode, but no
    comparison of a proof with BFS meets it either. The reference interpreter checks the
    builder without reading its output, on a subset of the language, and checks z3's
-   `proved` at `m + 1` and `m + 3` (I1, B1). Every run checks each cone it chooses against
-   what Theorems A1 and A2 need of it, not against a second choice: the cone is closed, holds
+   `proved` at `m + 1` and `m + 3` (I1, B1). Every run checks each cone the cone builders
+   return against what Theorems A1 and A2 need of it, not against a second choice: the cone is closed, holds
    its seed and is exact where its use needs it, and its restriction drops only what
    Definition 2 lists (A1). That check shares the actions' read and write sets
    (`plain_reads`, `mark_reads`, `copy_reads`, `action_writes`, `pred_reads`) with the

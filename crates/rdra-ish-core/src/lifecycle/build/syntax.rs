@@ -2,8 +2,8 @@
 //! (claims A8 and A18 of docs/theory/claims.md): `proofs/lean/RdraIsh/SymActions.lean`'s
 //! `WF` and `Built`, which `SymActModel.lean::local_`, `::shape` and `::new_writes` and
 //! `SymActions.lean::step_comm` assume, read field by field off each action. Every build
-//! checks it at its end (`Builder::finish`), and a fault fails the build with
-//! `StateDiag::BuildFault`, a tool error: no engine runs on a system the proofs do not cover.
+//! checks it at its end (`Builder::finish`), and a fault stops the build as a tool error: no
+//! engine runs on a system the proofs do not cover.
 //!
 //! - `WF.guards` (`pwf`): every term of a guard reads a column or an owner on a row of its
 //!   own entity: the var of `Term::Slot { var, at }` belongs to the entity `at` names (a
@@ -49,11 +49,10 @@ pub(crate) enum SyntaxClause {
     Role,
 }
 
-/// One fault: the clause, the action (its index) and what breaks it.
+/// One fault: the clause and what breaks it, the action named.
 #[derive(Debug)]
 pub(crate) struct SyntaxFault {
     pub(crate) clause: SyntaxClause,
-    pub(crate) action: usize,
     pub(crate) what: String,
 }
 
@@ -100,11 +99,10 @@ impl TransitionSystem {
     /// in the syntax.
     pub(crate) fn slot_syntax_faults(&self) -> Vec<SyntaxFault> {
         let mut out = Vec::new();
-        for (i, a) in self.actions.iter().enumerate() {
+        for a in &self.actions {
             let mut fault = |clause, what: String| {
                 out.push(SyntaxFault {
                     clause,
-                    action: i,
                     what: format!("{}: {what}", a.name),
                 })
             };
@@ -231,21 +229,22 @@ impl TransitionSystem {
     }
 
     /// The vars two params of `a` that can bind one slot both write with values that can
-    /// differ, with the two params: Proposition T1 assumes there are none. Two writes agree
-    /// whatever their order when both are one literal (`Assign` of `Rhs::Lit`, as a raise
-    /// sets its mark on every row of the entity the step binds), both `Create`s or both
-    /// `Delete`s. Two params of one entity can bind one slot unless their roles bind disjoint
-    /// rows (`binds_exists`: present against absent), a guard `Index(p) != Index(q)` holds
-    /// them apart, they carry conjuncts `m = j` and `m = k` on one var with `j != k`, or one is
-    /// `New` and the other carries a conjunct `m = k` with `k` not `m`'s base (an absent row
-    /// holds base values on every reachable state).
+    /// differ, with the two params: Proposition T1 assumes there are none. Two writes of one
+    /// literal (`Assign` of `Rhs::Lit`) agree in either order, in the native step and in the
+    /// printer's `EXCEPT`, as a raise sets its mark to `true` on every row of the entity the
+    /// step binds; every other pair of writes may differ. Two params of one entity can bind
+    /// one slot unless their roles bind disjoint rows (`binds_exists`: present against
+    /// absent), a guard `Index(p) != Index(q)` holds them apart, they carry conjuncts `m = j`
+    /// and `m = k` on one var with `j != k`, or one is `New` and the other carries a conjunct
+    /// `m = k` with `k` not `m`'s base (an absent row holds base values on every reachable
+    /// state).
     pub(crate) fn shared_slot_writes(&self, a: &Action) -> Vec<(VarId, u8, u8)> {
         let mut out = Vec::new();
-        let writes = |p: u8| -> Vec<(VarId, Written)> {
+        let writes = |p: u8| -> Vec<(VarId, Option<Value>)> {
             (a.effects.iter())
                 .filter(|e| effect_param(e) == Some(p))
                 .flat_map(|e| {
-                    let how = Written::of(e);
+                    let how = written_literal(e);
                     self.effect_writes(a, e).into_iter().map(move |v| (v, how))
                 })
                 .collect()
@@ -259,7 +258,7 @@ impl TransitionSystem {
                 let theirs = writes(q);
                 for (v, how) in writes(p) {
                     let differ = (theirs.iter())
-                        .any(|(w, other)| *w == v && (how != *other || how == Written::Other));
+                        .any(|(w, other)| *w == v && (how.is_none() || how != *other));
                     if differ && !out.contains(&(v, p, q)) {
                         out.push((v, p, q));
                     }
@@ -313,26 +312,14 @@ impl TransitionSystem {
     }
 }
 
-/// What an effect writes, as far as two writes of one slot agree whatever their order.
-#[derive(Clone, Copy, PartialEq, Eq)]
-enum Written {
-    Lit(Value),
-    Create,
-    Delete,
-    /// A choice, a transition, a row index: two such writes can differ.
-    Other,
-}
-
-impl Written {
-    fn of(e: &Effect) -> Written {
-        match e {
-            Effect::Assign {
-                rhs: Rhs::Lit(v), ..
-            } => Written::Lit(*v),
-            Effect::Create { .. } => Written::Create,
-            Effect::Delete { .. } => Written::Delete,
-            _ => Written::Other,
-        }
+/// The literal an effect writes, the one kind of write two params can share: `None` for
+/// any other effect.
+fn written_literal(e: &Effect) -> Option<Value> {
+    match e {
+        Effect::Assign {
+            rhs: Rhs::Lit(v), ..
+        } => Some(*v),
+        _ => None,
     }
 }
 

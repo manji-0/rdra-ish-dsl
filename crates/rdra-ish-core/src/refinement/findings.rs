@@ -22,7 +22,7 @@ pub(super) fn owning_stage(model: &SemanticModel, diag: &StateDiag) -> StageId {
             rule_stage(model, &site.fact).unwrap_or(StageId::AdvancedRules)
         }
         StateDiag::ContradictoryDrivenComparison { .. } => StageId::AdvancedRules,
-        StateDiag::TraceFault { .. } | StateDiag::BuildFault { .. } => StageId::Lifecycle,
+        StateDiag::TraceFault { .. } => StageId::Lifecycle,
         StateDiag::UnreachableEnumVariant { .. }
         | StateDiag::ConflictingEffects { .. }
         | StateDiag::DoubleModeledEnum { .. }

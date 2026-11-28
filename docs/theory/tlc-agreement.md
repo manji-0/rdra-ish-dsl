@@ -172,9 +172,10 @@ with a multi-target `Transition` and also an `Assign` after it or a `Choose` bef
 ([Effects](#per-construct-argument)). The build enforces it: an action that writes one slot
 twice fails with `ConflictingEffects` (`Action::slots_written_twice`, checked by
 `build/mod.rs::Builder::one_write_per_slot`, which `Builder::finish` calls; corpus case
-`safety_created_set_beside_transitions`). The argument also assumes that no two params of one
-action that can bind one slot write the same variable, which no check enforces
-([Effects](#per-construct-argument)). Steps 1 and 2, and step 3 per binding on unreduced
+`safety_created_set_beside_transitions`). The argument also needs that no two params of one
+action that can bind one slot write the same variable there with values that can differ, and
+the build enforces that too (`ConflictingEffects`,
+`build/syntax.rs::TransitionSystem::shared_slot_writes`; [Effects](#per-construct-argument)). Steps 1 and 2, and step 3 per binding on unreduced
 cones, are also checked as graph equality on every sample cone that fits the comparison's
 cap, with edges compared with their params ([Sample comparison](#the-sample-comparison));
 step 3 on a reduced cone's class moves, which print no params, and step 4 are checked by
@@ -227,11 +228,16 @@ step writes by slot in effect order. If two params of one action bound one slot 
 wrote `v`, TLA+'s `EXCEPT` would keep the higher param's value and the native step the later
 effect's, and on a delete the printer resets only the deleted param's entries while the
 native step drops every choice keyed by that param. Neither `candidate_slots` nor
-`bindings_for` keeps two params of one entity apart, and `Action::slots_written_twice` and
-`Builder::one_write_per_slot` compare `(var, param)` pairs, not slots. No builder path is
-known that gives one action two params of one entity that write the same variable, but none
-is shown to be impossible either: the argument below assumes it, and it is not checked. Case
-by case:
+`bindings_for` keeps two params of one entity apart, so the build checks it
+(`build/syntax.rs::TransitionSystem::shared_slot_writes`, called by
+`Builder::one_write_per_slot`): an action two of whose params of one entity can bind one slot
+and write one variable there fails with `ConflictingEffects`, unless both writes are one
+literal, which `EXCEPT` and the native step give alike in either order. oidc-auth's
+`RedeemCode` writes so: it raises `EvTokensIssued` on its three `Parent` rows of `Grant`,
+which may be one row, setting the mark to `true` on each. Two params can bind one slot
+unless their roles bind present against absent rows, a guard `Index(p) != Index(q)` holds
+them apart, they carry `m = j` and `m = k` with `j != k`, or one is `New` and the other
+carries `m = k` with `k` not `m`'s base. Case by case:
 
 - `Create`: both set the entity's `Exists` to `present` at the new slot, at once and in effect
   order (`Post::Expr` of `Value::PRESENT` against `next.set`).
@@ -426,7 +432,7 @@ invariants of `print_state_models`, which are one-sided by design (T6).
 
 | Step of T1 | Paper argument | Test | Assumed |
 |---|---|---|---|
-| 1, 2, 3 (states, init, steps) on unreduced systems | above; step 3 for multi-target transitions under the builder's effect-order invariant, which the build enforces (`ConflictingEffects`), and for every effect under the assumption, not checked, that no two params of one action that can bind one slot write one variable | graph equality on every sample cone under 300,000 states, at 1 and 2 instances, edges with their params; the 36 `bfs_and_tlc_*` tests of `engine_equivalence.rs` | TLC's `-dump dot` lists every edge, self-loops included |
+| 1, 2, 3 (states, init, steps) on unreduced systems | above; step 3 for multi-target transitions under the builder's effect-order invariant, which the build enforces (`ConflictingEffects`), and for every effect under the builder's rule, which the build enforces too, that no two params of one action that can bind one slot write one variable there with values that can differ | graph equality on every sample cone under 300,000 states, at 1 and 2 instances, edges with their params; the 36 `bfs_and_tlc_*` tests of `engine_equivalence.rs` | TLC's `-dump dot` lists every edge, self-loops included |
 | 3 on reduced systems | none (not argued here) | graph equality on reduced sample cones, class moves by action alone; the reduced cone's violated set against the unreduced one's; on the 21 reduced corpus cones, every step of the unreduced cone a step of the reduced module or a stutter ([The reduction, step by step](#the-reduction-step-by-step)) | the quotient tables (common-mode) outside the corpus |
 | 4, state rules and `after` | above, with D17's stuttering exemption | verdict and violated-set comparison on every compared cone; each TLC trace replayed through the native step relation | TLC |
 | 4, temporal properties and fairness | above | verdicts only: 23 `TEMPORAL_CASES` at 2 instances (under `-lncheck final`, [Batch JVMs](#batch-jvms)) and the corpus at each case's flags | TLC's liveness checking under quantified weak fairness |
@@ -981,9 +987,11 @@ the sections it cites, and carries the tag of the statements it rests on.
    transitions rests on a builder invariant, and the build rejects any action that writes one
    slot twice (`ConflictingEffects`; corpus case `safety_created_set_beside_transitions`,
    whose two effect readings differ). The check lives in the builder, not in the printer, so
-   the printer's reading is right only for the actions the builder lets through. Two params of
-   one action that bind one slot and write one variable are not excluded by any check
-   ([Effects](#per-construct-argument)).
+   the printer's reading is right only for the actions the builder lets through. The build
+   also rejects two params of one action that can bind one slot and write one variable there
+   with values that can differ ([Effects](#per-construct-argument)); which params can bind
+   one slot is read off the action's roles and guards, so a pair that the guards hold apart
+   in a way the check does not see is refused, not let through.
 8. **TLC [assumed: TLC].** TLC's fingerprint-based state store can, with small probability,
    merge two distinct states on a hash collision and so miss states (Yu, Manolios and Lamport
    1999 discuss TLC's design; TLC prints its own collision estimate, which

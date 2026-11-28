@@ -160,9 +160,9 @@ column or an owner of the row its `At` names, an `At::Bound` counted outermost f
 Lean's `refEnt` counts innermost first; each effect's var is of its param's row; every
 param named exists), `Built.new_create`, `Built.earlier_mark` (the literal conjunct
 `Cmp(Slot { m, Param(p) }, Eq, Lit(k))` on the param's row with `k` not `m`'s base), and the
-roles' `binds_exists` against a transcription of `Rows.cand`. A fault fails the build with a
-new error, `StateDiag::BuildFault` (a tool error: no engine runs); a debug or `shadow` build
-panics. `Earlier { step: 0 }` in `X` is not checked: `X` is not built by `build`, and the
+roles' `binds_exists` against a transcription of `Rows.cand`. A fault stops the build as a
+tool error (`tool error: the built step of …`), so no engine runs, as a restriction fault
+does (C11). `Earlier { step: 0 }` in `X` is not checked: `X` is not built by `build`, and the
 check reads the built system only; a cone keeps `WF` and `Built` through C11's restriction
 check. Still read: that `candidate_slots` filters by role before any guard (the shadow twin of
 `each_planned` compares the fast path with it, not it with Lean) and that `each_successor`
@@ -396,9 +396,11 @@ refuse. Free.
 
 *Done (1c), a build refusal.* `build/syntax.rs::TransitionSystem::shared_slot_writes` lists,
 per action, each var two params of one entity both write, with values that can differ, when
-the two can bind one slot. Two writes of one literal, two `Create`s or two `Delete`s agree in
-either order and pass: oidc-auth's `RedeemCode` raises `EvTokensIssued` on its three
-`Parent` rows of `Grant`, which may be one row, by setting one mark to `1` on each. Two params
+the two can bind one slot. Two writes of one literal agree in either order, natively and in
+the printer's `EXCEPT` (`module.rs::effects`), and pass: oidc-auth's `RedeemCode` raises
+`EvTokensIssued` on its three `Parent` rows of `Grant`, which may be one row, by setting one
+mark to `true` on each. So the assumption as T1 stated it (no two such params write one
+variable) was false on a shipped sample; the refined one holds on every model. Two params
 can bind one slot unless their roles bind present against absent rows, a guard
 `Index(p) != Index(q)` holds them apart, they carry `m = j` and `m = k` with `j != k`, or one
 is `New` and the other carries `m = k` with `k` not `m`'s base (an absent row holds base values

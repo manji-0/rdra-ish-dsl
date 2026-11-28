@@ -367,6 +367,7 @@ impl TransitionSystem {
         map: &Remap,
     ) {
         if let Some(fault) = self.restriction_faults(vars, keep, out, map).first() {
+            crate::shadow_assert!(false, "shadow: restrict_to: {fault}");
             panic!("tool error: restrict_to: {fault} (a tool bug, not a finding about the model)");
         }
     }

@@ -125,6 +125,16 @@ fn a_planted_cone_fails_the_clause_it_breaks() {
                         "falls back to the whole system"
                     );
                     assert_eq!(back.keep, cone.keep);
+                    // Closed and exact, at every exactness a use can ask for.
+                    let exact = Exactness {
+                        marks: true,
+                        slots: true,
+                    };
+                    let faults = ts.cone_faults(&seed, &back, exact);
+                    assert!(faults.is_empty(), "the whole system: {}", faults[0]);
+                    let (out, map) = ts.restrict_to_mapped(&back.vars, &back.keep, true);
+                    let faults = ts.restriction_faults(&back.vars, &back.keep, &out, &map);
+                    assert!(faults.is_empty(), "its restriction: {}", faults[0]);
                     fell_back += 1;
                 }
             };
@@ -282,7 +292,7 @@ fn a_planted_restriction_fails_the_clause_it_breaks() {
 /// on purpose, so the restriction drops a guard of a kept action that Definition 2 does not
 /// list.
 #[test]
-#[should_panic(expected = "tool error: restrict_to")]
+#[should_panic(expected = "restrict_to: the restriction's guards")]
 fn restrict_to_stops_at_a_restriction_fault() {
     for (_, ts) in systems() {
         for (_, cone, _) in cones(&ts) {
@@ -312,8 +322,7 @@ fn restrict_to_stops_at_a_restriction_fault() {
     }
 }
 
-/// Each field of `WF` and `Built` the build checks fails on an action planted to break it,
-/// and a build whose builder plants one (`slot_syntax`) fails with `BuildFault`, an error.
+/// Each field of `WF` and `Built` the build checks fails on an action planted to break it.
 #[test]
 fn a_planted_action_fails_the_syntax_field_it_breaks() {
     use crate::lifecycle::build::syntax::SyntaxClause;
@@ -391,16 +400,17 @@ fn a_planted_action_fails_the_syntax_field_it_breaks() {
         SyntaxClause::EarlierMark,
     ];
     assert_eq!(fired, all.into_iter().collect(), "every field fails once");
-    let (name, model) = &walked_models()[0];
-    let built = dropping("slot_syntax", || {
+}
+
+/// A build whose builder plants an action outside the slot syntax (`slot_syntax` drops a
+/// `Create`) stops as a tool error.
+#[test]
+#[should_panic(expected = "tool error: the built step of Built.new_create")]
+fn a_build_outside_the_slot_syntax_stops() {
+    let (_, model) = &walked_models()[0];
+    dropping("slot_syntax", || {
         TransitionSystem::build(model, Bounds::VERIFY, &Scope::ALL)
     });
-    let fault = (built.diags.iter()).find(|d| matches!(d.diag, StateDiag::BuildFault { .. }));
-    assert!(fault.is_some(), "{name}: the build fails");
-    assert!(
-        crate::lifecycle::has_errors(&built.diags),
-        "{name}: as an error"
-    );
 }
 
 /// An action two of whose params can bind one slot and write one var there fails the build

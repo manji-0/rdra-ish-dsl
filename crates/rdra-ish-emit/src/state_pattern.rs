@@ -190,7 +190,6 @@ violation_message(text, pattern_desc)
         | StateDiag::TimeBudgetReached { .. }
         | StateDiag::LiftFault { .. }
         | StateDiag::TraceFault { .. }
-        | StateDiag::BuildFault { .. }
         | StateDiag::NoWitness { .. }
         | StateDiag::VacuousRule { .. }
         | StateDiag::NeverRuns { .. }

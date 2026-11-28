@@ -171,7 +171,9 @@ and `Triggered` parameter, and a freed entity's `New` parameter, whose `Create` 
 Under closure every other guard reads `W`, so it stays. A freed entity's row is read by no
 guard of `A_W` but a copy guard into it, which goes because its target is outside `W`: a
 plain guard that read the row would put its var in `W` by (C1) and the existence by (C4).
-A fault there stops the run as a tool error.
+A fault there stops the run as a tool error. The cones `targets.rs::recheck_on` grows between
+its first round and its exact one come from `cone` directly, so only the restriction check
+meets them.
 
 ---
 
@@ -819,7 +821,7 @@ for a reading of the code that this section gives and nothing checks.
 
 | Field | Fact | How the code meets it |
 |---|---|---|
-| `local_` | `Local`: a guard conjunct reads only `Rd(a) ∪ Wr(a)` and depends only on what it reads; the effect leaves every variable outside `Wr(a)` as it is, and its value on `Wr(a)` depends only on `Rd(a) ∪ Wr(a)` | M: proved for the action model read off the slot syntax of Theorem A18 (`SymActModel.lean::local_`, under `Built`); Kani proves that a predicate reads only its `pred_reads` (T13); a debug or `shadow` build holds every step to `Wr(a)` (A1). R: every build checks that the built actions are in that syntax, `WF` and `Built` of `SymActions.lean` (`build/syntax.rs::TransitionSystem::slot_syntax_faults`, a `BuildFault` otherwise); that `each_successor` executes the syntax as the Lean semantics does is read |
+| `local_` | `Local`: a guard conjunct reads only `Rd(a) ∪ Wr(a)` and depends only on what it reads; the effect leaves every variable outside `Wr(a)` as it is, and its value on `Wr(a)` depends only on `Rd(a) ∪ Wr(a)` | M: proved for the action model read off the slot syntax of Theorem A18 (`SymActModel.lean::local_`, under `Built`); Kani proves that a predicate reads only its `pred_reads` (T13); a debug or `shadow` build holds every step to `Wr(a)` (A1). R: every build checks that the built actions are in that syntax, `WF` and `Built` of `SymActions.lean` (`build/syntax.rs::TransitionSystem::slot_syntax_faults`; a fault stops the build as a tool error); that `each_successor` executes the syntax as the Lean semantics does is read |
 | `lemma5` | Lemma 5 (a)(b) | R: `split_faults`; the proof of Lemma 5 above |
 | `reads` | Lemma 5 (c), with a fold's reads those of `Fold::reads` | R: `split_faults` checks (c) with `Fold::reads` |
 | `shape` | `a`'s guard is its role conjuncts followed by its other conjuncts `og` | M: proved for the slot model (`SymActModel.lean::shape`); R: every build checks that each role binds what `Rows.cand` says (`ParamRole::binds_exists`, `build/syntax.rs`); that `candidate_slots` applies it before the guards is read |
