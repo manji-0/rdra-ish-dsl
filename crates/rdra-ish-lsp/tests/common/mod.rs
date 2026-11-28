@@ -19,7 +19,13 @@ pub struct Client {
 
 impl Client {
     pub fn start() -> Self {
+        Self::start_with_env(&[])
+    }
+
+    /// `start`, with these variables set in the server's environment.
+    pub fn start_with_env(env: &[(&str, &std::ffi::OsStr)]) -> Self {
         let mut child = Command::new(env!("CARGO_BIN_EXE_rdra-ish-lsp"))
+            .envs(env.iter().copied())
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())
@@ -64,7 +70,16 @@ impl Client {
 
     /// `initialized` with these initialization options.
     pub fn initialized_with(root: &Path, options: Value) -> Self {
-        let mut client = Self::start();
+        Self::initialized_with_env(root, options, &[])
+    }
+
+    /// `initialized_with`, with these variables set in the server's environment.
+    pub fn initialized_with_env(
+        root: &Path,
+        options: Value,
+        env: &[(&str, &std::ffi::OsStr)],
+    ) -> Self {
+        let mut client = Self::start_with_env(env);
         client.send(json!({"jsonrpc": "2.0", "id": 1, "method": "initialize",
             "params": {"processId": null, "rootUri": uri(root), "capabilities": {},
                 "initializationOptions": options}}));

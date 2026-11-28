@@ -1,9 +1,10 @@
-//! `verify --prove`: the rules z3 proves for any number of rows, printed before TLC runs.
+//! The proof `verify` runs unless `--no-prove`: the rules z3 proves for any number of rows,
+//! printed before TLC runs.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
 
-use anyhow::{bail, Result};
+use anyhow::Result;
 use rdra_ish_core::lifecycle::prove::{self, ProveOptions, RuleProof, Unproved, Verdict, Z3};
 use rdra_ish_core::lifecycle::{
     has_errors, label_prefix, Bounds, Scope, Selection, StateDiag, Target, TransitionSystem,
@@ -185,29 +186,63 @@ fn int_range(
     Some((least, lo))
 }
 
+/// No z3 binary where `find_z3` looked.
+#[derive(Debug)]
+pub(crate) enum Z3Missing {
+    /// `--z3` or `RDRA_Z3` names no file.
+    At(PathBuf),
+    /// Neither is set and PATH holds no `z3`.
+    NotOnPath,
+}
+
+impl Z3Missing {
+    /// The one `note:` line of a run that skips the proof for want of z3.
+    pub(crate) fn note(&self) -> String {
+        let place = match self {
+            Z3Missing::At(path) => format!("at {} (from --z3 or {Z3_ENV})", path.display()),
+            Z3Missing::NotOnPath => "on PATH".to_string(),
+        };
+        format!(
+            "note: z3 not found {place}: the proof was skipped (install z3, or pass --no-prove to run without it)"
+        )
+    }
+}
+
+/// The error of a run that asked for the proof (`--prove`, `--deny-unproved`).
+impl std::fmt::Display for Z3Missing {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Z3Missing::At(path) => write!(
+                f,
+                "z3 not found at {} (from --z3 or {Z3_ENV})",
+                path.display()
+            ),
+            Z3Missing::NotOnPath => write!(
+                f,
+                "z3 not found on PATH (--prove and --deny-unproved need it)\n\
+                 Get it one of these ways:\n  \
+                 - Nix: `nix develop` (the dev shell has it) or `nix shell nixpkgs#z3`\n  \
+                 - A package manager: `apt install z3`, `brew install z3`, or `pip install z3-solver`\n\
+                 Then pass `--z3 <path>` or set {Z3_ENV}=<path> if it is not on PATH."
+            ),
+        }
+    }
+}
+
+impl std::error::Error for Z3Missing {}
+
 /// `--z3` first, then `RDRA_Z3`, then `z3` on PATH.
-pub(crate) fn find_z3(z3: Option<PathBuf>) -> Result<PathBuf> {
+pub(crate) fn find_z3(z3: Option<PathBuf>) -> Result<PathBuf, Z3Missing> {
     let named = z3.or_else(|| {
         std::env::var_os(Z3_ENV)
             .filter(|v| !v.is_empty())
             .map(PathBuf::from)
     });
-    if let Some(path) = named {
-        if !path.is_file() {
-            bail!("z3 not found at {} (from --z3 or {Z3_ENV})", path.display());
-        }
-        return Ok(path);
+    match named {
+        Some(path) if path.is_file() => Ok(path),
+        Some(path) => Err(Z3Missing::At(path)),
+        None => crate::verify::find_on_path("z3").ok_or(Z3Missing::NotOnPath),
     }
-    if let Some(path) = crate::verify::find_on_path("z3") {
-        return Ok(path);
-    }
-    bail!(
-        "z3 not found on PATH (--prove needs it)\n\
-         Get it one of these ways:\n  \
-         - Nix: `nix develop` (the dev shell has it) or `nix shell nixpkgs#z3`\n  \
-         - A package manager: `apt install z3`, `brew install z3`, or `pip install z3-solver`\n\
-         Then pass `--z3 <path>` or set {Z3_ENV}=<path> if it is not on PATH."
-    );
 }
 
 /// What the report says about a rule besides its verdict, by index into `ts.invariants()`.

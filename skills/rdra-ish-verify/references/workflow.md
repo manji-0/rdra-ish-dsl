@@ -134,7 +134,7 @@ OK: no errors in the selected scope, within 1 instance per entity, Int 0..5
   per permutation of interchangeable rows, so a cone that outgrows the limit can finish. Its
   cone lines read `(about <m> states)`. The default is `never`.
 - `RDRA_JOBS=<n>` sets how many cones `check`, `states`, and `verify` explore at once, the
-  threads of one large cone, and the z3 processes of `--prove`. By default cones run on the
+  threads of one large cone, and the z3 processes of the proof. By default cones run on the
   cores (at most 8) and a large cone takes a third of the cores (4 to 12). The result does
   not depend on it; lower it when memory is short.
 - Under `--with-tlc`, BFS takes half the limit and the TLC runs the rest. A TLC run out of

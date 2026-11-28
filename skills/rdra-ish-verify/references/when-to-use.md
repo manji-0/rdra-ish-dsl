@@ -23,6 +23,6 @@ differ, so a verdict that differs between them comes from the bounds.
 | `UnjoinedWrite_*` warning | `verify` | Only two instances show rows of different parents |
 | `.at_most(n, ..)`, a `0..n:1` card | `verify --instances E=<n+1>` | The rule breaks only with `n + 1` rows of `E` |
 | `property` of any form | `verify` | `check` and `states` evaluate no `property`; `check` prints a `note:` |
-| A rule for any number of rows | `verify --prove` | See `prove.md` |
+| A rule for any number of rows | `verify` (with z3 on `PATH`) | See `prove.md` |
 
 State the `bounds:` line with every result.

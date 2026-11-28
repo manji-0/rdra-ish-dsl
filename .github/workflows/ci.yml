@@ -412,17 +412,19 @@ jobs:
         # docs/theory/claims.md), so the step fails on such a call in a run and twin
         # `expected_skips` does not name. The fourth run is the path a release build takes
         # (workers that do not probe): the twins of that path must compare calls there, and
-        # the probe twins (`hit`, `recent`) none but in the tenth (claim N4).
+        # the probe twins (`hit`, `recent`) none but in the tenth (claim N4). Each `verify`
+        # passes `--no-prove`, so the counts are those of BFS's runs alone; the sample step
+        # below runs the proof, as a default `verify` does.
         run: |
-          for run in "verify samples/patent-ops --symmetry always" \
-                     "verify samples/clinic-ops --symmetry always" \
-                     "verify samples/formal-verification/quantifier_guard.rdra --symmetry always" \
-                     "verify samples/clinic-ops" \
+          for run in "verify --no-prove samples/patent-ops --symmetry always" \
+                     "verify --no-prove samples/clinic-ops --symmetry always" \
+                     "verify --no-prove samples/formal-verification/quantifier_guard.rdra --symmetry always" \
+                     "verify --no-prove samples/clinic-ops" \
                      "check samples/patent-ops" \
-                     "verify crates/rdra-ish-cli/tests/engine_corpus/safety_edge_free_cone.rdra" \
-                     "verify crates/rdra-ish-cli/tests/engine_corpus/sym_relink_loop.rdra --instances Ticket=1 --symmetry always" \
-                     "verify crates/rdra-ish-cli/tests/engine_corpus/presence_first_absent_asymmetry.rdra --symmetry always" \
-                     "verify crates/rdra-ish-cli/tests/engine_corpus/presence_along_key_moves.rdra --symmetry always"; do
+                     "verify --no-prove crates/rdra-ish-cli/tests/engine_corpus/safety_edge_free_cone.rdra" \
+                     "verify --no-prove crates/rdra-ish-cli/tests/engine_corpus/sym_relink_loop.rdra --instances Ticket=1 --symmetry always" \
+                     "verify --no-prove crates/rdra-ish-cli/tests/engine_corpus/presence_first_absent_asymmetry.rdra --symmetry always" \
+                     "verify --no-prove crates/rdra-ish-cli/tests/engine_corpus/presence_along_key_moves.rdra --symmetry always"; do
             RDRA_ISH_SHADOW_STATS=1 RDRA_ISH_FORCE_ORBITS=1 RDRA_ISH_FORCE_S_UP_TO_H=1 \
               target/ci-checked/rdra-ish $run 2>&1 >/dev/null \
               | grep '^shadow: compared/skipped/stopped ' >> shadow-stats.txt || true
@@ -431,7 +433,7 @@ jobs:
           # the test-only `RDRA_ISH_FORCE_PROBES`, which a release build never sets: this run
           # holds the probes (`hit`, `recent`) to their twins. The code they check is code a
           # release build does not run.
-          RDRA_ISH_SHADOW_STATS=1 RDRA_ISH_FORCE_PROBES=1 target/ci-checked/rdra-ish verify samples/clinic-ops 2>&1 >/dev/null \
+          RDRA_ISH_SHADOW_STATS=1 RDRA_ISH_FORCE_PROBES=1 target/ci-checked/rdra-ish verify --no-prove samples/clinic-ops 2>&1 >/dev/null \
             | grep '^shadow: compared/skipped/stopped ' >> shadow-stats.txt || true
           cat shadow-stats.txt
           test "$(wc -l < shadow-stats.txt)" -eq 10

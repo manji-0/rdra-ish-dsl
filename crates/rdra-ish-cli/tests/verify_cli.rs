@@ -4,7 +4,8 @@
 //! not TLC's.
 //!
 //! Without `tlc` on PATH each `--with-tlc` test is skipped with a printed reason;
-//! `RDRA_REQUIRE_TLC=1` turns the skip into a failure.
+//! `RDRA_REQUIRE_TLC=1` turns the skip into a failure. Every run here passes `--no-prove`, so
+//! it prints the same with z3 on PATH or not; `prove_cli` tests the proof.
 
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
@@ -54,7 +55,7 @@ fn verify_env(cwd: &Path, tmpdir: &Path, env: &[(&str, &str)], args: &[&str]) ->
         .env("PATH", &empty)
         .env_remove("RDRA_TLC_JAR")
         .envs(env.iter().copied())
-        .arg("verify")
+        .args(["verify", "--no-prove"])
         .args(args)
         .output()
         .expect("rdra-ish runs")
@@ -67,7 +68,7 @@ fn verify_on_path(cwd: &Path, tmpdir: &Path, path: &Path, args: &[&str]) -> Outp
         .env("TMPDIR", tmpdir)
         .env("PATH", path)
         .env_remove("RDRA_TLC_JAR")
-        .arg("verify")
+        .args(["verify", "--no-prove"])
         .args(args)
         .output()
         .expect("rdra-ish runs")
@@ -78,7 +79,7 @@ fn verify_with_tlc(cwd: &Path, tmpdir: &Path, args: &[&str]) -> Output {
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
         .current_dir(cwd)
         .env("TMPDIR", tmpdir)
-        .arg("verify")
+        .args(["verify", "--no-prove"])
         .arg("--with-tlc")
         .args(args)
         .output()
@@ -1731,6 +1732,7 @@ fn a_tlc_counterexample_that_does_not_replay_fails_the_run_as_a_tool_bug() {
         .env("PATH", path)
         .args([
             "verify",
+            "--no-prove",
             "--with-tlc",
             "--entity",
             "Order",

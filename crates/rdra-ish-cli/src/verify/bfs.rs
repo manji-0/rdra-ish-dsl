@@ -357,7 +357,7 @@ pub(super) enum BfsCone {
     /// The cone at this index of the jobs covers this one (`covering`) and passed.
     Covered(usize),
     /// BFS stopped at the memory limit after `states` states and before a violation, and
-    /// `--prove` proved every check of the cone for any number of rows (`decide_by_proof`).
+    /// the proof proved every check of the cone for any number of rows (`decide_by_proof`).
     Proved { states: usize },
 }
 
@@ -475,7 +475,7 @@ impl BfsCone {
         }
     }
 
-    /// The cone, decided by `--prove` when BFS stopped at the memory limit before a violation
+    /// The cone, decided by the proof when BFS stopped at the memory limit before a violation
     /// and every check of it is an invariant in `proved` (indices into `ts.invariants()`).
     /// The proof's encoding allows every step the explorer takes, at any number of rows and
     /// any Int value, so a rule it proves holds at verify's bounds too. An after-assert,
@@ -657,8 +657,7 @@ impl BfsCone {
                 Some(*states as u64),
                 &[
                     "BFS stopped at the memory limit".to_string(),
-                    "decided by proof: --prove proved every check for any number of rows"
-                        .to_string(),
+                    "decided by proof: z3 proved every check for any number of rows".to_string(),
                 ],
             ),
         }
@@ -666,7 +665,7 @@ impl BfsCone {
 }
 
 /// Each safety cone of `cones` that BFS left undecided at the memory limit, decided by the
-/// rules `--prove` proved (`BfsCone::decided_by_proof`).
+/// rules the proof proved (`BfsCone::decided_by_proof`).
 pub(super) fn decide_by_proof(
     ts: &TransitionSystem,
     jobs: &[Job],

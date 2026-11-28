@@ -21,8 +21,8 @@ Three engines read one transition system:
   `property`, each on its own cone. No JVM starts.
 - **TLC** runs only under `verify --with-tlc`, on the same cones and runs, as a second
   opinion. A check the two engines decide differently fails the run.
-- **z3** runs only under `verify --prove`. It tries to prove each state rule for any number
-  of rows.
+- **z3** runs under `verify` unless `--no-prove` turns it off. It tries to prove each
+  state rule for any number of rows. Without z3 the run prints a `note:` and skips the proof.
 
 Paths in the transcripts below are shortened to the repository root.
 
@@ -31,9 +31,9 @@ Paths in the transcripts below are shortened to the repository root.
 1. Model the lifecycle with `transitions`, `sets`, and entity rules.
 2. Run `rdra-ish check` for fast feedback: one instance per entity, safety only.
 3. Run `rdra-ish verify samples/formal-verification/order.rdra` to check every rule and
-   property at two instances.
-4. Add `--prove` to prove the state rules for any number of rows
-   ([Proofs for any number of rows](#proofs-for-any-number-of-rows)).
+   property at two instances, and to prove the state rules for any number of rows
+   ([Proofs for any number of rows](#proofs-for-any-number-of-rows)). The proof needs z3;
+   `nix develop` puts it on `PATH`.
 5. Add `--with-tlc` for a second opinion. `nix develop` puts `tlc` on `PATH`; other ways
    are in [Getting TLC](./cli-reference.md#getting-tlc).
 6. Run `rdra-ish export samples/formal-verification/order.rdra --kind tla -o /tmp/rdra-tla`
@@ -47,9 +47,9 @@ The agent skill `skills/rdra-ish-verify/` walks the same loop. Install it as
 | Command | Decides | Engine |
 |---|---|---|
 | `check`, `states` | Invariants, `after` assertions, witnesses, deadlocks, and use cases that never run, at one instance per entity. No `property`: `check` prints a `note:` that says to use `verify`. | native BFS |
-| `verify` | Every invariant, `after` assertion, and `property`, each on its own cone, and the state models of each entity cone, at two instances | native BFS |
-| `verify --with-tlc` | The same, with TLC on each cone and run beside it | native BFS and TLC |
-| `verify --prove` | Each state rule, for any number of rows and every Int range the model builds at | z3, beside the above |
+| `verify` | Every invariant, `after` assertion, and `property`, each on its own cone, and the state models of each entity cone, at two instances; and each state rule, for any number of rows and every Int range the model builds at | native BFS, and z3 for the proof |
+| `verify --no-prove` | The same, without the proof | native BFS |
+| `verify --with-tlc` | The same as `verify`, with TLC on each cone and run beside it | native BFS, z3 and TLC |
 | `export --kind tla` | Nothing. Writes `RdraSpec.tla` and `RdraSpec.cfg` for the whole model, and the `StateModel_<E>` specs, for a TLC run by hand | none |
 
 `--instance-count` (default 2 in `verify` and `export`, 1 in `check`) and `--int-range-max`
@@ -474,9 +474,10 @@ names. Which cones run, what breaks the symmetry, and `RDRA_ISH_SYMMETRY_STATS` 
 - **What the limit counts.** It counts the BFS state stores and, under `--with-tlc`, the TLC
   heaps, not the whole process (#237). The passes over a finished cone (liveness, `can_reach`,
   deadlocks, the reduction's partition), a growing run's spare buffers, and z3 are outside it,
-  and a run has been measured well past the limit. Under `--prove` each z3 process (one per
-  `RDRA_JOBS`) takes about 0.3 to 0.5 GiB more, beside BFS's passes and TLC, and holds one
-  of the cores the TLC runs are scheduled on. When cones stop at the limit, set `--memory` to
+  and a run has been measured well past the limit. Unless `--no-prove`, each z3 process (one
+  per `RDRA_JOBS`) takes more beside BFS's passes and TLC (29 to 63 MB each on the samples
+  at their `// expect` bounds, z3 5.1.0), and holds one of the cores the TLC runs are
+  scheduled on. When cones stop at the limit, set `--memory` to
   about half the memory you can spare ([Memory limit](./cli-reference.md#memory-limit)).
 - **A stopped entity cone gives back its room.** `verify` reads the findings of an entity
   cone that stopped at the limit at once, then frees what it held, so the cones after it can
@@ -515,10 +516,25 @@ The rules for each flag are in [Partial runs](./cli-reference.md#partial-runs).
 
 ## Proofs for any number of rows
 
-`verify --prove` is experimental. BFS and TLC check a fixed number of instances and an Int
-range with a top, so a rule that holds at two instances can break at three. `--prove` asks z3
-whether each state rule holds for **any** number of rows and **every** Int range the model
-builds at. It never finds a counterexample; the bounded engines do that.
+BFS and TLC check a fixed number of instances and an Int range with a top, so a rule that
+holds at two instances can break at three. `verify` also asks z3 whether each state rule
+holds for **any** number of rows and **every** Int range the model builds at. It never finds a
+counterexample; the bounded engines do that.
+
+**When the proof runs.** Every `verify` runs it, unless `--no-prove` turns it off:
+
+| Run | z3 found | z3 not found |
+|---|---|---|
+| `verify` | The proof runs | `note: z3 not found on PATH: the proof was skipped (...)` on stderr; the rest prints, and exits, as under `--no-prove` |
+| `verify --prove` | The proof runs (`--prove` changes nothing else) | Error, exit 1 |
+| `verify --deny-unproved` | The proof runs; an unproved rule fails the run | Error, exit 1 |
+| `verify --no-prove` | No proof; z3 is not looked for | No proof, no note |
+
+z3 is looked for as `--z3`, then `RDRA_Z3`, then `z3` on `PATH`; a `--z3` or `RDRA_Z3` that
+names no file is z3 not found. `--no-prove` with `--prove`, `--deny-unproved` or `--z3` is a
+usage error (exit 2). A z3 that is found but fails is an error, whatever the flags. A run
+that asks for the proof with `--prove` or `--deny-unproved` cannot pass unproved for want of
+z3, so CI that must prove should pass one of them.
 
 Every line that says a rule or lemma is proved, the `proof (...)` header, and the clause the
 `OK:` line ends with state the same claim, for example `for any number of rows and every
@@ -578,7 +594,7 @@ exploration costs proofs, not soundness. The lemmas a proof kept print as `lemma
 one that only the one-instance run offered ends in `(mined at 1 instance per entity)`:
 
 ```
-$ rdra-ish verify samples/formal-verification/order.rdra --prove
+$ rdra-ish verify samples/formal-verification/order.rdra
 ...
 proof (Z3 version 5.1.0 - 64 bit): 2 state rules, for any number of rows, in the whole model
 proved: Forbidden_Order_0 (for any number of rows, in the whole model)
@@ -598,7 +614,7 @@ state before holds the rule, every proved rule, and every kept lemma but need no
 reachable:
 
 ```
-$ rdra-ish verify samples/formal-verification/one_to_one_shared.rdra --prove --instance-count 1
+$ rdra-ish verify samples/formal-verification/one_to_one_shared.rdra --instance-count 1
 ...
 unproved: Unique_Shipment_Order: not inductive; Ship(Order#1, Shipment#1) breaks it from a state where it, every proved rule, and every kept lemma hold (not necessarily reachable)
   Order#1 (present) status=placed -> status=shipped
@@ -613,7 +629,7 @@ counts as `refuted` on the `proof:` line, and is BFS's error, not an unproved ru
 `--deny-unproved` does not count it:
 
 ```
-$ rdra-ish verify samples/formal-verification/one_to_one_shared.rdra --prove
+$ rdra-ish verify samples/formal-verification/one_to_one_shared.rdra
 ...
 refuted: Unique_Shipment_Order (BFS counterexample at 2 instances)
 proof: 0 proved, 0 unproved, 0 out of scope, 1 refuted
@@ -633,7 +649,7 @@ kept only when it is inductive with the rest, and `proved` means what it did. It
 model when the language states it (rows of distinct entities, columns, marks, and keys):
 
 ```
-$ rdra-ish verify crates/rdra-ish-cli/tests/engine_corpus/z3_cti_true_rule.rdra --prove
+$ rdra-ish verify crates/rdra-ish-cli/tests/engine_corpus/z3_cti_true_rule.rdra
 ...
 proved: MultiForbidden_Light_0 [not enforced by the SQL schema: several entities]
 ...
@@ -667,7 +683,7 @@ not of time: 20,000,000 for a rule, a `.lemma()` rule included, and 2,000,000 fo
 prover adds (helper, mined, or from a CTI). So the proof is the same on a
 busy machine and an idle one. A unit is z3's own count, so the limits hold for the z3 versions
 they were measured on: 5.1.0 today, the one `flake.nix` and `flake.lock` pin. Under any other
-version, or one whose `z3 --version` line it cannot read, `verify --prove` prints `note: z3
+version, or one whose `z3 --version` line it cannot read, `verify` prints `note: z3
 <version> is not a version the proof's resource limits were measured on (5.1.0); ...` on
 stderr. The version must match exactly, since a patch release can change what a check
 spends, and the note changes nothing else. The release test `proof_equivalence` meters every
@@ -695,17 +711,19 @@ breaks one from a state where all of them hold. A certificate that passes and ho
 any other costs that round, and the proof runs from the start. A cached verdict is never trusted, and the
 output is the same either way. The proof starts once BFS has decided the safety cones and runs beside the property
 and whole-model passes; its lines print where they would after them. Each z3 process takes
-about 0.3 to 0.5 GiB that `--memory` does not count
-([Memory, state caps, and threads](#memory-state-caps-and-threads)).
+memory that `--memory` does not count, 29 to 63 MB on the samples
+([Memory, state caps, and threads](#memory-state-caps-and-threads)). On the 43 runs of
+`scripts/verify-samples.sh` the proof takes the total from about 40 s to 85 s with an empty
+certificate cache, and 59 s with a warm one (`RDRA_JOBS=1`); `--no-prove` saves that.
 
-**What a proof changes.** `--prove` reads the state rules only, not `after` assertions or
+**What a proof changes.** The proof reads the state rules only, not `after` assertions or
 temporal properties. An invariant cone that BFS stopped at the memory limit before a violation
 reads `ok` when z3 proves every rule it checks, and counts as decided:
 
 ```
-$ rdra-ish verify samples/formal-verification/check_met.rdra --instance-count 4 --memory 1KiB --prove
+$ rdra-ish verify samples/formal-verification/check_met.rdra --instance-count 4 --memory 1KiB
 ...
-Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (16 states, BFS stopped at the memory limit, decided by proof: --prove proved every check for any number of rows)
+Cone_Forbidden_CartLine_0 [Forbidden_CartLine_0, Check_CartLine_qty_0]: ok (16 states, BFS stopped at the memory limit, decided by proof: z3 proved every check for any number of rows)
 ```
 
 A cone that also checks an `after` assertion, or a rule left unproved or out of scope, stays
@@ -787,8 +805,8 @@ says how to see it in a run and what to do. The
   A deleted slot is never reused. Every Int, Money, Decimal, Date, and DateTime column ranges
   over `0..5`, and `now` stops at the top. A literal or a numeric `@default` outside the
   range is the error `IntLiteralOutOfBounds`. See it: the `bounds:` line and the `OK:` line. What
-  to do: raise `--instance-count`, `--instances <Entity>=<n>`, or `--int-range-max`, or prove
-  the state rules with `--prove`.
+  to do: raise `--instance-count`, `--instances <Entity>=<n>`, or `--int-range-max`, and read
+  the `proved:` lines of `verify`, which hold for any number of rows.
 - **Events order by row; a latch counts no events.** A use case an event triggers runs only
   after a raise on its rows (#112). The record is a latch: after the first raise the handler
   runs as often as its guards allow, and a raiser never waits. `triggers(Ev, UC).counted(k)`
@@ -871,10 +889,10 @@ The canonical files are in `skills/rdra-ish-verify/samples/`. Each file stands a
 `samples/formal-verification/`.
 
 The second column gives `check`'s verdict, then the verdict of `verify`'s cones. A state with no
-witness or a deadlock fails both commands even where every cone passes. The `--prove` column
-counts the state rules proved. The `// expect` header of each file states the exit status.
+witness or a deadlock fails both commands even where every cone passes. The proof column
+counts the state rules `verify` proves. The `// expect` header of each file states the exit status.
 
-| Sample | `check`, `verify` cones | `--prove` | Focus |
+| Sample | `check`, `verify` cones | Proof | Focus |
 |---|---|---|---|
 | `order.rdra` | pass, pass | 2 of 2 | Invariants, `after` assertion, `leads_to` and `eventually` under `WF_vars(Next)` |
 | `int_stock.rdra` | pass, pass | 1 of 1 | Int columns, arithmetic `forbidden`, an Int temporal property |

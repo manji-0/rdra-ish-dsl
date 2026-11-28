@@ -25,10 +25,18 @@ fn project(test: &str, manifest: &str) -> PathBuf {
     dir
 }
 
+/// Runs `args`; a `verify` runs with `--no-prove`, since no test here is about the proof.
 fn run(cwd: &Path, args: &[&str]) -> Output {
+    let (command, rest) = args.split_first().expect("a command");
+    let no_prove: &[&str] = match *command {
+        "verify" => &["--no-prove"],
+        _ => &[],
+    };
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
         .current_dir(cwd)
-        .args(args)
+        .arg(command)
+        .args(no_prove)
+        .args(rest)
         .output()
         .expect("rdra-ish runs")
 }

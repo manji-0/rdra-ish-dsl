@@ -674,13 +674,19 @@ fn verify(case: &Case, extra: &[&str]) -> Observed {
 }
 
 fn verify_with(case: &Case, extra: &[&str], env: &[(&str, &str)]) -> Observed {
-    // Every proof runs its Houdini rounds: no certificate from an earlier run, or build.
+    // Every proof runs its Houdini rounds: no certificate from an earlier run, or build. A run
+    // the harness gives no `--prove` runs no proof.
+    let no_prove: &[&str] = match extra.contains(&"--prove") {
+        true => &[],
+        false => &["--no-prove"],
+    };
     let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
         .env("RDRA_ISH_NO_PROOF_CACHE", "1")
         .envs(env.iter().copied())
         .arg("verify")
         .arg(&case.path)
         .args(extra)
+        .args(no_prove)
         .args(&case.flags)
         .output()
         .expect("rdra-ish runs");
@@ -1687,7 +1693,7 @@ fn each_h_reason_a_case_shows_has_a_witness() {
         ("presence_first_absent_asymmetry", "Observed:input"),
     ] {
         let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
-            .args(["verify", "--symmetry", "always"])
+            .args(["verify", "--no-prove", "--symmetry", "always"])
             .arg(corpus_dir().join(format!("{case}.rdra")))
             .env("RDRA_ISH_FORCE_ORBITS", "1")
             .env("RDRA_ISH_FORCE_S_UP_TO_H", "1")
@@ -1766,7 +1772,14 @@ fn a_twin_that_skips_a_call_says_so() {
     let model = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../samples/formal-verification/check_met.rdra");
     let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
-        .args(["verify", "--instance-count", "7", "--symmetry", "always"])
+        .args([
+            "verify",
+            "--no-prove",
+            "--instance-count",
+            "7",
+            "--symmetry",
+            "always",
+        ])
         .arg(&model)
         .env("RDRA_ISH_FORCE_ORBITS", "1")
         .env_remove("RDRA_ISH_SHADOW_STATS")

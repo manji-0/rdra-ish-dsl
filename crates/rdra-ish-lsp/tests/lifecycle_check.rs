@@ -49,6 +49,32 @@ fn client(root: &Path) -> Client {
     )
 }
 
+/// A `z3` that records each call in the file the first path names, put first on `PATH` and
+/// named by `RDRA_Z3` in the environment the second holds: `verify` runs the proof by
+/// default, and the editor's check runs none, so nothing calls it.
+#[cfg(unix)]
+fn z3_spy(root: &Path) -> (std::path::PathBuf, Vec<(&'static str, std::ffi::OsString)>) {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = root.join(".z3-spy");
+    std::fs::create_dir_all(&dir).unwrap();
+    let called = dir.join("called");
+    let z3 = dir.join("z3");
+    std::fs::write(
+        &z3,
+        format!("#!/bin/sh\necho \"$@\" >> '{}'\nexit 3\n", called.display()),
+    )
+    .unwrap();
+    std::fs::set_permissions(&z3, std::fs::Permissions::from_mode(0o755)).unwrap();
+    let path = std::env::join_paths(std::iter::once(dir).chain(std::env::split_paths(
+        &std::env::var_os("PATH").unwrap_or_default(),
+    )))
+    .unwrap();
+    (
+        called,
+        vec![("PATH", path), ("RDRA_Z3", z3.into_os_string())],
+    )
+}
+
 /// The line index of the first line of `text` that contains `needle`.
 fn line_of(text: &str, needle: &str) -> u64 {
     text.lines()
@@ -105,7 +131,17 @@ fn a_broken_guard_shows_the_rule_it_breaks_with_its_lens() {
     let rules = std::fs::read_to_string(&entities).unwrap();
     let rule_a = line_of(&rules, "医師事務作業補助者が入力したオーダは");
     let text = std::fs::read_to_string(&orders).unwrap();
-    let mut client = client(&root);
+    // The check runs no proof: a z3 on PATH is never called (unix only).
+    #[cfg(unix)]
+    let (called, env) = z3_spy(&root);
+    #[cfg(not(unix))]
+    let env: Vec<(&str, std::ffi::OsString)> = Vec::new();
+    let env: Vec<(&str, &std::ffi::OsStr)> = env.iter().map(|(k, v)| (*k, v.as_os_str())).collect();
+    let mut client = Client::initialized_with_env(
+        &root,
+        json!({"lifecycleCheck": {"enabled": true, "timeBudgetMs": 60000, "quietMs": 50}}),
+        &env,
+    );
     client.open(&orders, &text);
     let first = wait_for_findings(&client, &entities, "the first check", |d| {
         finding(d, A).is_none()
@@ -142,6 +178,12 @@ fn a_broken_guard_shows_the_rule_it_breaks_with_its_lens() {
     assert_eq!(
         lens_at(&mut client, &entities, rule_a),
         "check: violated (1 instance)"
+    );
+    #[cfg(unix)]
+    assert!(
+        !called.exists(),
+        "the lifecycle check ran z3: {:?}",
+        std::fs::read_to_string(&called)
     );
 }
 

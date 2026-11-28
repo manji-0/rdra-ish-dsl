@@ -11,11 +11,19 @@ mod scratch;
 use root::repo;
 use scratch::scratch;
 
+/// Runs `args`; a `verify` runs with `--no-prove`, since no test here is about the proof.
 fn run(cwd: &Path, args: &[&str]) -> Output {
+    let (command, rest) = args.split_first().expect("a command");
+    let no_prove: &[&str] = match *command {
+        "verify" => &["--no-prove"],
+        _ => &[],
+    };
     Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
         .current_dir(cwd)
         .env("TMPDIR", Path::new(env!("CARGO_TARGET_TMPDIR")))
-        .args(args)
+        .arg(command)
+        .args(no_prove)
+        .args(rest)
         .output()
         .expect("rdra-ish runs")
 }
@@ -230,7 +238,14 @@ fn safety_and_property_passes_stop_where_they_stop_one_at_a_time() {
         let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
             .current_dir(&dir)
             .env("RDRA_JOBS", jobs)
-            .args(["verify", "--instance-count", "2", "--memory", memory])
+            .args([
+                "verify",
+                "--no-prove",
+                "--instance-count",
+                "2",
+                "--memory",
+                memory,
+            ])
             .arg(&model)
             .arg("-o")
             .arg(&spec)
@@ -259,7 +274,14 @@ fn a_stopped_entity_cone_leaves_its_room_on_any_number_of_threads() {
         let out = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
             .current_dir(repo())
             .env("RDRA_JOBS", jobs)
-            .args(["verify", "--memory", "1MiB", "samples/patent-ops", "-o"])
+            .args([
+                "verify",
+                "--no-prove",
+                "--memory",
+                "1MiB",
+                "samples/patent-ops",
+                "-o",
+            ])
             .arg(&spec)
             .output()
             .expect("rdra-ish runs");
@@ -292,7 +314,14 @@ fn shared_quotients_stop_no_cone_elsewhere_on_any_number_of_threads() {
             .current_dir(repo())
             .env("RDRA_JOBS", jobs)
             .env("RDRA_ISH_TEST_QUOTIENT_HITS", "1")
-            .args(["verify", "--memory", memory, "samples/patent-ops", "-o"])
+            .args([
+                "verify",
+                "--no-prove",
+                "--memory",
+                memory,
+                "samples/patent-ops",
+                "-o",
+            ])
             .arg(&spec);
         if !sharing {
             command.env("RDRA_ISH_NO_QUOTIENT_CACHE", "1");
@@ -599,6 +628,7 @@ fn tlc_runs(test: &str, memory: &str, env: &[(&str, &str)], oom_at: Option<&str>
         .env_remove("JAVA_TOOL_OPTIONS")
         .args([
             "verify",
+            "--no-prove",
             "--with-tlc",
             "--memory",
             memory,
@@ -731,7 +761,12 @@ fn the_tlc_knobs_fix_the_workers_and_the_runs_at_once() {
     std::fs::write(&model, THREE_CONES).unwrap();
     let output = Command::new(env!("CARGO_BIN_EXE_rdra-ish"))
         .env("RDRA_TLC_JOBS", "0")
-        .args(["verify", "--with-tlc", model.to_str().unwrap()])
+        .args([
+            "verify",
+            "--no-prove",
+            "--with-tlc",
+            model.to_str().unwrap(),
+        ])
         .output()
         .expect("rdra-ish runs");
     let stderr = String::from_utf8_lossy(&output.stderr);

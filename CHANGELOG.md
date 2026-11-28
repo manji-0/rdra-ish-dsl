@@ -213,6 +213,22 @@
 
 ### Changed
 
+- `verify` (behavior change): the proof for any number of rows runs by default, as `--prove`
+  ran it; it is no longer experimental in the help. A run prints the `proof (...)`,
+  `proved:` and `lemma:` lines, the `OK:` line gains `; N of M rules proved ...`, a rule the
+  proof leaves unproved is escalated (and fails the run on a counterexample at more
+  instances), an invariant cone stopped at the memory limit can be decided by the proof, and
+  the proof keeps its certificate under the user's cache directory. On the 43 runs of
+  `scripts/verify-samples.sh` the total time goes from about 40 s to 85 s with an empty
+  cache (59 s with a warm one); each z3 process takes 29 to 63 MB. Without z3 (`--z3` or
+  `RDRA_Z3` naming no file, or no `z3` on `PATH`) the run prints `note: z3 not found ...: the
+  proof was skipped`, and otherwise prints and exits as before. `--no-prove` keeps the old
+  behavior: no proof and no z3 lookup. `--prove` is accepted and changes only that a missing
+  z3 is an error (exit 1); `--deny-unproved` makes a missing z3 an error too, and neither it
+  nor `--z3` needs `--prove` any more. `--no-prove` with `--prove`, `--deny-unproved` or
+  `--z3` is a usage error. The message of a cone the proof decides reads `decided by proof:
+  z3 proved every check ...` (it named `--prove`). `check` and the editor's lifecycle check
+  run no proof.
 - `codegen` (output text only): the generated header, entry-point docs and skip reasons no
   longer carry plan words. The header says `Use cases with no function`, an entry point says
   the generator prints no function for its action (no `(#335)`), and reasons drop `(phase 5)`

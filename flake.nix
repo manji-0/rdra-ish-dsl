@@ -135,7 +135,7 @@
           ];
           # The workspace tests call python3, tlc, z3, tsc and go; CI runs them in the devShell.
           doCheck = false;
-          # `verify` runs tlc, and `verify --prove` runs z3, from PATH. Appended, so a tlc or z3
+          # `verify --with-tlc` runs tlc, and `verify` runs z3, from PATH. Appended, so a tlc or z3
           # the user already has comes first.
           nativeBuildInputs = [ pkgs.makeWrapper ];
           postInstall = ''
