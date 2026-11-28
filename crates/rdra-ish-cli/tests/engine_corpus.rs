@@ -1653,9 +1653,9 @@ fn tlc_refinement_with_stub_params_left_unbound() {
                 );
                 // TLC names a step by its action alone or with its parameters (`Note(1,1)`),
                 // depending on the version; the action is what the check is about.
-                let last = steps
-                    .last()
-                    .map_or(String::new(), |a| a.split('(').next().unwrap_or(a).to_string());
+                let last = steps.last().map_or(String::new(), |a| {
+                    a.split('(').next().unwrap_or(a).to_string()
+                });
                 caught.push((case.name.clone(), last));
             } else {
                 assert!(log.contains(TLC_NO_ERROR), "{}:\n{log}", m.label);

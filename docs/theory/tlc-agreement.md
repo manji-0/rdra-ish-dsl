@@ -625,6 +625,15 @@ therefore sees 45 random models per main run, the same 45 each time. The generat
 generator mode, `reduction-diff.py --counted` (`.counted(k)` with `k` of 1 or 2 on every
 `triggers` line), which no workflow passes.
 
+The first generator rarely draws a param on a stub (claims row
+[A8](./claims.md#a-cones-of-influence-and-reductions)): of the 522 pull-request seeds, one binds a
+fold's `Triggered` param on a stub and none a rise's; of the 45 main seeds, none. A second
+generator, `reduction-diff.py --stubs`, draws cones that reduce with a folded S action's
+`Triggered` param on a stub and a rise's `Parent`, `Existing` or `Triggered` param on one,
+nested reductions among them. Both workflows run 95 of its seeds without TLC, and the
+`shadow` job runs 30 of them with S up to `H`. The runs fail when fewer seeds than a floor
+reach each shape. No TLC run sees these models.
+
 ### The reduction, step by step
 
 <!-- derived-from ./cones.md#the-reduction-by-an-independent-sub-lifecycle -->

@@ -1,0 +1,8 @@
+name = "RdraIsh"
+defaultTargets = ["RdraIsh"]
+
+[leanOptions]
+autoImplicit = false
+
+[[lean_lib]]
+name = "RdraIsh"

@@ -5,7 +5,7 @@
 #   git diff --name-only HEAD^1 HEAD | scripts/verify-relevant.sh
 #
 # The list below names what cannot: prose, the editor and LSP, the Claude Code plugin, the code generators, the
-# diagram and data-layer exports, and the tests and fixtures of those. Anything not listed
+# diagram and data-layer exports, the Lean proofs, and the tests and fixtures of those. Anything not listed
 # counts as relevant, so a new file runs the checks until it is listed here. An empty
 # list prints `true`.
 set -euo pipefail
@@ -29,6 +29,7 @@ while IFS= read -r path; do
     .github/workflows/release.yml | .github/workflows/publish-pypi.yml) ;;
     .github/workflows/portability.yml | scripts/check-skill-snippets.py | pyproject.toml) ;;
     scripts/check-release-version.sh) ;;
+    proofs/lean/* | scripts/check-lean-proofs.sh) ;;
     .claude-plugin/* | plugins/*) ;;
     crates/rdra-ish-cli/tests/lsp_cli.rs | crates/rdra-ish-cli/tests/plugin_manifest.rs) ;;
     *) relevant=true ;;

@@ -52,8 +52,49 @@ pub(super) struct StubCheck {
     /// The params on a stub that `bind_stub_params` bound to any slot.
     #[cfg_attr(not(test), allow(dead_code))]
     pub(super) rebound: usize,
+    /// The same params by the kind of action and role, for `RDRA_ISH_REDUCTION_SHAPE_STATS`.
+    pub(super) shape: StubParams,
     /// The first param found that breaks the check.
     pub(super) fault: Option<StubParam>,
+}
+
+/// The params on a stub that `bind_stub_params` bound to any slot: a fold's key, a fold's
+/// other T params and a rise's params, the last two per role (`Existing`, `Parent`,
+/// `Triggered`). `RDRA_ISH_REDUCTION_SHAPE_STATS` prints them, so the differential test of the
+/// reduction (`scripts/reduction-diff.py`) shows its models reach these shapes.
+#[derive(Clone, Copy, Debug, Default)]
+pub(super) struct StubParams {
+    key: usize,
+    fold: [usize; 3],
+    rise: [usize; 3],
+}
+
+impl StubParams {
+    fn add(&mut self, key: bool, rise: bool, role: ParamRole) {
+        let at = match role {
+            ParamRole::Existing => 0,
+            ParamRole::Parent { .. } => 1,
+            _ => 2,
+        };
+        match (key, rise) {
+            (true, _) => self.key += 1,
+            (false, true) => self.rise[at] += 1,
+            (false, false) => self.fold[at] += 1,
+        }
+    }
+}
+
+impl std::fmt::Display for StubParams {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let [fe, fp, ft] = self.fold;
+        let [re, rp, rt] = self.rise;
+        write!(
+            f,
+            "key={} fold_existing={fe} fold_parent={fp} fold_triggered={ft} \
+             rise_existing={re} rise_parent={rp} rise_triggered={rt}",
+            self.key
+        )
+    }
 }
 
 /// A param on a stub that needs a present row of it, or that `bind_stub_params` would bind
@@ -490,6 +531,11 @@ fn bind_stub_params(
                 });
                 continue;
             }
+            let key = fold.is_some_and(|f| match f.key {
+                FoldKey::Param(key) => local(key).map(usize::from) == Some(p),
+                FoldKey::Linked { .. } => false,
+            });
+            out.shape.add(key, !s_actions.contains(&act), param.role);
             system.actions[k].params[p].role = ParamRole::Earlier { step: 0 };
             out.rebound += 1;
         }
