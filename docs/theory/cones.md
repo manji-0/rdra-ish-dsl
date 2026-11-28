@@ -1226,7 +1226,7 @@ leaves open.
 | A17 | — | none | M, D | |
 | A18 | Theorem A18 | full given (G1)–(G6) | M, D | (G6) outside guards rests on the evaluators' presence gates |
 | A19 | `DeletedRowOwner` | full (as the case (G5) removes) | D | |
-| A20, A21 | subgroup; canonical form | full given A18 (A21: checks invariant under `G_s`; annotated-quotient checks are A23) | D | ten reasons have no witness |
+| A20, A21 | subgroup; canonical form | full given A18 (A21: checks invariant under `G_s`; annotated-quotient checks are A23) | D | eleven reasons have no witness (four of `Observed`, seven of `Reduced`); ten are in `KEPT` |
 | A22, A23 | composition; annotated quotient | sketch | R, M, D | |
 | A24 | Proposition A24 | sketch | D | (1) for a safety cone stopped at a cap rests on the code path |
 | A25 | Proposition A25 | full given A28′, A8 | D: unit test, two CLI tests (with z3) | |
@@ -1349,9 +1349,9 @@ leaves open.
   `reduce/lift.rs::lift`, `explore/orbit.rs::lift_path`, the lasso lift
   `explore/orbit/liveness.rs::Product::lift`, `reduce/partition.rs::Succ::shortest_path` and
   `explore/properties.rs::ComponentRun::decide_property` report a broken invariant of their own
-  as a fault. What still panics in a release build on a lift's way is listed, with the reason
-  each holds or the assumption it rests on, in [native.md, "Counterexamples: what is checked
-  before printing"](./native.md#counterexamples-what-is-checked-before-printing): among them
+  as a fault. What still panics in a release build on a lift's way is listed in [native.md, "Counterexamples: what is checked before
+  printing"](./native.md#counterexamples-what-is-checked-before-printing), and the claims
+  inventory's list of panics left on a lift's way gives the reason each holds: among them
   `reduce/lift.rs::lift_stop`'s `expect`s about its caller and its walk's own graph, and the
   `expect`s of the extended sub-lifecycle that `lift` rebuilds and explores again, which hold if
   `Extended::rebuild` reproduces the build the reduction was made from, which is not checked. A

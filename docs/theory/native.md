@@ -185,8 +185,10 @@ for a fixed sequence it is the same on every machine and thread count. Kani prov
 `store_bytes` never overflows; that each of its terms only grows, from which `store_bytes`,
 a saturating sum of products of those terms, all at least 0, does too (the harness
 `store_bytes_only_grows` does not call `store_bytes` itself); and that without the lists of
-segments it is at most an earlier, simpler model of the store (the lists can make it count
-more at a power of two, as `store_bytes_is_at_most_the_model_before`'s comment says); the unit
+segments it never counts more than a simpler model that charges an 8-byte parent per state
+and a 12-byte edge in doubling `Vec`s (the lists, 24 bytes a slot past `2 * SEG` rows, can make
+it count more at a power of two, as `store_bytes_is_at_most_the_model_before`'s comment says);
+the unit
 test `store_bytes_models_the_store_a_run_counts` (main only) holds the model above what a run counts.
 The charge covers the state store only: the passes over a finished graph (liveness,
 `can_reach`, deadlocks, the partition) and the workers' scratch are outside it, as
@@ -498,20 +500,19 @@ By N1 and the definition of enabledness in D20 (some binding extending `κ` has 
 `≠ s`), `En(s)` on a complete `G` is the set of fair instances enabled at `s` in `T`, and a
 step `s → s'` with `s ≠ s'` takes every fair instance that labels an edge from `s` to `s'`.
 
-**Assumption τ (a step that changes nothing takes nothing).** D20 requires `s' ≠ s` for
-enabledness but not for *taken*: it says a fair instance is taken "by a step whose action is
-`a` and whose binding extends `κ`", and D13 allows such a step with `s' = s`. The code and the
-TLA+ output read *taken* as requiring a change of state: `fair_steps` keeps only edges with
-`from ≠ to`, and the printer's `WF_vars` takes `⟨A⟩_vars` steps only. This document adopts
-that reading as assumption τ, which D20 states. A second reading
-goes with it: D14's behaviors are sequences of states without action labels, so the code
-counts a step `s → s'` as taking every fair instance that labels some edge from `s` to `s'`
-(`En`, `Tk` above; `lasso.rs::unfair_loop` likewise), not only the instance of the action a
-behavior "used". This is the TLA+ reading (`⟨A⟩_vars` is a predicate on the pair of states)
-and is closer to it than D20's "a step whose action is `a`". Under D20 read
-literally, a behavior that stutters forever at a state where an instance `(a, κ)` has both a
-self-loop and a move to another state takes `(a, κ)` infinitely often on the self-loop and
-satisfies `Fair_P`, and the code does not count that state as a stop.
+**Assumption τ (a step that changes nothing takes nothing).** D20 counts a fair instance as
+taken only by a step `s → s'` with `s' ≠ s`, although D13 allows a step with `s' = s`. The code
+and the TLA+ output read it the same way: `fair_steps` keeps only edges with `from ≠ to`, and
+the printer's `WF_vars` takes `⟨A⟩_vars` steps only. This document names that clause
+assumption τ, because N9's (⇒) direction uses it twice. A second reading goes with it: D14's
+behaviors are sequences of states without action labels, so the code counts a step `s → s'`
+as taking every fair instance that labels some edge from `s` to `s'` (`En`, `Tk` above;
+`lasso.rs::unfair_loop` likewise), not only the instance of the action a behavior "used".
+This is the TLA+ reading (`⟨A⟩_vars` is a predicate on the pair of states); D20's wording, "a
+step whose action is `a`", is narrower. Without τ, a behavior that stutters forever at a state
+where an instance `(a, κ)` has both a self-loop and a move to another state would take `(a, κ)`
+infinitely often on the self-loop and satisfy `Fair_P`, while the code does not count that
+state as a stop.
 
 ### The check
 
@@ -666,8 +667,8 @@ Three consequences.
   finding is not decided again on them. The lifted start of a reduced trace is built from an
   initial S state of the start's class (a start with none is `ReplayError::NotInitial`) and is
   not itself checked against the unreduced cone's initial states. Some code holds invariants of
-  its own by release panics, listed here (the [claims inventory](./claims.md) gives the reason
-  each holds, in its list of panics left on a lift's way): `reduce/lift.rs::lift_stop`
+  its own by release panics, listed here (the [claims inventory](./claims.md), in its list of
+  panics left on a lift's way, gives the reason each holds or the assumption it rests on): `reduce/lift.rs::lift_stop`
   (`expect`s about its caller, a reduced cone, and its walk's own graph, marked in the code as unchecked invariants); in
   `explore/orbit/liveness.rs` `Product::new`'s permutations and the look-ups of the pair search
   before the lift (`lasso`, `thread_walk`, `walk_in`, `threads_covered`), and in
