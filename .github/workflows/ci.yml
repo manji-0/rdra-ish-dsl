@@ -34,7 +34,8 @@ jobs:
     # lock file and this workflow can. `codegen` says whether the change touches the codegen
     # printers, the subcommand, their tests, or the models the domain-sample differential
     # test reads (the five domain samples' .rdra files and samples.txt): `check` then runs
-    # the slow tests of the codegen_* binaries too.
+    # the slow tests of the codegen_* binaries too. `lean` says whether the change touches the
+    # Lean proofs, their check script or this workflow: the `lean` job then checks them.
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -46,6 +47,7 @@ jobs:
       code: ${{ steps.decide.outputs.code }}
       codegen: ${{ steps.decide.outputs.codegen }}
       nix: ${{ steps.decide.outputs.nix }}
+      lean: ${{ steps.decide.outputs.lean }}
     defaults:
       run:
         shell: bash
@@ -80,12 +82,14 @@ jobs:
             code=false
             codegen=false
             nix=false
+            lean=false
           elif [ "$EVENT" != pull_request ]; then
             verify=true
             kani=true
             code=true
             codegen=true
             nix=true
+            lean=true
           else
             git diff --name-only --no-renames HEAD^1 HEAD | tee changed.txt
             kani=$(scripts/kani-relevant.sh < changed.txt)
@@ -103,6 +107,11 @@ jobs:
             else
               codegen=false
             fi
+            if grep -qE '^proofs/lean/|^scripts/check-lean-proofs\.sh$|^\.github/workflows/ci\.yml$' changed.txt; then
+              lean=true
+            else
+              lean=false
+            fi
             if [ "$NO_VERIFY" = true ]; then
               verify=false
             else
@@ -115,6 +124,7 @@ jobs:
           echo "code=$code" | tee -a "$GITHUB_OUTPUT"
           echo "codegen=$codegen" | tee -a "$GITHUB_OUTPUT"
           echo "nix=$nix" | tee -a "$GITHUB_OUTPUT"
+          echo "lean=$lean" | tee -a "$GITHUB_OUTPUT"
 
   check:
     needs: changes
@@ -444,3 +454,28 @@ jobs:
           cargo kani setup
       - name: Prove the harnesses
         run: cargo kani -p rdra-ish-core
+
+  lean:
+    # The Lean proofs under proofs/lean (proofs/lean/README.md), when a change touches them,
+    # and on every run on main. elan is not in the devShell, so the job runs outside it; the
+    # cache holds elan and the toolchain proofs/lean/lean-toolchain pins, which lake installs
+    # on the first build. The proofs import nothing beyond Lean's core, and build in seconds.
+    needs: changes
+    if: needs.changes.outputs.lean == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v6
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.elan
+          key: elan-4.3.0-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('proofs/lean/lean-toolchain') }}
+      - name: Install elan
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: curl -sSfL https://raw.githubusercontent.com/leanprover/elan/v4.3.0/elan-init.sh | sh -s -- -y --default-toolchain none
+      - name: Build the proofs, with no sorry and no axiom of their own
+        run: PATH="$HOME/.elan/bin:$PATH" scripts/check-lean-proofs.sh
