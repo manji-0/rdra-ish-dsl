@@ -1,4 +1,5 @@
 import RdraIsh.SymmetryLiveness
+import RdraIsh.Actions
 
 /-!
 # Theorem A18 from (G1)–(G6) (cones.md, "Instance symmetry")
@@ -25,7 +26,7 @@ on the syntax of its actions, from which the commutation of Theorem A18 is deriv
   of the last effect in the list that writes it, and its old value when none does;
 - a step binds each parameter by its role (`candidate_slots`): `Existing`, `Parent` and
   `Triggered` a present slot, `New` the lowest absent slot, `Earlier` any slot; every choice
-  effect picks a value (`Bnd.pick`, by the effect's position).
+  effect picks a value (`Binding.choice`, by the effect's position).
 
 `W` (`BaseAbsent`) is the set of states in which every absent row holds the base value of
 each of its columns and owners. It holds the initial states, is closed under steps and under
@@ -57,6 +58,7 @@ syntax only as far as (G2) needs them; `Domain` sizes of data columns are not ch
 namespace RdraIsh.SymAct
 
 open LTS
+open Act (Role Param Binding Rows)
 
 /-- The existence of a slot (`Value::ABSENT`, `PRESENT`, `DELETED`). -/
 inductive Ex where
@@ -65,26 +67,12 @@ inductive Ex where
   | deleted
   deriving DecidableEq
 
-/-- A parameter's role (`ParamRole`). -/
-inductive Role where
-  | existing
-  | parent
-  | triggered
-  | new
-  | earlier
-  deriving DecidableEq
-
 /-- How a variable of a pre-existing row starts (`Start`). -/
 inductive Start where
   | base
   | any
   | identity
   deriving DecidableEq
-
-/-- A parameter: its entity and its role. -/
-structure Param (E : Type) where
-  ent : E
-  role : Role
 
 /-- Where a term reads (`At`). -/
 inductive Ref where
@@ -166,12 +154,6 @@ structure St (E C O : Type) where
 theorem St.ext' {E C O : Type} {s t : St E C O} (h1 : s.ex = t.ex) (h2 : s.col = t.col)
     (h3 : s.own = t.own) (h4 : s.now = t.now) : s = t := by
   cases s; cases t; cases h1; cases h2; cases h3; cases h4; rfl
-
-/-- A step's binding: the slot of each parameter and the value each choice effect picks, by
-the effect's position. -/
-structure Bnd where
-  slot : Nat → Nat
-  pick : Nat → Option Nat
 
 variable {K E C O A : Type}
 
@@ -338,7 +320,7 @@ end Sys
 /-! ## The semantics: terms, predicates, effects, steps -/
 
 /-- The entity of a parameter. -/
-def pent (ps : List (Param E)) (p : Nat) : Option E := (ps[p]?).map Param.ent
+def pent (ps : List (Param E)) (p : Nat) : Option E := (ps[p]?).map Param.entity
 
 /-- The entity of the row a reference names, under the parameters and the quantifiers'
 entities (innermost first). -/
@@ -402,24 +384,25 @@ def wnow (s : St E C O) : Eff C O → Option Nat
   | _ => none
 
 /-- Whether a choice's pick is one of its values. -/
-def pickOk (s : St E C O) (b : Bnd) (i : Nat) : Eff C O → Prop
-  | .chooseCol _ _ vs => ∃ v, b.pick i = some v ∧ v ∈ vs
-  | .chooseOwn _ _ vs => b.pick i ∈ vs
+def pickOk (s : St E C O) (b : Binding) (i : Nat) : Eff C O → Prop
+  | .chooseCol _ _ vs => ∃ v, b.choice i = some v ∧ v ∈ vs
+  | .chooseOwn _ _ vs => b.choice i ∈ vs
   | .trans c p arms => (tos arms (s.col c (b.slot p))).isEmpty = false →
-      ∃ v, b.pick i = some v ∧ v ∈ tos arms (s.col c (b.slot p))
+      ∃ v, b.choice i = some v ∧ v ∈ tos arms (s.col c (b.slot p))
   | _ => True
 
 /-- Every choice picks one of its values. -/
-def PicksOk (xs : List (Eff C O)) (s : St E C O) (b : Bnd) : Prop :=
+def PicksOk (xs : List (Eff C O)) (s : St E C O) (b : Binding) : Prop :=
   ∀ i x, xs[i]? = some x → pickOk s b i x
 
-/-- What a role binds (`ParamRole::binds_exists`, `candidate_slots`). -/
-def roleOk (s : St E C O) (e : E) (k : Nat) : Role → Prop
-  | .existing => s.ex e k = .present
-  | .parent => s.ex e k = .present
-  | .triggered => s.ex e k = .present
-  | .new => s.ex e k = .absent ∧ ∀ j < k, s.ex e j ≠ .absent
-  | .earlier => True
+/-- How a slot's existence holds its rows: the present slots, and the lowest absent one. -/
+def rows : Rows (Nat → Ex) where
+  present f k := f k = .present
+  lowestAbsent f k := f k = .absent ∧ ∀ j < k, f j ≠ .absent
+
+/-- What a role binds (`ParamRole::binds_exists`, `candidate_slots`): `Rows.cand`, the
+semantics Lemma 6's model gives `Role`, on the existence of the parameter's entity. -/
+def roleOk (s : St E C O) (e : E) (k : Nat) (r : Role) : Prop := rows.cand r (s.ex e) k
 
 namespace Sys
 
@@ -446,7 +429,7 @@ variable [DecidableEq E] [DecidableEq C] [DecidableEq O]
 
 /-- The column value an effect writes at `(c, k)`. A delete resets the columns `creset`
 names (every column but the run marks) and keeps the owners, (G5). -/
-def wcol (ps : List (Param E)) (b : Bnd) (s : St E C O) (i : Nat) (c : C) (k : Nat) :
+def wcol (ps : List (Param E)) (b : Binding) (s : St E C O) (i : Nat) (c : C) (k : Nat) :
     Eff C O → Option Nat
   | .delete p =>
       if S.creset c = true ∧ pent ps p = some (S.cent c) ∧ b.slot p = k then some (S.cbase c)
@@ -456,15 +439,15 @@ def wcol (ps : List (Param E)) (b : Bnd) (s : St E C O) (i : Nat) (c : C) (k : N
   | .copyCol c' p q =>
       if c' = c ∧ pent ps p = some (S.cent c) ∧ b.slot p = k then some (b.slot q) else none
   | .chooseCol c' p _ =>
-      if c' = c ∧ pent ps p = some (S.cent c) ∧ b.slot p = k then b.pick i else none
+      if c' = c ∧ pent ps p = some (S.cent c) ∧ b.slot p = k then b.choice i else none
   | .trans c' p arms =>
       if c' = c ∧ pent ps p = some (S.cent c) ∧ b.slot p = k then
-        (if (tos arms (s.col c (b.slot p))).isEmpty then none else b.pick i)
+        (if (tos arms (s.col c (b.slot p))).isEmpty then none else b.choice i)
       else none
   | _ => none
 
 /-- The owner value an effect writes at `(o, k)`. -/
-def wown (ps : List (Param E)) (b : Bnd) (i : Nat) (o : O) (k : Nat) :
+def wown (ps : List (Param E)) (b : Binding) (i : Nat) (o : O) (k : Nat) :
     Eff C O → Option (Option Nat)
   | .setOwn o' p q =>
       if o' = o ∧ pent ps p = some (S.child o) ∧ b.slot p = k then some (some (b.slot q))
@@ -472,11 +455,11 @@ def wown (ps : List (Param E)) (b : Bnd) (i : Nat) (o : O) (k : Nat) :
   | .setOwnLit o' p v =>
       if o' = o ∧ pent ps p = some (S.child o) ∧ b.slot p = k then some v else none
   | .chooseOwn o' p _ =>
-      if o' = o ∧ pent ps p = some (S.child o) ∧ b.slot p = k then some (b.pick i) else none
+      if o' = o ∧ pent ps p = some (S.child o) ∧ b.slot p = k then some (b.choice i) else none
   | _ => none
 
 /-- The successor of `s` under the action `a` with the binding `b`. -/
-def post (a : A) (b : Bnd) (s : St E C O) : St E C O where
+def post (a : A) (b : Binding) (s : St E C O) : St E C O where
   ex e k := (lastW (fun _ x => wex (S.params a) b.slot e k x) 0 (S.effs a)).getD (s.ex e k)
   col c k := (lastW (fun i x => S.wcol (S.params a) b s i c k x) 0 (S.effs a)).getD (s.col c k)
   own o k := (lastW (fun i x => S.wown (S.params a) b i o k x) 0 (S.effs a)).getD (s.own o k)
@@ -484,7 +467,7 @@ def post (a : A) (b : Bnd) (s : St E C O) : St E C O where
 
 /-- Every parameter is bound to a slot of its entity that its role admits. -/
 def BindOk (ps : List (Param E)) (b : Nat → Nat) (s : St E C O) : Prop :=
-  ∀ p q, ps[p]? = some q → b p < S.n (S.cls q.ent) ∧ roleOk s q.ent (b p) q.role
+  ∀ p q, ps[p]? = some q → b p < S.n (S.cls q.entity) ∧ roleOk s q.entity (b p) q.role
 
 /-- The values an owner of `o` takes: a parent slot, or `null` when it is optional. -/
 def ODom (o : O) : Option Nat → Prop
@@ -507,7 +490,7 @@ def Init (s : St E C O) : Prop :=
   s.now = 0
 
 /-- The cone system's step relation, labelled by the action and the binding. -/
-def lts : LTS (St E C O) (A × Bnd) where
+def lts : LTS (St E C O) (A × Binding) where
   init := S.Init
   step s l t := S.BindOk (S.params l.1) l.2.slot s ∧ PicksOk (S.effs l.1) s l.2 ∧
     (∀ φ ∈ S.guards l.1, S.eval s t l.2.slot [] φ = true) ∧ t = S.post l.1 l.2 s
@@ -520,7 +503,7 @@ def BaseAbsent (s : St E C O) : Prop :=
 /-- A binding under `g`: each parameter's slot moves by its class. -/
 def mvSlot (g : Perm S.n) (ps : List (Param E)) (b : Nat → Nat) (p : Nat) : Nat :=
   match ps[p]? with
-  | some q => g.f (S.cls q.ent) (b p)
+  | some q => g.f (S.cls q.entity) (b p)
   | none => b p
 
 /-- The picks under `g`: an owner choice's pick is relabelled. -/
@@ -531,8 +514,8 @@ def mvPick (g : Perm S.n) (xs : List (Eff C O)) (pk : Nat → Option Nat) (i : N
   | _ => pk i
 
 /-- A label under `g`: `g` maps the binding `p` to `g(p)`. -/
-def actL (g : Perm S.n) (l : A × Bnd) : A × Bnd :=
-  (l.1, ⟨S.mvSlot g (S.params l.1) l.2.slot, S.mvPick g (S.effs l.1) l.2.pick⟩)
+def actL (g : Perm S.n) (l : A × Binding) : A × Binding :=
+  (l.1, ⟨S.mvSlot g (S.params l.1) l.2.slot, S.mvPick g (S.effs l.1) l.2.choice⟩)
 
 /-! ## The hypotheses -/
 
@@ -579,8 +562,8 @@ action (`build/actions.rs`), and an `Earlier` parameter carries the run-mark con
 `mark = k` of `run_marks`, whose base (`none`) is not `k`. -/
 structure Built : Prop where
   new_create : ∀ a p q, (S.params a)[p]? = some q → q.role = .new → Eff.create p ∈ S.effs a
-  earlier_mark : ∀ a p q, (S.params a)[p]? = some q → q.role = .earlier →
-    ∃ m k, Pred.cmp (.col m (.param p)) .eq (.lit k) ∈ S.guards a ∧ S.cent m = q.ent ∧
+  earlier_mark : ∀ a p q st, (S.params a)[p]? = some q → q.role = .earlier st →
+    ∃ m k, Pred.cmp (.col m (.param p)) .eq (.lit k) ∈ S.guards a ∧ S.cent m = q.entity ∧
       S.cbase m ≠ k
 
 /-- The class of the rows a term names: an owner's parent, an index's entity. -/
@@ -638,10 +621,10 @@ def G6 (ps : List (Param E)) : Pred E C O → Prop
 `null`, a choice of an owner ranges over every row, and a data column is not written from a
 slot of a class that moves. Rules `OwnerLiteral`, `MixedIds`, `OwnerChoice`. -/
 def G2 (ps : List (Param E)) : Eff C O → Prop
-  | .setOwn o _ q => ∃ q', ps[q]? = some q' ∧ (S.cls q'.ent = S.cls (S.par o) ∨
-      (S.moves (S.cls (S.par o)) = false ∧ S.moves (S.cls q'.ent) = false))
+  | .setOwn o _ q => ∃ q', ps[q]? = some q' ∧ (S.cls q'.entity = S.cls (S.par o) ∨
+      (S.moves (S.cls (S.par o)) = false ∧ S.moves (S.cls q'.entity) = false))
   | .setOwnLit o _ v => v = none ∨ S.moves (S.cls (S.par o)) = false
-  | .copyCol _ _ q => ∃ q', ps[q]? = some q' ∧ S.moves (S.cls q'.ent) = false
+  | .copyCol _ _ q => ∃ q', ps[q]? = some q' ∧ S.moves (S.cls q'.entity) = false
   | .chooseOwn o _ vs => (∀ k < S.n (S.cls (S.par o)), some k ∈ vs) ∨
       S.moves (S.cls (S.par o)) = false
   | _ => True
@@ -733,7 +716,7 @@ theorem lastW_ne_none {f : Nat → Eff C O → Option β} :
 end LastW
 
 theorem pent_eq {ps : List (Param E)} {p : Nat} {e : E} :
-    pent ps p = some e ↔ ∃ q, ps[p]? = some q ∧ q.ent = e := by
+    pent ps p = some e ↔ ∃ q, ps[p]? = some q ∧ q.entity = e := by
   simp [pent, Option.map_eq_some_iff]
 
 theorem ite_and_congr {α : Type} {P u u' : Prop} [Decidable P] [Decidable u] [Decidable u']
@@ -771,7 +754,7 @@ theorem wex_ne_absent [DecidableEq E] {ps : List (Param E)} {sl : Nat → Nat} {
 
 theorem wex_some [DecidableEq E] {ps : List (Param E)} {sl : Nat → Nat} {e : E} {k : Nat}
     {x : Eff C O} {v : Ex} (h : wex ps sl e k x = some v) :
-    ∃ p q, ps[p]? = some q ∧ q.ent = e ∧ sl p = k ∧ (x = .create p ∨ x = .delete p) := by
+    ∃ p q, ps[p]? = some q ∧ q.entity = e ∧ sl p = k ∧ (x = .create p ∨ x = .delete p) := by
   cases x <;> simp only [wex] at h
   all_goals first
     | (cases h; done)
@@ -806,7 +789,7 @@ theorem rel_fix {s : St E C O} {g : Perm S.n} (hg : S.mem s g) {o : O}
   cases v <;> simp [rel, hg.1 _ _ h]
 
 theorem mvSlot_of {g : Perm S.n} {ps : List (Param E)} {sl : Nat → Nat} {p : Nat} {q : Param E}
-    (h : ps[p]? = some q) : S.mvSlot g ps sl p = g.f (S.cls q.ent) (sl p) := by
+    (h : ps[p]? = some q) : S.mvSlot g ps sl p = g.f (S.cls q.entity) (sl p) := by
   simp [mvSlot, h]
 
 theorem mvSlot_pent {g : Perm S.n} {ps : List (Param E)} {sl : Nat → Nat} {p : Nat} {e : E}
@@ -954,8 +937,8 @@ the pre-state may read an owner of is not absent in `s`, and every parameter's r
 absent in `t`. -/
 theorem eval_mv (g : Perm S.n) (s t : St E C O) (b : Nat → Nat) (hg : S.mem s g)
     (ps : List (Param E))
-    (hown : ∀ p q, ps[p]? = some q → q.role ≠ .new → s.ex q.ent (b p) ≠ .absent)
-    (hnext : ∀ p q, ps[p]? = some q → t.ex q.ent (b p) ≠ .absent) :
+    (hown : ∀ p q, ps[p]? = some q → q.role ≠ .new → s.ex q.entity (b p) ≠ .absent)
+    (hnext : ∀ p q, ps[p]? = some q → t.ex q.entity (b p) ≠ .absent) :
     ∀ (φ : Pred E C O) (ctx : List E) (env : List Nat), S.pwf ps ctx φ → S.G1 φ → G6 ps φ →
       env.length = ctx.length →
       (∀ (i : Nat) (e : E), ctx[i]? = some e → s.ex e ((env[i]?).getD 0) = .present) →
@@ -1077,9 +1060,9 @@ theorem eval_mv (g : Perm S.n) (s t : St E C O) (b : Nat → Nat) (hg : S.mem s 
 
 variable [DecidableEq E] [DecidableEq C] [DecidableEq O]
 
-theorem wcol_some {ps : List (Param E)} {b : Bnd} {s : St E C O} {i : Nat} {c : C} {k : Nat}
+theorem wcol_some {ps : List (Param E)} {b : Binding} {s : St E C O} {i : Nat} {c : C} {k : Nat}
     {x : Eff C O} {v : Nat} (h : S.wcol ps b s i c k x = some v) :
-    ∃ p q, ps[p]? = some q ∧ q.ent = S.cent c ∧ b.slot p = k := by
+    ∃ p q, ps[p]? = some q ∧ q.entity = S.cent c ∧ b.slot p = k := by
   cases x <;> simp only [wcol] at h
   all_goals first
     | (cases h; done)
@@ -1089,9 +1072,9 @@ theorem wcol_some {ps : List (Param E)} {b : Bnd} {s : St E C O} {i : Nat} {c : 
          exact ⟨_, q, hq, he, hc.2.2⟩
        · cases h)
 
-theorem wown_some {ps : List (Param E)} {b : Bnd} {i : Nat} {o : O} {k : Nat}
+theorem wown_some {ps : List (Param E)} {b : Binding} {i : Nat} {o : O} {k : Nat}
     {x : Eff C O} {v : Option Nat} (h : S.wown ps b i o k x = some v) :
-    ∃ p q, ps[p]? = some q ∧ q.ent = S.child o ∧ b.slot p = k := by
+    ∃ p q, ps[p]? = some q ∧ q.entity = S.child o ∧ b.slot p = k := by
   cases x <;> simp only [wown] at h
   all_goals first
     | (cases h; done)
@@ -1107,7 +1090,7 @@ theorem wex_mv (g : Perm S.n) (ps : List (Param E)) (sl : Nat → Nat) (e : E) (
   cases x <;> simp only [wex, hit_mv]
 
 /-- A column write commutes with `g`, by (G2) for a column written from a slot. -/
-theorem wcol_mv {s : St E C O} {g : Perm S.n} (hg : S.mem s g) {a : A} {b : Bnd} {i : Nat}
+theorem wcol_mv {s : St E C O} {g : Perm S.n} (hg : S.mem s g) {a : A} {b : Binding} {i : Nat}
     {x : Eff C O} (hx : (S.effs a)[i]? = some x) (h2 : S.G2 (S.params a) x)
     (hw : S.ewf (S.params a) x) (c : C) (k : Nat) :
     S.wcol (S.params a) (S.actL g (a, b)).2 (S.act g s) i c (g.f (S.cls (S.cent c)) k) x =
@@ -1128,7 +1111,7 @@ theorem wcol_mv {s : St E C O} {g : Perm S.n} (hg : S.mem s g) {a : A} {b : Bnd}
   | chooseCol c' p vs =>
     simp only [wcol]
     exact ite_and_congr (hit_mv k) (fun _ _ => by
-      show S.mvPick g (S.effs a) b.pick i = b.pick i
+      show S.mvPick g (S.effs a) b.choice i = b.choice i
       simp [mvPick, hx])
   | trans c' p arms =>
     simp only [wcol]
@@ -1136,9 +1119,9 @@ theorem wcol_mv {s : St E C O} {g : Perm S.n} (hg : S.mem s g) {a : A} {b : Bnd}
       subst hc
       have h1 : (S.act g s).col c' (S.mvSlot g (S.params a) b.slot p) = s.col c' (b.slot p) := by
         rw [mvSlot_pent hw, act_col]
-      have h2' : S.mvPick g (S.effs a) b.pick i = b.pick i := by simp [mvPick, hx]
+      have h2' : S.mvPick g (S.effs a) b.choice i = b.choice i := by simp [mvPick, hx]
       show (if (tos arms ((S.act g s).col c' (S.mvSlot g (S.params a) b.slot p))).isEmpty
-          then none else S.mvPick g (S.effs a) b.pick i) = _
+          then none else S.mvPick g (S.effs a) b.choice i) = _
       rw [h1, h2'])
   | create p => rfl
   | setOwn o p q => rfl
@@ -1148,7 +1131,7 @@ theorem wcol_mv {s : St E C O} {g : Perm S.n} (hg : S.mem s g) {a : A} {b : Bnd}
 
 /-- An owner write commutes with `g`, relabelled: by (G2), an owner is written from a slot of
 its parent's class, from `null`, or by a choice over every row. -/
-theorem wown_mv {s : St E C O} {g : Perm S.n} (hg : S.mem s g) {a : A} {b : Bnd} {i : Nat}
+theorem wown_mv {s : St E C O} {g : Perm S.n} (hg : S.mem s g) {a : A} {b : Binding} {i : Nat}
     {x : Eff C O} (hx : (S.effs a)[i]? = some x) (h2 : S.G2 (S.params a) x) (o : O) (k : Nat) :
     S.wown (S.params a) (S.actL g (a, b)).2 i o (g.f (S.cls (S.child o)) k) x =
       (S.wown (S.params a) b i o k x).map (S.rel g o) := by
@@ -1178,7 +1161,7 @@ theorem wown_mv {s : St E C O} {g : Perm S.n} (hg : S.mem s g) {a : A} {b : Bnd}
     rw [map_ite_some]
     exact ite_and_congr (hit_mv k) (fun ho _ => by
       subst ho
-      show some (S.mvPick g (S.effs a) b.pick i) = _
+      show some (S.mvPick g (S.effs a) b.choice i) = _
       simp [mvPick, hx])
   | create p => rfl
   | delete p => rfl
@@ -1192,7 +1175,7 @@ theorem wown_mv {s : St E C O} {g : Perm S.n} (hg : S.mem s g) {a : A} {b : Bnd}
 
 section Step
 
-variable {a : A} {b : Bnd} {s : St E C O}
+variable {a : A} {b : Binding} {s : St E C O}
 
 theorem post_ex_absent {e : E} {k : Nat} (h : (S.post a b s).ex e k = .absent) :
     s.ex e k = .absent ∧ lastW (fun _ x => wex (S.params a) b.slot e k x) 0 (S.effs a) = none := by
@@ -1214,39 +1197,39 @@ theorem post_ex_ne {e : E} {k : Nat} (h : s.ex e k ≠ .absent) : (S.post a b s)
 theorem bound_nonabsent {t : St E C O} (hb : S.Built) (hW : S.BaseAbsent s)
     (hB : S.BindOk (S.params a) b.slot s) (hGd : ∀ φ ∈ S.guards a, S.eval s t b.slot [] φ = true)
     {p : Nat} {q : Param E} (hq : (S.params a)[p]? = some q) (hr : q.role ≠ .new) :
-    s.ex q.ent (b.slot p) ≠ .absent := by
+    s.ex q.entity (b.slot p) ≠ .absent := by
   have hok := (hB p q hq).2
   intro habs
   cases hrole : q.role with
   | new => exact hr hrole
-  | earlier =>
-    obtain ⟨m, k, hm, hent, hbase⟩ := hb.earlier_mark a p q hq hrole
+  | earlier st =>
+    obtain ⟨m, k, hm, hent, hbase⟩ := hb.earlier_mark a p q st hq hrole
     have h1 : decide (some (s.col m (b.slot p)) = some k) = true := hGd _ hm
     have h1' : s.col m (b.slot p) = k := by simpa using h1
     have h2 := hW.1 m (b.slot p) (by rw [hent]; exact habs)
     exact hbase (by rw [← h2]; exact h1')
   | existing =>
     rw [hrole] at hok
-    have : s.ex q.ent (b.slot p) = .present := hok
+    have : s.ex q.entity (b.slot p) = .present := hok
     rw [habs] at this; cases this
   | parent =>
     rw [hrole] at hok
-    have : s.ex q.ent (b.slot p) = .present := hok
+    have : s.ex q.entity (b.slot p) = .present := hok
     rw [habs] at this; cases this
   | triggered =>
     rw [hrole] at hok
-    have : s.ex q.ent (b.slot p) = .present := hok
+    have : s.ex q.entity (b.slot p) = .present := hok
     rw [habs] at this; cases this
 
 /-- After the step, no parameter's row is absent: a `New` row is created. -/
 theorem post_bound_nonabsent {t : St E C O} (hb : S.Built) (hW : S.BaseAbsent s)
     (hB : S.BindOk (S.params a) b.slot s) (hGd : ∀ φ ∈ S.guards a, S.eval s t b.slot [] φ = true)
     {p : Nat} {q : Param E} (hq : (S.params a)[p]? = some q) :
-    (S.post a b s).ex q.ent (b.slot p) ≠ .absent := by
+    (S.post a b s).ex q.entity (b.slot p) ≠ .absent := by
   by_cases hr : q.role = .new
   · intro h
     obtain ⟨i, hi⟩ := List.mem_iff_getElem?.1 (hb.new_create a p q hq hr)
-    have := lastW_ne_none (f := fun _ x => wex (S.params a) b.slot q.ent (b.slot p) x)
+    have := lastW_ne_none (f := fun _ x => wex (S.params a) b.slot q.entity (b.slot p) x)
       (S.effs a) 0 i hi (by simp [wex, pent, hq])
     exact this (post_ex_absent h).2
   · exact post_ex_ne (bound_nonabsent hb hW hB hGd hq hr)
@@ -1330,7 +1313,7 @@ end Step
 
 /-- **Theorem A18, the commutation**: under well-typedness, the builder's invariants, and
 (G1)–(G4) and (G6), a step from a state of `W` commutes with every `g ∈ G_s`. -/
-theorem step_comm (hwf : S.WF) (hb : S.Built) (hH : S.Hyp) {s t : St E C O} {l : A × Bnd}
+theorem step_comm (hwf : S.WF) (hb : S.Built) (hH : S.Hyp) {s t : St E C O} {l : A × Binding}
     {g : Perm S.n} (hW : S.BaseAbsent s) (hst : S.lts.step s l t) (hg : S.mem s g) :
     S.lts.step (S.act g s) (S.actL g l) (S.act g t) := by
   obtain ⟨a, b⟩ := l
@@ -1340,25 +1323,25 @@ theorem step_comm (hwf : S.WF) (hb : S.Built) (hH : S.Hyp) {s t : St E C O} {l :
   have hpost := post_comm hwf hb hH hW hg hB hGd
   refine ⟨?_, ?_, ?_, hpost.symm⟩
   · intro p q hq
-    have hmv : S.mvSlot g (S.params a) b.slot p = g.f (S.cls q.ent) (b.slot p) := mvSlot_of hq
+    have hmv : S.mvSlot g (S.params a) b.slot p = g.f (S.cls q.entity) (b.slot p) := mvSlot_of hq
     obtain ⟨hlt, hrole⟩ := hB p q hq
-    have key : ∀ r, roleOk s q.ent (b.slot p) r →
-        roleOk (S.act g s) q.ent (g.f (S.cls q.ent) (b.slot p)) r := by
+    have key : ∀ r, roleOk s q.entity (b.slot p) r →
+        roleOk (S.act g s) q.entity (g.f (S.cls q.entity) (b.slot p)) r := by
       intro r h
       cases r with
-      | existing => exact (act_ex S g s q.ent (b.slot p)).trans h
-      | parent => exact (act_ex S g s q.ent (b.slot p)).trans h
-      | triggered => exact (act_ex S g s q.ent (b.slot p)).trans h
+      | existing => exact (act_ex S g s q.entity (b.slot p)).trans h
+      | parent => exact (act_ex S g s q.entity (b.slot p)).trans h
+      | triggered => exact (act_ex S g s q.entity (b.slot p)).trans h
       | new =>
         obtain ⟨habs, hlow⟩ := h
         rw [hg.2 _ _ habs]
         exact And.intro ((act_absent_iff S hg _ _).2 habs)
           (fun j hj => by rw [Ne, act_absent_iff S hg]; exact hlow j hj)
-      | earlier => trivial
+      | earlier _ => trivial
     refine ⟨?_, ?_⟩
     · show S.mvSlot g (S.params a) b.slot p < _
       rw [hmv]; exact g.f_lt hlt
-    · show roleOk (S.act g s) q.ent (S.mvSlot g (S.params a) b.slot p) q.role
+    · show roleOk (S.act g s) q.entity (S.mvSlot g (S.params a) b.slot p) q.role
       rw [hmv]; exact key _ hrole
   · intro i x hx
     change (S.effs a)[i]? = some x at hx
@@ -1367,16 +1350,16 @@ theorem step_comm (hwf : S.WF) (hb : S.Built) (hH : S.Hyp) {s t : St E C O} {l :
     have hpk := hP i x hx
     cases x
     case chooseCol c p vs =>
-      have : S.mvPick g (S.effs a) b.pick i = b.pick i := by simp [mvPick, hx]
-      show ∃ v, S.mvPick g (S.effs a) b.pick i = some v ∧ v ∈ vs
+      have : S.mvPick g (S.effs a) b.choice i = b.choice i := by simp [mvPick, hx]
+      show ∃ v, S.mvPick g (S.effs a) b.choice i = some v ∧ v ∈ vs
       rw [this]; exact hpk
     case chooseOwn o p vs =>
-      have : S.mvPick g (S.effs a) b.pick i = S.rel g o (b.pick i) := by simp [mvPick, hx]
-      show S.mvPick g (S.effs a) b.pick i ∈ vs
+      have : S.mvPick g (S.effs a) b.choice i = S.rel g o (b.choice i) := by simp [mvPick, hx]
+      show S.mvPick g (S.effs a) b.choice i ∈ vs
       rw [this]
-      have hpk : b.pick i ∈ vs := hpk
+      have hpk : b.choice i ∈ vs := hpk
       rcases h2 with hall | hfix
-      · cases hv : b.pick i with
+      · cases hv : b.choice i with
         | none => rw [hv] at hpk; exact hpk
         | some k =>
           simp only [rel, Option.map_some]
@@ -1387,9 +1370,9 @@ theorem step_comm (hwf : S.WF) (hb : S.Built) (hH : S.Hyp) {s t : St E C O} {l :
     case trans c p arms =>
       have h1 : (S.act g s).col c (S.mvSlot g (S.params a) b.slot p) = s.col c (b.slot p) := by
         rw [mvSlot_pent hw, act_col]
-      have h1' : S.mvPick g (S.effs a) b.pick i = b.pick i := by simp [mvPick, hx]
+      have h1' : S.mvPick g (S.effs a) b.choice i = b.choice i := by simp [mvPick, hx]
       show (tos arms ((S.act g s).col c (S.mvSlot g (S.params a) b.slot p))).isEmpty = false →
-        ∃ v, S.mvPick g (S.effs a) b.pick i = some v ∧
+        ∃ v, S.mvPick g (S.effs a) b.choice i = some v ∧
           v ∈ tos arms ((S.act g s).col c (S.mvSlot g (S.params a) b.slot p))
       rw [h1, h1']; exact hpk
     all_goals trivial
@@ -1401,14 +1384,14 @@ theorem step_comm (hwf : S.WF) (hb : S.Built) (hH : S.Hyp) {s t : St E C O} {l :
     exact this.trans (hGd φ hφ)
 
 /-- A step keeps `g ∈ G_s`: a slot leaves `absent` only. This holds on every state. -/
-theorem mem_step {s t : St E C O} {l : A × Bnd} {g : Perm S.n} (hst : S.lts.step s l t)
+theorem mem_step {s t : St E C O} {l : A × Binding} {g : Perm S.n} (hst : S.lts.step s l t)
     (hg : S.mem s g) : S.mem t g := by
   obtain ⟨a, b⟩ := l
   obtain ⟨_, _, _, rfl⟩ := hst
   exact ⟨hg.1, fun e k h => hg.2 e k (post_ex_absent h).1⟩
 
 /-- `W` is closed under steps: a step writes only rows that are present after it. -/
-theorem W_step (hb : S.Built) {s t : St E C O} {l : A × Bnd} (hW : S.BaseAbsent s)
+theorem W_step (hb : S.Built) {s t : St E C O} {l : A × Binding} (hW : S.BaseAbsent s)
     (hst : S.lts.step s l t) : S.BaseAbsent t := by
   obtain ⟨a, b⟩ := l
   obtain ⟨hB, _, hGd, rfl⟩ := hst

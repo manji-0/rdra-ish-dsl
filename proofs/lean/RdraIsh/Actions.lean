@@ -42,16 +42,56 @@ inductive Role where
   | earlier (step : Nat)
   deriving DecidableEq
 
+/-- The roles whose binding needs a present row (`binds_exists() == PRESENT`). -/
+def Role.needsPresent : Role → Bool
+  | .existing | .parent | .triggered => true
+  | _ => false
+
+/-- The roles whose binding reads the entity's existence (all but `earlier`). -/
+def Role.readsRow : Role → Bool
+  | .earlier _ => false
+  | _ => true
+
+theorem Role.readsRow_of_needsPresent {r : Role} (h : r.needsPresent = true) :
+    r.readsRow = true := by
+  cases r <;> simp_all [Role.needsPresent, Role.readsRow]
+
+section Rows
+
+variable {Val : Type}
+
+/-- How an existence value holds its rows: which slots are present, and which slot is the
+lowest absent one. The semantics of `Role` is `Rows.cand`: Lemma 6's model reads it through
+an `Rows` of its valuations, and the slot model of `SymActions.lean` through `SymAct.rows`. -/
+structure Rows (Val : Type) where
+  present : Val → Nat → Prop
+  lowestAbsent : Val → Nat → Prop
+
+/-- `candidate_slots`: the slots a parameter of a role may bind, given its entity's existence. -/
+def Rows.cand (R : Rows Val) : Role → Val → Nat → Prop
+  | .existing, v, c => R.present v c
+  | .parent, v, c => R.present v c
+  | .triggered, v, c => R.present v c
+  | .new, v, c => R.lowestAbsent v c
+  | .earlier _, _, _ => True
+
+theorem Rows.cand_present (R : Rows Val) {r : Role} (h : r.needsPresent = true) (v : Val)
+    (c : Nat) : R.cand r v c ↔ R.present v c := by
+  cases r <;> simp_all [Role.needsPresent, Rows.cand]
+
+end Rows
+
 /-- A parameter: its entity and its role. -/
 structure Param (E : Type) where
   entity : E
   role : Role
 
 /-- A binding of a step: the slot of each parameter, by position, and the value each choice
-effect picks, by position. Which bindings a step may take is part of the guard. -/
+effect picks, by position (`none` is `null`, which an owner choice may pick). Which bindings a
+step may take is part of the guard. -/
 structure Binding where
   slot : Nat → Nat
-  choice : Nat → Nat
+  choice : Nat → Option Nat
 
 /-- A guard conjunct: the variables it reads and the condition. -/
 structure Conj (V Val : Type) where

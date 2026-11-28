@@ -62,7 +62,7 @@ def s : St Bool Empty Unit where
   now := 0
 
 /-- The binding of order 0. -/
-def b : Bnd := ⟨fun _ => 0, fun _ => none⟩
+def b : Act.Binding := ⟨fun _ => 0, fun _ => none⟩
 
 theorem wf : S.WF where
   guards _ φ h := by simp [S] at h
@@ -78,7 +78,7 @@ theorem built : S.Built where
       | zero => rfl
       | succ p => simp [S] at hq
     subst this; simp [S]
-  earlier_mark a p q hq hr := by
+  earlier_mark a p q _ hq hr := by
     cases p with
     | zero =>
       simp only [S, List.getElem?_cons_zero, Option.some.injEq] at hq
