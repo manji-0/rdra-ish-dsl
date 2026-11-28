@@ -53,7 +53,7 @@ implementation gives a wrong verdict that nothing in the run sees.
 |---|---|---|---|---|---|---|
 | C1 | A8 (A5, A6, A10, A11, A15) | `Lemma6Hyp` syntactic fields: `kept_rd`, `folded_og`, `folded_names`, `other_names`, `eff_names`, `cover` (the "names" half), `eff_s`, `rise_eff`; and, outside the Lean model, `X`'s initial states are `C`'s projections and each bit starts where `C` starts (`fold_initial`) | `restrict.rs::restrict_to`; `reduce/fold.rs::TransitionSystem::fold_of` (`s_keys`, `touched_t`), `::fold_initial`; `reduce/extended.rs::Extended::build` | read; D via `lemma6.rs::check` on test cones | yes: a kept guard reading `T`, an effect naming a free `T` param, or a wrong start makes `X` lose steps or states, giving a wrong `ok` | D |
 | C2 | A8 `exact`, A11 | `holds_fast` computes the bit `holdsB` (step (a)); node folds and bit groups are on paper | `fold.rs::Fold::holds`, `::holds_fast`, `::as_node`, `::strip_links`, `push_bits` | K (one action, small bounds); debug/shadow twin `fold/reference.rs` | yes: a bit that is false where it should be true drops an `S` step, giving a wrong `ok` | D |
-| C3 | A8 (`local_`, `shape`, `new_writes`), A18 (`Built`, `WF`) | the code's actions are in the slot syntax of `SymActModel.lean`; `candidate_slots` filters by role first; a `New` row has its `Create`; an `Earlier` param has a run-mark conjunct; every term reads its own entity's row | `build/actions.rs`; `explore/moves.rs::candidate_slots`; `types.rs::Action`, `Pred`, `Effect` | read; M on the model | yes, but only through other points: if the syntax is wrong, the Lean theorems do not apply | D |
+| C3 | A8 (`local_`, `shape`, `new_writes`), A18 (`Built`, `WF`) | the code's actions are in the slot syntax of `SymActModel.lean`; `candidate_slots` filters by role first; a `New` row has its `Create`; an `Earlier` param has a run-mark conjunct; every term reads its own entity's row | `build/actions.rs`; `explore/moves.rs::candidate_slots`; `types.rs::Action`, `Pred`, `Effect` | **R (1c): `build/syntax.rs::TransitionSystem::slot_syntax_faults`** (`WF`, `Built`, the roles' `Rows.cand`); M on the model; `candidate_slots`' order read | yes, but only through other points: if the syntax is wrong, the Lean theorems do not apply | D |
 | C4 | A1, B6, `Local` (2) | a step changes only `Wr(a)` | `explore/plan.rs::check_writes`, `Plan::writes`; `moves.rs::each_successor`; `cone.rs::action_writes` | M in debug/shadow only (`Twin::Writes`); release unchecked | yes: an unlisted write lets a cone drop a writer, giving a wrong `ok` | D, P (step pruning) |
 | C5 | `Local` (3) | what a step writes is a function of `Rd(a) ∪ Wr(a)` | `each_successor`, `Plan` | read; no harness (Kani on `each_successor` did not finish) | yes | D |
 | C6 | A10 | the guards give `Pre` at each step; `Monotone.lean`'s write graph is not joined to the action model; `split.rs::acyclic` decides `Acyclic` | `split.rs::monotone_vars`, `::acyclic`; `narrow.rs`; `Reduction::rises_from` | read; R checks 5(d) statically, but with `monotone_vars` itself | yes: a non-monotone input breaks the quotient (wrong `ok`) | D |
@@ -61,7 +61,7 @@ implementation gives a wrong verdict that nothing in the run sees.
 | C8 | A12, A3 | no counter is an input; a counted mark keeps its raiser and handler out of `S` | `split.rs::split_at`, `::monotone_vars`; `cone.rs::plain_reads`; `build/events.rs::count_up`, `::count_down` | P-full by reading; M (`Split.lean`) | yes, in principle | D |
 | C9 | A2 | `Trace::free_triggers` lists every step that runs an action reading a mark outside the cone; the exact cone's counterexample is vouched for | `trace.rs::free_triggers`, `::vouched`; `targets.rs::recheck_on`; `cone.rs::exact_target_cone` | **Done (1a):** TV + R, `vouch.rs` | **yes: a spurious counterexample prints as real**; replay inside the cone cannot see it | D |
 | C10 | A16 | the lifted start is an initial state of the unreduced cone | `explore/graph.rs::ComponentRun::lifted_path`; `reduce/lift.rs::lift` | **Done (1a):** R, `vouch.rs::lifted_start` | partly: the trace replays from a non-initial state | D |
-| C11 | residual risk 1 | the cone choice: the closure under Lemma 2, with its documented exceptions (a latch read inexactly stays out and its guards are dropped; existence vars join without their columns) | `cone.rs::cone`, `::target_cone`, `::property_cone`, `::keep_writers`, `::reach_seed`; `restrict.rs::restrict_to` | P-full; D (`assert_cones_exact` on samples) | yes: a cone missing a writer gives a wrong `ok` | D |
+| C11 | residual risk 1 | the cone choice: the closure under Lemma 2, with its documented exceptions (a latch read inexactly stays out and its guards are dropped; existence vars join without their columns) | `cone.rs::cone`, `::target_cone`, `::property_cone`, `::keep_writers`, `::reach_seed`; `restrict.rs::restrict_to` | P-full; **TV (1c): `cone_check.rs::TransitionSystem::cone_faults`, `::restriction_faults`**; D (`assert_cones_exact` on samples) | yes: a cone missing a writer gives a wrong `ok` | D |
 | C12 | A4, A5, native.md:853 | the staging of a property cone's runs (plain, then `_WF`, then `after`) | `cli/src/property_cone.rs`; `verify/native.rs::native_property_after` | argued, "for the order of its runs only" | yes, in principle | D |
 | C13 | A13, A14 | budget rejection; dropped checks get their own cone | `reduce/mod.rs::TLA_CELL_BUDGET`, `drop_unreadable_checks` | read / test gap | A13 no (performance only); A14 covered by 5(e) in `split_faults` | D |
 | C14 | A15 | nested reduction, run up to `H`, case 4 (one unobserved class read as the partition by input bytes) | `partition.rs::Classes::up_to_h`, `::divergence`; `hypotheses.rs::loop_faults` | P-sketch | yes, on those cones | D |
@@ -98,7 +98,7 @@ implementation gives a wrong verdict that nothing in the run sees.
 | C30 | N2 | the state table inserts and looks a row up correctly | `explore/table.rs`, `arena.rs`, `segments.rs` | read; K on packing only | yes: a lost row is a missed state (wrong `ok`) | D |
 | C31 | N8, N17 | `can_reach` reports the first state in BFS order; output is independent of `RDRA_JOBS` | `reach.rs`, `bfs.rs` | proof / empirical | no (choice of trace only) | D |
 | C32 | native.md:848 | `lift_stop` finds a stop whenever one exists | `reduce/lift.rs::lift_stop` | not argued | no (completeness; failure is a fault, not a wrong trace) | D |
-| C33 | T1 | no two params of one action that can bind one slot write one variable (`ConflictingEffects` does not enforce it) | `build/mod.rs::Builder::finish`, `Action::slots_written_twice` | assumed | under `--with-tlc` the engines may disagree (`tool_error`); natively the effect order decides | T, D |
+| C33 | T1 | no two params of one action that can bind one slot write one variable (`ConflictingEffects` does not enforce it) | `build/mod.rs::Builder::finish`, `Action::slots_written_twice` | **R (1c): build refusal, `ConflictingEffects` (`build/syntax.rs::TransitionSystem::shared_slot_writes`)** | under `--with-tlc` the engines may disagree (`tool_error`); natively the effect order decides | T, D |
 | C34 | T1 | the printed module denotes the cone's system (per construct; the reduced step `bits`, `rise_expr` has no argument). TLC's distinct-state count is parsed (`StateModelRan::states`) and printed, but `state_model_disagreements` compares only witnesses and deadlocks | `emit/tla/module.rs::action`, `::effects`, `::bits`, `::rise_expr`; `emit/tla/pred.rs`; `cli/src/verify/state_models.rs` | P-sketch; D; TLC refinement on 21 corpus cones (`emit/tla/refine.rs`) | only if both engines are wrong the same way | T |
 | C35 | residual risk 1 | `TlaNames` maps native states to TLA+ names injectively and totally | `emit/tla/names.rs::TlaNames`, `::decoder` | test `tla_names_cover_every_slot` | could hide a disagreement | T |
 | C36 | residual risk 1 | the quotient tables the TLA+ module prints are the `Reduction`'s | `module.rs::reduction`, `Reduction::tla_cells`, `ClassTable` | read | could hide a disagreement | T |
@@ -154,6 +154,21 @@ corpus model's actions in that grammar and run a Lean decision procedure for `Bu
 the grammar, with `decide`, as `PartitionCheck.lean` does. In both, the remaining reading is
 that `each_successor` executes the syntax as the Lean semantics does. That is C4, C5 and
 C28.
+
+*Done (1c), R half.* `build/syntax.rs::TransitionSystem::slot_syntax_faults` runs at the end of
+every build (`Builder::finish`) and reads `WF` (`twf`/`pwf`/`ewf`: each slot term's var is a
+column or an owner of the row its `At` names, an `At::Bound` counted outermost first where
+Lean's `refEnt` counts innermost first; each effect's var is of its param's row; every
+param named exists), `Built.new_create`, `Built.earlier_mark` (the literal conjunct
+`Cmp(Slot { m, Param(p) }, Eq, Lit(k))` on the param's row with `k` not `m`'s base), and the
+roles' `binds_exists` against a transcription of `Rows.cand`. A fault stops the build as a
+tool error (`tool error: the built step of …`), so no engine runs, as a restriction fault
+does (C11). `Earlier { step: 0 }` in `X` is not checked: `X` is not built by `build`, and the
+check reads the built system only; a cone keeps `WF` and `Built` through C11's restriction
+check. Still read: that `candidate_slots` filters by role before any guard (the shadow twin of
+`each_planned` compares the fast path with it, not it with Lean) and that `each_successor`
+executes the syntax as Lean's semantics does (C4, C5, C28). The walk over the samples, the
+domain samples and the corpus at two bounds finds no fault.
 
 **C4, R, gated on measurement.** Keep `Plan::writes` in release builds as a word mask
 (`Vec<u64>`, one bit per byte, so RSS stays flat: it is per action, not per state). In
@@ -230,6 +245,31 @@ certified. For an exact cone (`exact_target_cone`), also check (3): no guard was
 It shares `action_reads` / `action_writes`, which C4 and the `pred_reads` Kani harness
 certify. On failure the run uses the whole system or reports a `tool_error`. It runs once per
 cone. Confirm (2) against `restrict_to`'s havoc of freed slots (A28) before writing it.
+
+*Done (1c).* Two checks, in `cone_check.rs`. `cone_faults` runs in `target_cone`,
+`property_cone` and `exact_target_cone`: `σ ⊆ W`, Definition 1's (C1)–(C4) from `plain_reads`,
+`mark_reads`, `copy_reads`, `action_writes`, `existences` (closure, not the least fixpoint),
+and the exactness each use needs (no left-out mark for an entity's and a `can_reach`'s cone,
+no freed entity for a `can_reach`'s; an exact cone's exactness is C9's
+`vouch.rs::certified_exact`, which runs after this check). A fault
+returns the cone of every var with the same `K`: it is closed and exact, so the verdict is
+the whole system's, at a cost in states only, with a warning (a debug or `shadow` build
+panics). `restriction_faults` runs in every `restrict_to` (every cone a run reads comes
+through it) and states (1) and (2) in the whole system's ids, since in the restricted
+system's ids (2) is vacuous: the kept actions are exactly `A_W` (matched through `Remap::act`
+and `Action::source`), each keeps exactly its effects on `W`, and drops only a copy guard with
+`τ ∉ W`, a left-out mark's `Raised` guard, `Triggered` param and the guards naming it, and a
+freed entity's `New` param; the restriction holds `|W|` vars and no stub. `restrict_to`'s
+havoc of freed slots fits as follows: with `havoc` on, a dropped `New` param is not among the
+params whose guards go; it leaves with its `Create` (which writes the existence outside `W`),
+and closure leaves no guard of `A_W` that reads its row but a copy into it (whose target is
+outside `W`). So the freed slot only adds steps (the entity never runs out), which A2 allows
+and A28 bounds, and `cone_frees_slots` reports it. A restriction fault has no fallback (the
+caller pairs `cone.vars` with the system's layout), so it stops the run as a tool error. (3),
+"no guard dropped" for an exact cone, is the exactness clause: with no left-out mark and no
+freed entity the only drop left is a copy guard, which Lemma 3 (iv) allows. The cones
+`recheck_on` builds between its first and its exact round (`targets.rs`) are certified only
+by the restriction check. Cost: once per cone and per restriction, no per-state work.
 
 **C12, mostly not certifiable.** The ladder's soundness is a case analysis over verdicts.
 Partial R: each property cone passes C11 against `property_seed`. The order of the runs stays
@@ -402,6 +442,21 @@ distinctness guard between them that write the same column through two effects: 
 with a new diagnostic (as `ConflictingEffects` does), or warn and have the TLA+ printer
 refuse. Free.
 
+*Done (1c), a build refusal.* `build/syntax.rs::TransitionSystem::shared_slot_writes` lists,
+per action, each var two params of one entity both write, with values that can differ, when
+the two can bind one slot. Two writes of one literal agree in either order, natively and in
+the printer's `EXCEPT` (`module.rs::effects`), and pass: oidc-auth's `RedeemCode` raises
+`EvTokensIssued` on its three `Parent` rows of `Grant`, which may be one row, by setting one
+mark to `true` on each. So the assumption as T1 stated it (no two such params write one
+variable) was false on a shipped sample; the refined one holds on every model. Two params
+can bind one slot unless their roles bind present against absent rows, a guard
+`Index(p) != Index(q)` holds them apart, they carry `m = j` and `m = k` with `j != k`, or one
+is `New` and the other carries `m = k` with `k` not `m`'s base (an absent row holds base values
+on every reachable state). `Builder::one_write_per_slot` refuses such an action with
+`ConflictingEffects`, naming the use case. A refusal and not a check, because no model of the
+samples, the domain samples or the corpus has such a pair, so no model that builds today is
+refused.
+
 **C34, TV under `--with-tlc`.** On each `StateModel_` module of a plain, unreduced,
 non-symmetric cone, add to `state_model_disagreements` the requirement that TLC's
 distinct-state count (`StateModelRan::states`, already parsed; `None` when TLC stopped early)
@@ -425,7 +480,7 @@ and the planted-bug test that every certificate needs (as
 |---|---|---|---|---|---|---|---|
 | 1 | 1a counterexample vouching (**Done**) | C9, C10 | TV, R | 2 d | 0 off counterexamples / 0 | A2 gap closed; A16 "lifted start" closed | none |
 | 1 | 1b reduction syntax | C1, C7, C8, C15 | R | 5 d | once per reduction, ~0 / 0 | A8's 8 fields, half of `cover` and `X`'s initial states move from read to R (`FoldKey::Param` folds); A9 fallback and marking, A12, A3 → R; N16's two internal facts → R | none |
-| 1 | 1c cone and build syntax | C11, C3 (R half), C33 | TV, R | 3 d | once per cone/build, ~0 / 0 | residual risk 1 "cone choice" → TV; A8/A18 syntax tie → R; T1 aliasing assumption → R | none |
+| 1 | 1c cone and build syntax (**Done**) | C11, C3 (R half), C33 | TV, R | 3 d | once per cone/build, ~0 / 0; measured at `RDRA_JOBS=1` `verify`: +0.2% instructions on patent-ops, +0.04% on clinic-ops, max RSS within the spread a one-string change to main gives | residual risk 1 "cone choice" → TV; A8/A18 syntax tie → R; T1 aliasing assumption → R | none |
 | 2 | 2a prover TVs | C22, C25, C24 | TV, W | 5 d | `--prove` only: ms + two builds already made + states × helper lemmas / 0 | B1 compare → TV; B2 Lemma U, B3 → TV; false helper lemmas → W on explored states (B16 unchanged) | none |
 | 3 | 3a step writes in release | C4 | R | 2 d + measure | per successor, target < 1% / 0 (per-action mask) | A1, B6 → R | none |
 | 3 | 3b canonical membership | C16 (R + K) | R, K | 3 d + measure | per canonicalization, target < 1% / one scratch row per worker | A21 "member of the orbit" → R, "function of the state" → K; T13 canonical gap → K | none |

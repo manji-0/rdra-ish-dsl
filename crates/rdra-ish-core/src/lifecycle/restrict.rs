@@ -31,7 +31,11 @@ impl TransitionSystem {
     /// needs a present row never binds here; the extended sub-lifecycle of `reduced` binds
     /// such params to any slot (`Extended::build`, claim A11 of docs/theory/claims.md).
     pub fn restrict_to(&self, vars: &VarSet, keep: &BTreeSet<ActId>) -> TransitionSystem {
-        self.restrict_to_mapped(vars, keep, true).0
+        let (out, map) = self.restrict_to_mapped(vars, keep, true);
+        // Every cone a verdict reads comes through here: its restriction is checked against
+        // what Theorem A2 lets it drop (`cone_check.rs`).
+        self.certify_restriction(vars, keep, &out, &map);
+        out
     }
 
     /// Whether `restrict_to(vars, ..)` keeps entity `e`: its existence is in `vars`, or an

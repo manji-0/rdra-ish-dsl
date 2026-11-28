@@ -4,6 +4,7 @@ mod along_guards;
 mod arm_guards;
 mod bare_values;
 mod budget;
+mod certify;
 mod checks;
 mod choice;
 mod choice_guards;
