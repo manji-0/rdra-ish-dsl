@@ -3,46 +3,300 @@
 This directory states what rdra-ish's verification tools decide, under which assumptions,
 and on what evidence, for a reader trained in formal methods. Each document defines its
 terms before it uses them, states its guarantees as propositions, and says for each one
-whether it rests on a proof, a mechanical check, a differential test, or an assumption.
+whether it rests on a proof, a mechanical check, a differential test, a run-time check, or
+an assumption.
 
-This index describes the code at commit `9857092ae33cd9c1dc4b1812a28cdba9b79a720e`
-(origin/main, 2026-11-28, the merge of #544), the commit every theme document is now pinned
-to as well; each names it in its own first paragraph. From the previous pin, `5ae62f2c` (the
-merge of #542), the crates change only by #544 (`prove/encode.rs::Enc::one_of` and its call in
-`Enc::step`: a choice of every number keeps the values it lists below `from`; tests added to
-`cli/tests/prove_cli.rs` and `core/tests/reference/proofs.rs`; the corpus case
-`z3_guarded_null_beside_present`, its `CASES` line and its symmetry-snapshot entry), and
-`.config/` does not change; `one_of` and its call were read at this commit, the corpus was
-recounted, and every other reading at `5ae62f2c` carries over. The pin before that was
-`5f59fae2` (the merge of #537); what #539 and #541 changed after it was read at `5ae62f2c`.
-In the table of open problems below, the status and the fix of every row were re-read at
-`5f59fae2`, P20's again at `5ae62f2c`, and P66's here: each named test or corpus case exists, and its doc comment or
-header was read for what it checks. A
-row's description of the problem as it stood before its fix is a reading of the code at the
-commit it was found at (`b83b9544` unless the row says otherwise) and is written in the
-past tense. A present-tense statement whose cited code was not re-read at this commit
-carries `unread@pin`. Code is cited by symbol, never by line, with the path abbreviations of
-the [claims inventory](./claims.md#how-to-read-a-row): `core/` is
+This document describes main at `91524792`.
+
+It is the entry point: what the verifier guarantees, engine by engine; what those guarantees
+rest on; what every run checks; the residual risks; the known limitations; and a map of the
+documents. Each statement points at the row of the [claims inventory](./claims.md) that
+states it with its evidence and tests. Code is cited by path and symbol, with the
+abbreviations of the [claims inventory](./claims.md#how-to-read-a-row): `core/` is
 `crates/rdra-ish-core/src/lifecycle/`, `cli/` is `crates/rdra-ish-cli/`, and `emit/` is
-`crates/rdra-ish-emit/src/`. How this index changed is in [Errata](#errata).
+`crates/rdra-ish-emit/src/`.
+
+## What the verifier guarantees
+
+A model `M` at bounds `β` denotes a transition system `T_β(M)`, defined from the model's
+text in [semantics.md](./semantics.md) (D1 to D13; D24 under a scope). `check` and `verify`
+decide its rules and properties and print one verdict per check: `ok`, `counterexample`,
+`not decided`, or, from the prover, `proved`; a fault of the tool itself is `tool_error`
+([semantics.md, D23](./semantics.md#d23)). Every engine reads the one system the build
+returns, so every guarantee below is about that system, and is about `T_β(M)` exactly when
+the build implements the definition (claim [I1](./claims.md#0-the-build)).
+
+### The model and its system
+
+- **The build implements the definition** for every model, bound and scope at which it
+  reports no error (I1). The build refuses what it cannot encode faithfully: a column domain
+  of more than 256 values (`DomainTooLarge`), a state past the bits a packed state addresses
+  (`StateTooWide`), and an action that writes one `(var, param)` twice
+  (`ConflictingEffects`). Evidence: per-construct readings, the hand-written corpus headers,
+  and a reference interpreter that rebuilds the system from the `SemanticModel` without the
+  builder on a subset of the language.
+- **Readings a modeler should know.** Each is a decision, stated in the language reference
+  and pinned by a test, under which every verdict is right for the model as written:
+  - null in a comparison is two-valued, so `x != 3` holds on a null `x`; a lint flags
+    `not` over an ordering of a nullable column (I2);
+  - verification executes no referential action: `.on_delete(cascade)`, `set_null` and
+    `set_default` delete the one row and leave the children, with a warning (I3);
+  - a liveness goal is read on a slot whatever its existence, so deleting a row can meet a
+    goal its base values satisfy; `.present()` asks for a present row (N9);
+  - an `after` assertion does not check a step that changes nothing, as in TLA+ (N5, N18);
+  - one raise runs a handler any number of times unless `.counted(k)` says otherwise
+    ([semantics.md, D11](./semantics.md#d11)).
+
+### Native BFS
+
+The native verifier explores the graph of a cone, a reduced cone, or a quotient by
+symmetry, and decides each check on that one graph ([native.md](./native.md); claims
+N1 to N18).
+
+- A complete run stores exactly the reachable states, each with a shortest-path parent
+  (N1); the packed store reads back every state it stores (N2); the memory charge is
+  deterministic and never overflows (N3).
+- Any number of threads computes the one-thread run: the same states, numbering, edges,
+  findings and stop point, except for a stop by the wall-clock budget (N4, N17).
+- Safety: a state rule, `always`, or `after` assertion is violated iff a stored state or move
+  violates it, reported with a shortest trace (N5); `stable`, `unchanged`, `precedes`
+  (N6, N7); `can_reach` on a complete graph (N8); deadlocks as D25 defines them (N14).
+- Liveness under weak fairness by fair strongly connected components (N9); on a stopped
+  graph only a counterexample decides (N10); up to symmetry, the same verdict as the plain
+  run (N12).
+- A cap or the budget gives `not decided`, never `ok` (N15, A24). A vacuity warning never
+  changes a verdict (N18).
+- Every printed counterexample replays through the step relation of its run before it
+  prints; one that does not is a tool error, never a counterexample (N11, N13, N16, A16).
+
+### Cones, the reduction, and symmetry
+
+The verifier decides most checks on a cone of influence, often reduced by an independent
+sub-lifecycle and explored up to slot permutations ([cones.md](./cones.md); claims A1 to
+A28).
+
+- An exact cone decides what the whole system decides, and a trace lifts (A1). A cone that
+  frees slots or leaves a raised mark out over-approximates: its `ok` is sound, and its
+  counterexample counts only once a refined or exact cone vouches for it (A2, A6, A28).
+  Entity cones and `can_reach` cones are exact (A2, A7).
+- A property cone decides under its own fairness by the three-run protocol (A4, A5).
+- The sub-lifecycle reduction is a divergence-blind stuttering bisimulation, relative to the
+  stability of its partition, which every build certifies, and to Lemma 6 (A8 to A15, A22).
+  `_WF` runs on a reduced cone are sound relative to the same hypotheses (A15).
+- Instance symmetry is a bisimulation under the group the scan computes; leaving a class out
+  costs states, never a verdict (A18 to A23).
+- Bound escalation turns a counterexample at `n+1` or `n+2` instances into a failure only
+  when it is a trace of the larger system, and prints the instances per entity (A25).
+- A covered cone's `ok` is the covering cone's (A27). The memory limit bounds the BFS stores,
+  not the process (A26).
+
+### Proofs with z3
+
+`--prove` encodes the system for any number of rows and runs Houdini with mined lemmas and
+CTI clauses ([z3.md](./z3.md); claims B1 to B18).
+
+- The encoding over-approximates the system at every bound in the range the model builds
+  at (B1). A `proved` rule holds for any number of rows and every `--int-range-max` in the
+  printed range, under the printed scope (B2). The prover proves nothing from an
+  unsatisfiable premise (B2).
+- Initiation and consecution are checked on every candidate; `unknown` never becomes
+  `proved`; mined lemmas, CTI clauses and `.lemma()` rules add nothing to the trust base
+  (B4, B5, B9 to B12, B17).
+- A cached certificate is used only after it re-checks (B15). The verdicts do not depend on
+  the number of solvers (B14).
+- A rule BFS refutes is not tried, and refuting it changes no other verdict; a proof can
+  decide a cone stopped at the memory limit (B16). `proved` covers state rules only (B18).
+
+### Agreement with TLC
+
+`verify --with-tlc` prints each cone as a TLA+ module and runs TLC beside BFS
+([tlc-agreement.md](./tlc-agreement.md); claims T1 to T16).
+
+- The printed module denotes the cone's system (T1). Every check and run both engines decide
+  gets the same verdict, every TLC trace replays through BFS's step relation, and a
+  disagreement ends the run as `tool_error` (T2, T3, T4, T6).
+- The evidence that the two readings agree: the sample comparison of states, edges with
+  their params, and findings (T5); the engine corpus with hand-written verdicts (T7);
+  random models reduced against unreduced (T9); symmetric against plain runs (T10); batch
+  JVMs against processes (T11); the scheduling knobs (T12); Kani harnesses (T13); shadow
+  twins (T14); mutation runs (T15); the Int range (T16).
+
+## Trust base and assumptions
+
+<a id="trust-base"></a>
+
+The guarantees above hold given these components and assumptions, none of which the project
+verifies:
+
+- **z3** answers `unsat` only for unsatisfiable queries (H1), and the prover takes each
+  answer for the check that asked it (H4); z3 5.1.0 is deterministic under a fixed resource
+  limit (B13, B15). Every (b) row assumes H1 and H4.
+- **TLC** (1.7.4, 1.8.0) and the JVM are correct. Every (d) row assumes it; CI runs the
+  devShell's 1.8.0 pre-release on JDK 25.
+- **The build** returns `T_β(M)` (I1). It is shared by every engine, together with the
+  parser, `build_model`, the choice of a cone, the staging of a property cone's runs, the
+  quotient tables of a reduced cone, and `TlaNames`.
+- **Paper arguments** that are sketches, not proofs: Lemma 6 of the reduction (A8), the
+  per-construct argument for the TLA+ printer (T1), the theorems marked `P-sketch` in the
+  [summary by evidence class](./claims.md#summary-by-evidence-class).
+- **Kani** and the Rust compiler. CI's verification jobs build with overflow checks (profile
+  `ci-checked`), so a fixed-width integer that wraps panics there; release builds wrap
+  silently.
+
+## What every run checks
+
+<a id="run-time-checks"></a>
+
+Every run, in every build:
+
+- replays every printed counterexample through the step relation of the system it is about,
+  and reports one that does not replay as a tool error (N16); the lifts' own look-ups are
+  faults too (A16, N13);
+- refuses, at build time, a column domain past a byte (`DomainTooLarge`), a state past the
+  packed width (`StateTooWide`), and an action that writes one slot twice
+  (`ConflictingEffects`) (I1, N2, T1);
+- panics on an edge number past `u32` instead of wrapping it (`edges.rs::edge_number`, N1);
+- certifies the stability of the reduction's partition and falls back to the sweeps'
+  partition when the certificate fails (`partition/reference.rs::stable`, A8);
+- refuses to prove anything from an unsatisfiable premise (`prove/mod.rs::premise`, B2);
+- uses a cached certificate only after it re-checks (B15);
+- with TLC, replays every TLC trace through BFS's step relation (T2).
+
+The internal invariants left as `expect`s and `panic!`s on a lift's way stop the run and
+print no wrong trace; they are listed, with the reason each holds, in
+[claims.md, "Panics left on a lift's way"](./claims.md#panics-left-on-a-lifts-way).
+
+## Residual risks
+
+<a id="conclusion"></a>
+
+<!-- derived-from ./tlc-agreement.md#residual-risk -->
+
+Two residual risks outweigh the rest. They are the first two items of
+[tlc-agreement.md, "Residual risk"](./tlc-agreement.md#residual-risk), and the other theme
+documents arrive at them from their own side.
+
+1. **Common-mode faults.** The builder (I1), the choice of a cone, the staging of a property
+   cone's runs, the quotient tables of a reduced cone, and the names that map native states
+   to TLA+ ones (`TlaNames`) are read by both engines, so a fault in any of them moves the
+   native verifier and TLC alike, and agreement with TLC cannot show it. A fault of the
+   prover's encoding that no sample or corpus case exercises is not common-mode, but no
+   comparison of a proof with BFS meets it either. The reference interpreter checks the
+   builder without reading its output, on a subset of the language, and checks z3's
+   `proved` at `m + 1` and `m + 3` (I1, B1). Outside that subset, and for the cone choice,
+   the property-cone ladder, the quotient tables, and `TlaNames`, only hand-written
+   expectations, such as the engine corpus's `expect` lines, see such a fault, and only on
+   the models they name (T7).
+2. **No run-time check of an `ok` or a `proved` as such.** A counterexample is checked
+   before it prints (N16); an `ok` and a `proved` are not. The causes of a wrong one that
+   are known are refused or checked in every run (see
+   [What every run checks](#what-every-run-checks)). A fault of another kind that gives a
+   wrong `ok` or `proved` passes unnoticed in the run. The evidence against it is offline:
+   the corpus, the reference interpreter, and the differential tests, which CI's
+   verification jobs run with overflow checks. A wrong `proved` can also make a cone stopped
+   at the memory limit print `ok` (B16).
+
+## Known limitations
+
+<a id="open-problems"></a>
+
+<!-- derived-from ./claims.md -->
+
+Each item is open at this commit, and each names the claims rows that state it. The list is
+what has been found, not a bound on what exists.
+
+**The build and the language**
+
+- Outside the reference interpreter's subset, only the corpus headers check model to `T`,
+  on the models they name; the reference shares the parser, `build_model`, the rule names,
+  and which Int columns are numbers (I1, T7). The subset is listed in I1.
+- Nothing checks at run time that a bound in a proof's printed `--int-range-max` range
+  builds the same system; Lemma U is a reading of the code (B2, I1).
+- semantics.md takes which models are well-formed from the code's list of error diagnostics
+  (I1).
+- Verification executes no referential action, while the SQL export writes
+  `ON DELETE CASCADE` / `SET NULL` / `SET DEFAULT`, so a rule over the children can be `ok`
+  in the model and broken against that database; executing them is the owner's call (I3).
+- No sample or corpus model draws the `negated-order-admits-null` warning (I2).
+
+**Cones, the reduction, and symmetry**
+
+- Lemma 6, which ties the extended sub-lifecycle to the cone, is argued, not proved; the
+  tests check its fold equivalence and its silent steps on the models and bounds they run
+  (A8, A11; A5, A6, A10, A15 rest on it).
+- A release build does not check that a step changes only the variables `Wr(a)` names; debug
+  and `shadow` builds do (A1, B6).
+- No test makes the reduction reject a quotient past the TLA+ cell budget (A13); A14 and A27
+  have no test of their own.
+- No Kani harness proves the canonical form invariant under the group; it rests on an
+  exhaustive unit test and a twin (A18, T13).
+- That a counterexample a cap-stopped safety cone finds is real has no test (A24).
+- Most of the lift's look-up faults are reached by no test (A16).
+- The memory limit does not bound the process (A26).
+
+**Proofs with z3**
+
+- `Enc::compare` re-implements `expr.rs::compare` and is tied to it by reading and
+  differential tests only; no code under `core/prove/` has a Kani harness or a twin (B1).
+- `proof_equivalence` skips 130 comparisons on the samples, cones whose BFS passes its state
+  cap (B1).
+- The checks z3 gives up on by itself are counted, not asserted (B16).
+- No test checks that an unstateable rule is `out of scope` or a guard is dropped (B7), plants
+  a false mined lemma (B9), or asserts that `proved` covers state rules only (B18); B6 has
+  no test. Determinism across machines and solver counts is empirical (B13, B14).
+
+**The native verifier**
+
+- The loom model, test jitter, and probe harness of native-bfs-parallel.md are not built, and
+  no workflow runs Miri (N4).
+- The naive oracle shares the step relation and the evaluator, and does not cover entity
+  cones up to symmetry (N8, N14).
+- No test checks an `always` trace against an expected one (N5), drives a stored path that
+  fails to replay through `trace_violations` (N16), or runs the second half of
+  `a_path_that_does_not_replay_is_a_fault` (N13).
+- No Kani harness inserts into the state table and looks a row up (N2).
+- The internal invariants of [Panics left on a lift's way](./claims.md#panics-left-on-a-lifts-way)
+  are unchecked; among them, that `Extended::rebuild` reproduces `Extended::of` is not
+  checked (N16).
+
+**Agreement with TLC**
+
+- The 25 `VERIFY_FALLBACK` cones meet TLC at 1 instance only, and oidc-auth's browser flow at
+  2 instances rests on the native checker alone (T5).
+- The printed reduced step has no per-construct argument, and that no two params of one
+  action that can bind one slot write one variable is assumed, not checked (T1).
+- TLC's deadlock check is one-sided (T6); batch JVMs are compared with processes only on
+  cones of at most 5,000 states (T11).
+- A call above a shadow twin's cap is not compared (T14).
+- The TLC-side mutation run's kill rate is not recorded, and the mutation runs start only by
+  hand (T15).
+
+**Process**
+
+- None of the CI checks is required: main has no branch protection and the repository no
+  ruleset (`gh api`, checked 2026-11-28), so merging on green checks is a convention
+  (T9, T11, T15; [tlc-agreement.md, "Process gates"](./tlc-agreement.md#5-process-gates)).
+- The proposal to restate items 2, 3 and 7 of the release gate to match what runs
+  ([native-temporal-verification.md, "Migration", "The release gate"](../design/native-temporal-verification.md#migration))
+  awaits the owner's decision.
 
 ## Documents
 
 | Document | Contents |
 |---|---|
 | [Semantics and notation](./semantics.md) | The transition system `T_β(M)` a model denotes, defined from the model's text, the meaning of every rule and property on it, fairness, scopes, and the verdict vocabulary. Definitions D1 to D25. |
-| [Claims inventory](./claims.md) | One row per guarantee the tools make or the docs claim, with its evidence class, code, tests, and owning theme, including claim I1, that the build implements semantics.md. |
+| [Claims inventory](./claims.md) | One row per guarantee the tools make or the docs claim, with its evidence classes, code, tests, and open gap: I1 to I3 (the build), A1 to A28, B1 to B18, N1 to N18, T1 to T16, and the summary by evidence class. |
 | [(a) Cones of influence and reductions](./cones.md) | The cone of a check and its closure; when a cone's reachable set is the projection of the model's and when it is a superset; the reduction by an independent sub-lifecycle and its quotient; `_WF` runs on reduced cones; instance symmetry (the group, orbits, entity cones, `DeletedRowOwner`); bound escalation to N+1 and N+2 instances; memory caps and the meaning of `not decided`. Claims A1 to A28. |
-| [(b) Theorem proving with z3](./z3.md) | The SMT encoding (`prove/smt.rs`, `prove/encode.rs`), what is folded and how Int terms are bounded; induction with Houdini; the lemma candidate shapes (#428); what `proved` covers for any number of rows and what `.lemma()` adds to the trust base; rlimit determinism; the certificate cache; how proof and BFS refutation interact. |
-| [(c) The native verifier](./native.md) | BFS and the packed state store; parallel exploration and why it computes the one-thread result; safety, liveness under fairness, the temporal operators, `can_reach`; lifting a counterexample from a reduced or symmetric run to the model. |
-| [(d) Agreement with TLC](./tlc-agreement.md) | The TLA+ translation, the agreement rules, the engine corpus, the sample and random-model comparisons, shadow twins, Kani harnesses, the mutation run, and known disagreements. |
+| [(b) Theorem proving with z3](./z3.md) | The SMT encoding (`prove/smt.rs`, `prove/encode.rs`), what is folded and how Int terms are bounded; induction with Houdini; the lemma candidate shapes; what `proved` covers for any number of rows and what `.lemma()` adds to the trust base; rlimit determinism; the certificate cache; how proof and BFS refutation interact. Claims B1 to B18. |
+| [(c) The native verifier](./native.md) | BFS and the packed state store; parallel exploration and why it computes the one-thread result; safety, liveness under fairness, the temporal operators, `can_reach`; lifting a counterexample from a reduced or symmetric run to the model. Claims N1 to N18. |
+| [(d) Agreement with TLC](./tlc-agreement.md) | The TLA+ translation, the agreement rules, the engine corpus, the sample and random-model comparisons, shadow twins, Kani harnesses, the mutation run, and known disagreements. Claims T1 to T16. |
 
 Each theme document takes its rows of the [claims inventory](./claims.md) as its table of
 contents: it states each of its claims as a proposition in the notation of
 [semantics.md](./semantics.md), gives the proof or proof sketch or names the check that
 stands for one, states the assumptions, and lists threats to validity and related work.
 
-## Reading order
+### Reading order
 
 1. [semantics.md](./semantics.md), whole. Everything else is stated in its notation.
 2. [claims.md](./claims.md), to see what is claimed and how well each claim is supported.
@@ -53,17 +307,16 @@ stands for one, states the assumptions, and lists threats to validity and relate
    refutation and bound escalation.
 5. (d), last, since it is the evidence for claims the others make.
 
-## Relation to the existing notes
+### Relation to the existing notes
 
 <!-- derived-from ../formal-verification.md -->
 <!-- derived-from ../engine-agreement.md -->
 <!-- derived-from ../state-derivation.md -->
 
-The notes below stay where they are as records: of what modelers are told, of the design
-decisions and measurements behind each feature, and of the issues they closed. This
-directory does not replace them. Where a theme document and a note disagree, the theme
-document states the code's behavior and records the disagreement; the note is corrected in
-its own pull request.
+The notes below are written for modelers and contributors, and record the design decisions
+and measurements behind each feature. This directory does not replace them. Where a theme
+document and a note disagree, the theme document states the code's behavior; the note is
+corrected in its own pull request.
 
 | Note | Audience and role | Theme |
 |---|---|---|
@@ -76,255 +329,5 @@ its own pull request.
 | [design/native-bfs-parallel.md](../design/native-bfs-parallel.md) | Design and measurements of parallel BFS and its shared table. | (c) |
 | [design/counted-events.md](../design/counted-events.md) | Counted triggers: semantics, cones, TLA+, z3. | semantics, (a), (b) |
 | [design/counting-rules.md](../design/counting-rules.md) | Counted quantifiers and per-entity instance counts. | semantics, (a), (b) |
-| [design/event-order.md](../design/event-order.md) | Raised marks, and rounds 3 to 5 of the reduction (monotone inputs, the size guard, the node fold). | semantics, (a) |
+| [design/event-order.md](../design/event-order.md) | Raised marks, and the rounds of the reduction (monotone inputs, the size guard, the node fold). | semantics, (a) |
 | [design/tlc-scheduling.md](../design/tlc-scheduling.md) | How TLC runs are scheduled under `verify --with-tlc`. | (d) |
-
-## Conclusion
-
-<!-- derived-from ./tlc-agreement.md#residual-risk -->
-
-Across the four theme documents, two residual risks outweigh the rest. They are the first two
-items of [tlc-agreement.md, "Residual risk"](./tlc-agreement.md#residual-risk), and the other
-three documents arrive at them from their own side.
-
-1. **Common-mode faults.** The builder, which claim [I1](./claims.md#0-the-build) says returns
-   `T_β(M)` of semantics.md, the choice of a cone, the staging of a property cone's runs, the
-   quotient tables of a reduced cone, and the names that map native states to TLA+ ones
-   (`TlaNames`) are read by both engines, so a fault in any of them moves the native verifier
-   and TLC alike, and agreement with TLC cannot show it. The faults of this kind found so far
-   were all fixed: P40 and P54 (a value the build wrapped; #470), P32 (an entity cone that
-   left a raised mark out; #477), and P24 (an effect order the printer read differently;
-   #485). P43, a fault of the prover's encoding at bounds past the run's, which no comparison
-   with TLC reaches, was fixed in #481. P66, a step the encoding lacked at every bound (a
-   `.when`-guarded `null` beside a `.when`-guarded `present` of one nullable Int), is not
-   common-mode either: BFS and TLC both took the step, but no sample or corpus case had the
-   construct, so no comparison of a proof with BFS met it; found by reading in the fourth
-   audit, it was fixed in #544. Since #492 the reference interpreter of P26 checks
-   the builder without reading its output, on a subset of the language; P26 is partly
-   closed. Outside that subset, and for the cone choice, the property-cone ladder, the
-   quotient tables, and `TlaNames`, only hand-written expectations, such as the engine
-   corpus's `expect` lines, see such a fault, and only on the models they name.
-2. **No run-time check of an `ok` or a `proved` as such.** Every printed counterexample
-   replays through the step relation of the system it is about before it prints, and one that
-   does not is a `tool_error` (P20, #518 and #522; [semantics.md, D23](./semantics.md#d23)).
-   Since #529 and #531 the lifts' own look-ups are faults too, and since #541 so is the search
-   for the S path behind a class move; the internal invariants left as
-   `expect`s and `panic!`s (P20's row lists them, in the lift's files and in the code a lift
-   reaches outside them, with the reason each holds or the assumption it rests on; the two that read a
-   lifted path hold whatever path of the system's own states is lifted) stop the run but print no wrong trace. An `ok` and a `proved` have no such check.
-   Several known causes of a wrong one are now refused or checked at run time in every
-   build: a column domain past a byte and a state past the packed width are build errors
-   (`DomainTooLarge`, #470; `StateTooWide`, #510), an edge number past `u32` panics
-   (`core/explore/edges.rs::edge_number`, #479), the reduction certifies the stability of its partition
-   (`core/reduce/partition/reference.rs::stable`, #480), the prover refuses to prove anything from an
-   unsatisfiable premise (`core/prove/mod.rs::premise`, #482), and a cached certificate is used
-   only after it re-checks (B15). A fault of another kind that gives a wrong `ok` or
-   `proved` still passes unnoticed in the run; the evidence against it is offline: the
-   corpus, the reference interpreter (which also checks z3's `proved` at `m + 1` and
-   `m + 3`), and the differential tests, which CI's verification jobs run with overflow
-   checks since #511, so a fixed-width integer that wraps panics there instead of giving a
-   wrong verdict; release builds still wrap silently.
-
-## Open problems
-
-Each item is a stated guarantee the code did not give, a disagreement between documents
-that bore on what a verdict means, or a gap in the evidence for a claim. The owner decides
-which become issues. The [claims inventory](./claims.md) refers to these by number.
-
-Kinds: **guarantee** (a verdict could mean less than the tools or notes say), **evidence**
-(the claim may hold, but its evidence was weaker than stated), **prose** (a note or code
-comment disagreed with the code, with no effect on a verdict), **feature** (a change of
-behavior the owner decided on while resolving another item, recorded here because it
-changes what a verdict means).
-
-Twelve items bore on what a printed verdict means and were each shown wrong or at risk for
-some model: P1, P3, P4, P20, P30, P32, P40, P43, P50, P54, P55, and P66. Seven were reproduced as a
-wrong `ok` or `proved`, or a wrong claim about one: P40 and P54 (a value past a byte wrapped
-when the build encoded it), P50 (the packing of a state past 65,535 bits merged states), P43
-(a `proved` whose printed reach was too wide), P4 (a `proved` under a scope that did not say
-so, and under `--entity` one the model breaks), P32 (an entity cone that hid a deadlock),
-and P66 (a wrong `proved`: the encoding lacked the step that breaks the rule; the `ok` it
-could give a stopped cone by Corollary 6 was not reproduced).
-P51 and P56 were readings of D17 and D20 that did not license the `ok` both engines printed;
-the definitions were aligned with the code (#475, #494). P24 (an evidence item) and the
-guarantee items P34, P63, and P65 bore on a verdict only through the builder, the reduction,
-or the SQL export. The other guarantee items did not bear on a verdict printed for a
-model as written: P11 on the instance count printed beside an escalation's counterexample;
-P2 and P22 on what the notes said a verdict quantifies over (P2 was false only through
-P43, and P22 is P51 found from the definitions); P62 on readings of null that trap a
-modeler, under which each verdict is right for the model as written. Of all
-these, P3 keeps an evidence
-gap (`Enc::compare`), and P63 keeps its referential actions unexecuted, the owner's call;
-the rest are fixed or closed. This list is what has been found, not a bound on what
-exists.
-
-Numbering: P1 to P21 come from the survey for the claims inventory. Each theme document
-numbers its items in a block of its own: theme (a) ([cones.md](./cones.md)) from P30, theme
-(b) ([z3.md](./z3.md)) from P40, theme (c) ([native.md](./native.md)) from P50, and theme (d)
-([tlc-agreement.md](./tlc-agreement.md)) from P22 to P29, of which it uses P22 to P24 and
-P26. P25 and P60 and later come from the owner's review; P65 and P66 (the fourth audit)
-were found after that review and take the next free numbers. P61 was never filed: the owner's review asked whether D11's
-latch, which lets one raise run a handler any number of times, is meant, and it is
-([semantics.md, D11](./semantics.md#d11)).
-
-Status: **fixed in #N** names the pull request whose change removed the problem; **partly
-fixed** heads a row with one line per part, each part fixed in #N or **open**; **narrowed in
-#N** is a partly fixed item whose open part a change made smaller; **not a bug** means the
-reading of the code shows the problem does not arise, recorded with a test where one was
-written; **closed** means the item was resolved without a code change (a question answered,
-a duplicate, or, for P33, a part shown to be a cost question); **added in #N** is a feature
-(P64); **not filed** is a number left unused (P61). An open part says whose call it is when
-it waits on the owner. These qualify a status: **refined in #N** names a later change that
-strengthened a fix already made (P1, P11); **decided as documented** says the fix kept the
-code's behaviour and stated it in the definitions and the language reference (P6);
-**prose fixed in #N** after **not a bug** names the change that corrected a note (P10);
-**recorded with a test in #N** after **not a bug**, and **test in #N** after a fix, name the
-change that added the test (P34, P65); **checked in #N** heads a part whose cause stays but
-which a test now checks, with what it does not check (P42); **refuted, pinned in #N** heads a
-part a reading of the code showed is not a bug, with the change whose test pins that reading
-(P30); **argued, not proved** heads a part whose only evidence is a paper argument, so it is
-neither fixed nor open in the sense above (P31); **closed: duplicate of P*n*** is **closed**
-for a duplicate (P51). **fixed** may also head one line per part when its parts were fixed
-in different changes (P20). **Reproduced** means a run of the tools showed
-the problem; the model and output are in the theme document named in the row or in the
-named test. P4, P6, P12, P21, P24, P32, P40, P41, P43, P50, P51, P53, P54, P65, and P66 were
-reproduced; every other item was a reading of the code.
-
-| # | Kind | Status | Problem | Where |
-|---|---|---|---|---|
-| P1 | guarantee | fixed in #477, refined in #509 | **A cone that left a raised mark out was treated as exact.** Such a cone reaches states that the event order forbids at every bound (A2). Its `ok` of a universal check is sound, but four places treated its counterexample as a reachable state of `T`: `verify/refuted.rs::refuted` marked the rule `refuted` and skipped its proof; `verify/escalate.rs` printed `counterexample at k instances`; `property_cone.rs::counterexample` and `explore/properties.rs::TransitionSystem::decide_property` re-decided a counterexample on `T` only when the cone freed slots. Consequence: a spurious `counterexample` and a rule never proved; not a wrong `ok` ([cones.md](./cones.md#safety-cones)). **Fix.** For an invariant or `after` assertion, #477 decided such a counterexample again on the check's exact cone, and #509 made that a counterexample-guided loop: `targets.rs::TransitionSystem::recheck_on` adds the raisers of each event the trace ran without (`Trace::free_triggers`) and the existence of each entity it creates past the bound (`Trace::over_bound`) to the cone (`refine`), runs it again until the trace is one the cone vouches for (`Trace::vouched`), and falls back to `exact_target_cone` when nothing is left to add; `check`, `verify`, `refuted.rs` and `escalate.rs` use it (`recheck_cones`). A property cone that leaves a mark out keeps only its `ok`, and its counterexample is decided again on the whole system (`cone_leaves_marks`, `Why::LeavesMarks`, `decide_property`). Tests: `core/tests/trace.rs::a_candidate_counterexample_refines_its_cone_with_the_events_raisers`, `cli/tests/prove_cli.rs::escalation_reports_no_counterexample_past_the_bound_it_prints`. | `core/targets.rs::TransitionSystem::recheck_on`, `::refine`; `cli/src/verify/refuted.rs::refuted`; `cli/src/verify/escalate.rs`; `cli/src/property_cone.rs::counterexample`; `core/explore/properties.rs::decide_property` |
-| P2 | prose, guarantee (via P43) | fixed in #514 and #525 | **What `proved` quantifies over was stated three ways.** `prove/mod.rs::Verdict::Proved` said "at the stated value bounds"; `ProofTally::clause` printed "any Int value"; formal-verification.md said "any non-negative Int value". What [z3.md](./z3.md#the-soundness-theorem) proves (Definition 3, Theorem 1) is a statement about every bound in `Sc(M, β)`; with the P43 construct "any Int value" was false, not merely loose. **Fix.** #514 made every proved line print the claim `cli/src/prove.rs::Claim::of` computes: "for any number of rows and every --int-range-max from L to M" (the least and greatest range at which the model builds, `int_range`), and the scope; `Verdict::Proved`'s doc cites Theorem 1 over `Sc(M, β)`. #525 changed the `--prove` help text, which still said "any Int value", to the same claim. Test: `cli/tests/prove_cli.rs::a_proved_line_names_the_bounds_the_proof_covers` (at 254 with a nullable Int column and 255 without, and no line says "any Int value"). Nothing checks at run time that a bound `β'` builds the same system: Lemma U of z3.md is a reading of every use of `int_max` in `core/build`, and the reference interpreter checks it on its subset (P26). | `cli/src/prove.rs::Claim::of`, `::int_range`; `cli/src/cli.rs`; `core/prove/mod.rs::Verdict` |
-| P3 | evidence | partly fixed<br>preamble: fixed in #482<br>fork order: not a bug<br>`Enc::compare`: open (evidence by reading and differential tests) | **Nothing checked that the encoding's preamble was satisfiable.** If the declarations and domain axioms, or `declarations ∧ initial`, were inconsistent, every query would be `unsat` and every rule `proved`. **Fix.** #482 checks the premise with a canary candidate `false` before the rounds (`prove/mod.rs::premise`); a premise with no state keeps the canary, and then no rule is proved and the verdict says why (`Unproved::Premise`). Test: `core/tests/prove.rs::a_contradictory_premise_proves_no_rule`, which plants a pre-existing row the declarations exclude. **Fork order:** `Enc::step` and `each_successor` both apply creates, assigns, and single-target transitions in effect order, then deletes, then forks, skipping forks on deleted rows ([z3.md](./z3.md#faithfulness-of-the-encoding)). **Still open:** `Enc::compare` re-implements `expr.rs::compare` and is tied to it by inspection and differential tests only. Post-states stay in their domains by construction. | `core/prove/mod.rs::premise`; `core/prove/encode.rs::Enc::compare`, `::step` |
-| P4 | guarantee | fixed in #483 (scope on proof lines, `Unproved::Initial`'s doc), #514 (the lines' wording), and #523 (`--entity`); reproduced | **`--prove` under a scope proved the scoped system and did not say so.** `verify --buc`, `--without-usecase`, `--without-buc`, `--actor`, and `--entity` drop use cases from the system the prover encodes, so a `proved` there is a statement about the smaller system. Reproduced: with `--without-usecase Close`, a rule the whole model violates printed `proved:` and `1 of 1 rules proved for any number of rows and any Int value`, while only the `scope:` header and the `OK:` line named the scope. Under `--entity`, a deferred build error could also reach the encoded system: an error whose entities no selected target's plain cone read was deferred, but an invariant's plain cone can leave out a mark whose raisers write nothing else in it, so an error that built a raiser's guard as `false` stopped the handler in the encoded system, and `verify --prove --entity Order` printed `proved:` for a rule the model breaks (reproduced). **Fix.** #483 put the scope on every proof line, and #514 restated those lines through `Claim::of` (P2). #523 made the deferral read each selected target's exact cone (`select.rs::select`, `exact_target_cone(t, true)`), which keeps every action that writes into it; an altered action binds every entity it writes (`build/mod.rs::diag`), so an action outside that cone changes nothing the rule reads. Tests: `cli/tests/prove_cli.rs::a_proof_under_a_scope_says_so_on_every_proved_line` (`--without-usecase` and `--entity`), `core/tests/select.rs::an_error_in_a_raiser_the_plain_cone_leaves_out_blocks`, `cli/tests/prove_cli.rs::a_deferred_error_never_reaches_a_proved_rule`. `Unproved::Initial`'s doc said the bounded engines report the initial violation, but the encoding's initial states include any number of rows and any Int value; #483 made it say that the violation may lie past the run's bounds, where the bounded engines do not see it. | `cli/src/prove.rs::Claim::of`, `::run_proof`; `core/select.rs::select`; `core/prove/mod.rs::Unproved` |
-| P5 | prose, evidence | fixed in #490 and #525 | **The proof notes overstated details.** The CTI line said "every proved rule hold" where `prove/mod.rs::assume` asserts every kept candidate; formal-verification.md gave "2,000,000 for a lemma", but a `.lemma()` rule gets the rule limit (20,000,000); "keeps the largest inductive set" was not maximal ([z3.md](./z3.md#maximality), Proposition 5); "exact up to 8" meant `at_least(k)` for `k ≤ 8`, so `.exactly(8)` and `.at_most(8)` were out of scope; no test supplied a false `.lemma()`. **Fix.** #490 restated the limits, the maximality, and the count range in formal-verification.md, and added `cli/tests/prove_cli.rs::a_false_lemma_is_refuted_where_bfs_reaches_it_and_dropped_where_not`. #525 changed the CTI line to "breaks it from a state where it, every proved rule, and every kept lemma hold (not necessarily reachable)", pinned by `cli/tests/prove_cli.rs::a_rule_that_breaks_at_two_rows_is_unproved_with_its_step`. Independence from the solver count stays empirical, as claim B14 says. | `cli/src/prove.rs`; `core/prove/mod.rs::assume`; formal-verification.md |
-| P6 | prose | fixed in #475 (decided as documented); reproduced | **Goals read absent rows at base values.** `eventually` and `leads_to` read the goal on a slot whatever its existence (D21), so deleting a row meets `eventually(E.c == v)` when `v` is the base value of `c`; `can_reach` requires presence along the path (D22). Both engines agree. The language reference stated `eventually` as `<>expr` and `can_reach` as `AG (present => EF expr)`. **Fix.** The reading stays, as both engines share it (reproduced: with `pending` the default, `leads_to(status == paid, status == pending)` is `ok` on both engines where a paid order can be deleted). language-reference.md states it with an example each way and gives the code's forms, D21 says so, and semantics.md S1 and S2 are resolved. A goal that requires presence is opt-in per property: `.present()` (P64). Test: corpus `presence_goal_present_modifier` (plain `ok`, `.present()` counterexample on both engines). | `core/lasso.rs::TransitionSystem::fails_at`, `core/reach.rs::reach_failure`; language-reference.md |
-| P7 | evidence | fixed in #480 | **The stability of the sub-lifecycle partition was not certified.** A8 needs `quotient_blocks` to return a partition satisfying (B1) to (B3) of cones.md. A test build compared the worklist with the reference sweeps, a `shadow` build up to 2,500,000 states, a release build never. **Fix.** Every build certifies the worklist's partition before the reduction uses it (`partition/reference.rs::stable`: it refines the labels, one sweep with every block a splitter splits nothing, and the rise signatures are equal per block) and falls back to the sweeps' partition, with a warning, if the certificate fails (`reduce/partition.rs`). Test: `core/reduce/partition.rs::the_stability_certificate_rejects_a_partition_that_is_not_stable`. | `core/reduce/partition.rs::quotient_blocks`, `core/reduce/partition/reference.rs::stable` |
-| P8 | prose, evidence | fixed in #475 (prose) | **The Kani claims for symmetry were overstated.** instance-symmetry.md said a harness proves `canonical(apply(g, s)) = canonical(s)`; the only symmetry harness proves `apply(g∘h) = apply(g)∘apply(h)` on a 2-slot parent and a 2-slot child. `scripts/kani-relevant.sh` called `canon.rs` "the canonical form the symmetry harness runs". engine-agreement.md listed 14 harnesses of 16. **Fix.** instance-symmetry.md states the harness as built and that the canonical-form harness was not built, the invariance resting on the exhaustive unit test and the `canonical` twin; engine-agreement.md lists all 16; `kani-relevant.sh` says why `canon.rs` is listed. No canonical harness was added. | `core/explore/symmetry/mod.rs`; instance-symmetry.md; engine-agreement.md; `scripts/kani-relevant.sh` |
-| P9 | prose | fixed in #475 | **Stale design statements.** instance-symmetry.md marked the slot-wise and per-binding readers "not sound" after phase 4 and #370 gave the symmetric runs dedicated readers; cone-soundness.md and `reduce/split.rs::monotone_vars` said a delete resets owners (it resets columns only); cone-soundness.md named a "`FreesSlots` case"; the `Twin::OrbitLiveness` description claimed more than it checks. **Fix.** The soundness table says which readers the symmetric runs have; cone-soundness.md, event-order.md and `monotone_vars` say a delete keeps owners and the rule counts them cyclic; `FreesSlots` is named as `cone_frees_slots` and `Why::FreesSlots`; the `orbit_liveness` twin's description says it checks the quotient only. | instance-symmetry.md; cone-soundness.md; `core/reduce/split.rs::monotone_vars` |
-| P10 | prose | not a bug; prose fixed in #477 | **A stopped cone's invariants.** formal-verification.md said a stopped cone "leaves its invariants `not decided`"; the code reports a counterexample found before the stop, which is real (A24), and leaves only the others undecided. formal-verification.md, "Known verification gaps", now says so. | `cli/src/verify/bfs.rs::BfsCone::verdict` |
-| P11 | guarantee | fixed in #477, refined in #509<br>per-entity counts under `--instances E=k`: fixed in #532 (corpus reader: #535) | **Escalation could understate the instances a counterexample needs.** At `n+1` or `n+2` the rule's cone may free slots; the printed `k` was `cone_slots`, which excluded the freed entity, and under `--instances E=k` it was a maximum over entities. `refuted.rs` printed `at k instances` the same way. **Fix.** A counterexample past the bound is decided again (`recheck_on`, P1), with the over-bound entities' existence in the cone, and the instances of the cone that decided it are printed; `refuted.rs` names the rows of an uncounted entity the trace creates. Both print the count of each entity of the cone (`state_findings.rs::Instances`, #532): one number when every entity has it, else each entity's own, as `Loan=4 Member=3`, so a per-entity bound is never stated as the largest; an uncounted entity's created rows raise its own count only. Tests: `cli/tests/prove_cli.rs::escalation_reports_no_counterexample_past_the_bound_it_prints`, `::escalation_names_each_entitys_instances_under_per_entity_bounds`. The engine corpus reads a per-entity count too (#535): `cli/tests/engine_corpus.rs::Observed::escalated` keeps no count for a line such as `ok at Loan=3 Member=2 instances`, and only a count every entity of the cone has is held to a case's `bfs=` verdicts. | `cli/src/verify/escalate.rs`, `cli/src/verify/refuted.rs::refuted`, `cli/src/state_findings.rs::Instances` |
-| P12 | evidence | fixed in #471; reproduced | **A TLC trace that did not replay silently skipped the comparison.** `compare.rs::disagreements` built TLC's violated set with `collect::<Result<_, _>>().ok()`, so a non-replaying trace dropped the comparison; `verify/tlc.rs::model_traces` replayed only the first TLC trace of each check, for display, and its unnamed `error:` line was counted nowhere ([tlc-agreement.md](./tlc-agreement.md#2-the-agreement-rules)). **Fix.** `compare.rs::unreplayed` replays every TLC trace of every job, whatever the native verdict, and a job with one that does not replay prints `error[EngineDisagreement]` and ends `tool_error` (reproduced with a `tlc` wrapper that corrupts one value). TLC's `Invariant X is violated by the initial state:` form, read before as an unnamed violation with no trace, is parsed as X's violation. Test: `cli/tests/verify_cli.rs::a_tlc_counterexample_that_does_not_replay_fails_the_run_as_a_tool_bug` (unix only; with TLC). | `cli/src/verify/compare.rs::disagreements`, `::unreplayed` |
-| P13 | evidence | fixed in #472 | **The corpus harness skipped silently in two places.** Rule 2 `continue`d when TLC printed no line for a module, and rule 8 compared only checks both runs decided. **Fix.** Rule 2 fails a native `Cone_` line without TLC's line when the header gives its checks a TLC verdict, and rule 8 fails a check the plain run decides and the symmetric run does not decide the same way, `not decided` included; both are functions (`rule_2`, `rule_8`). Tests on canned output: `cli/tests/engine_corpus.rs::rule_2_fails_a_tlc_line_the_header_expects_and_the_run_lacks`, `::rule_8_fails_a_check_symmetry_leaves_undecided`. | `cli/tests/engine_corpus.rs::check_case`, `::rule_2`, `::rule_8` |
-| P14 | evidence | narrowed in #476<br>`VERIFY_FALLBACK` cones and oidc-auth at 2 instances: open | **TLC agreement was tested at few bounds.** In the corpus, TLC ran at each case's default bounds only. In the sample comparison, the 25 cones of `VERIFY_FALLBACK` (24 before #526 added insurance-claim-ops' Investigation), the largest reduced ones among them, are compared at 1 instance only; a cone whose unreduced BFS passes `STATE_CAP` (300,000) and whose reduced BFS fits was compared reduced only and listed nowhere ([tlc-agreement.md](./tlc-agreement.md#the-sample-comparison)). **Fix (narrowing).** The corpus's `bfs=` runs at 1, 3 and 4 instances run TLC beside BFS under rules 1 to 3, and `VERIFY_REDUCED_ONLY` lists the cones compared reduced only. **Still open:** the 25 `VERIFY_FALLBACK` cones are compared at 1 instance only, and oidc-auth's 13 of them (eight browser-flow entity views and five invariants) meet TLC at 2 instances nowhere, since `verify --with-tlc` runs that root's headers (`samples/oidc-auth/buc/buc_ciba.rdra`), whose 2-instance run selects none of them: under `--entity` a run keeps an invariant only when one of its binders is selected (`core/select.rs::TransitionSystem::select`, `target_entities`), and that line's run checks five invariants, `Forbidden_BackchannelRequest_3` to `_5`, `MultiForbidden_LogoutNotice_4` and `Quantifier_DeviceAuthorization_1`, none of them a `VERIFY_FALLBACK` cone (run at `5f59fae2`). Its browser flow at 2 instances rests on the native checker alone. Open issue #202 proposes random walks with TLC. | `cli/tests/engine_equivalence.rs` (`VERIFY_FALLBACK`, `VERIFY_REDUCED_ONLY`), `cli/tests/engine_corpus.rs` |
-| P15 | evidence | fixed in #472 | **Deleting corpus cases went unnoticed.** `every_corpus_header_is_well_formed` asserted at least 30 cases. **Fix.** The header test compares the cases with `cli/tests/engine_corpus/CASES` both ways (87 cases at this commit). | `cli/tests/engine_corpus.rs::every_corpus_header_is_well_formed` |
-| P16 | evidence, prose | narrowed in #486, #497 and #508<br>branch protection, release gate: open (the owner's call) | **Gates the notes described were not in force.** No mutation kill rate was recorded; the mutation run mutated no file of the printer, the comparison, or the TLC readers; release-gate items 2, 3 and 7 of v3.0.0 were waived or held on weaker evidence (CHANGELOG); `RDRA_TLC_BATCH=both` ran in no workflow; the repository has no branch protection or ruleset; native-temporal-verification.md and engine-agreement.md described CI it did not have ([tlc-agreement.md](./tlc-agreement.md#5-process-gates)). **Fix (narrowing).** #486 recorded the kill rate per full run of the liveness-ladder mutation run (66.5% at `b0f593ba`, 62.9% at `6f2d29a1`, docs/engine-agreement.md, "Mutation run"), added the main-only `tlc-batch-both` job (`ci.yml`), restated the v3.0.0 gate as it ran with a proposal for items 2, 3 and 7, and fixed the stale CI and samples text. #497 added an erratum under the CHANGELOG's v3.0.0 entry saying that gate item 2 was held on five TLC roots and the flagged header lines, not on every root. #508 added a second mutation run, `.cargo/mutants-tlc.toml` (run by `mutants.yml` with `-f config=tlc`), over the TLA+ printer (`emit/tla/{mod,module,names,pred}.rs`), `verify/compare.rs`, `tlc_output.rs` and `tlc_replay.rs`, killed by the corpus with TLC and z3, the unit tests of the TLC reader, the comparison and the TLC driver, and the `verify_cli` tests that run TLC; its first run's kill rate is recorded as pending. **Still open:** branch protection (checked with `gh api` on 2026-11-28: none), and the owner's decision on the gate proposal. | `.github/workflows/ci.yml`, `.github/workflows/mutants.yml`, `.cargo/mutants-tlc.toml` |
-| P17 | evidence | fixed in #473 | **Shadow twins skipped large inputs without failing.** Twins skip calls above their caps (200,000 or 2,500,000 states; `Twin::Canonical` only for groups of at most 1,296 elements), counted only under `RDRA_ISH_SHADOW_STATS`, and the module's table listed 22 fast paths for 25 twins. **Fix.** A `shadow` build prints `shadow: compared/skipped/stopped` whenever a twin lets a call through, counting a call over the cap (`skipped`) apart from one where the run stopped (`stopped`); the corpus harness fails a case on any `skipped` call but for the runs `PAST_A_TWIN_CAP` names (one: `cone_reduced_class_loops` unreduced at 3 instances); CI's shadow job fails on a skip in a run and twin it does not expect. Tests: `cli/tests/engine_corpus.rs::bfs_and_tlc_and_z3_agree_on_the_adversarial_corpus` under `--features shadow` (its helper `check_case` fails a case on a skip that `PAST_A_TWIN_CAP` does not name) and CI job `shadow`. The table lists every twin: 26 at this commit (`shadow.rs::TWINS`; `Twin::Writes` joined in #491, P35). | `crates/rdra-ish-core/src/shadow.rs` |
-| P18 | evidence | partly fixed<br>`SeenGrowth` on the release path and CI per-run check: fixed in #473<br>loom model, jitter, probe harness, Miri: open (not built) | **Parallel BFS was checked on paths release builds do not take.** Release builds run `Probing::Off`; the twins of the shared-table probe ran only under `RDRA_ISH_FORCE_PROBES`, in one CI run. `Twin::SameAs` and `Twin::DenseBinding` guard paths release builds take, on every `shadow` run ([native.md](./native.md#parallel-exploration)). **Fix.** `Twin::SeenGrowth` also runs on the release path (an unforced `shadow` run of clinic-ops: `seen_growth` 5,805,845 calls), and CI's shadow job checks per run that the release path's twins compare and the probe twins (`Hit`, `Recent`) do not. **Still open:** the loom model, test jitter, and "probe finds every key" harness of native-bfs-parallel.md were not built, and no workflow runs Miri (`.github/workflows/` names neither). A wall-clock `--temporal-budget` stop depends on the machine, by design. | `core/explore/bfs.rs`; native-bfs-parallel.md |
-| P19 | evidence | fixed in #478 | **`can_reach` and deadlocks had no external oracle.** TLC cannot state `can_reach`, its deadlock check is one-sided (T6), and the guards against a stopped graph were `debug_assert!` only ([native.md](./native.md#recoverability)). **Fix.** `core/tests/oracle.rs` explores the whole system on its own (its own map from `initial_states` and `moves`) and decides `can_reach` and deadlocks by a forward search from every state; on every corpus case and formal-verification sample that builds, at 1 and 2 instances (at #478: 214 systems; 700 `can_reach`, 414 deadlock values; `::can_reach_and_deadlocks_agree_with_a_naive_oracle`, main only), it agrees with `reach_failure`, with the cone `verify` decides on, with `state_model_findings`, and with the deadlocks `check` prints on every entity whose cone frees no slots. Planted bugs in `reach_failure` and `can_leave` fail it. Both guards are `assert!`. It shares the step relation and the evaluator. Not covered: the entity cones up to symmetry. | `core/tests/oracle.rs`; `core/reach.rs`; `core/targets.rs` |
-| P20 | guarantee | fixed<br>replay before printing: fixed in #518 and #522<br>internal invariants of the lift that panicked: fixed in #529<br>re-evaluation of a lifted reduced `always`: fixed in #529<br>symmetric lasso lift: fixed in #531<br>class move with no S path: fixed in #541 | **"Every native counterexample replays" did not hold for safety traces.** Liveness lassos were replayed, re-evaluated and fairness-checked before printing; a plain safety trace was printed as stored; a reduced trace's lift checked its `T` steps with `debug_assert!` only; a symmetric lift that failed to replay panicked. **Fix.** Every printed trace replays through the step relation of its run before it prints: state rules and `after` in #518; `always`, `stable`, `unchanged`, `precedes`, `can_reach`, deadlocks and witnesses in #522, through `ComponentRun::lifted_path`, which calls `orbit::replays` and then lifts. `reduce/lift.rs::lift` checks every lifted `T` and `S` step against the unreduced cone's moves in every build and returns `ReplayError`. A failure is a fault, never a counterexample: `LiftFault`, `LassoFault::Replay`, or `TraceFault`, each a `tool_error` (#524). Tests: `core/explore/tests.rs::a_path_that_does_not_replay_is_a_fault` (`orbit::replays` returns `NoMove` for a step to a state its action does not reach; its second half, which would build a `LiftFault` with `faulted`, runs only when the run finds a state-rule violation, and its model, `SHOP`, has no rule, so that half never runs), `::a_violation_that_does_not_lift_is_a_lift_fault` (the `LiftFault` that `faulted` makes, through `lifted(None, ..)`: its name, sites and severity, and no trace), `core/explore/symmetry/witnesses.rs::pinned_start_has_a_witness` (with `PinnedStart` dropped, the lifted counterexample of a run up to symmetry starts at no initial state, and `explore/orbit.rs::run_orbits_annotating`'s replay makes it a `LiftFault` with `LassoFault::Replay(NotInitial)`), `core/tests/reduce.rs::a_lifted_step_that_is_no_move_of_the_cone_is_a_replay_error`, `cli/src/verify/end.rs::a_trace_fault_is_a_tool_error`. No test was found that drives `explore/mod.rs::ComponentRun::trace_violations` with a stored path that fails to replay (the `LassoFault::Replay` of `explore/tests.rs::a_path_that_does_not_replay_is_a_fault` is in the half that never runs; the one that runs, in `explore/symmetry/witnesses.rs::pinned_start_has_a_witness`, is the replay of a lift up to symmetry). The lift's own look-ups fault too (#529): `explore/orbit.rs::lift_path` returns `NoMove` for a stored edge that is no move of its source; `reduce/lift.rs::lift` returns `NotInitial` for a start with no class or no initial S state and for an S path up to `H` that starts elsewhere, `NoMove` for a rise or a class move's target it cannot find and for an S action that is not the cone's, and `Length` for a mismatched group of the inner lift. Since #541 a class move with no S path to its target is `NoMove` too: `reduce/partition.rs::Succ::shortest_path` returns `None`, where until #541 it had a `panic!`. `decide_property` checks in every build that its path breaks the property at its last state, and on a reduced system reads an `always` again on the lifted last state (`PropertyVerdict::Fault`). Tests, of two of these branches only: `core/tests/reduce.rs::a_lift_from_no_initial_state_is_a_replay_error` (a start with no class) and `::a_class_move_with_no_s_path_is_a_replay_error` (a forged move back to the class just left is the `NoMove` of that step, #541); no test was found that reaches `lift`'s other look-up faults (a class with no initial S state, an S path up to `H` that starts elsewhere, a rise or a target with no block, an S action that is not the cone's, and `Length`); the `is_move` check of a lifted step is what `a_lifted_step_that_is_no_move_of_the_cone_is_a_replay_error` reaches. The lasso lift of a run up to symmetry, `explore/orbit/liveness.rs::Product::lift`, returns `NoMove` for a stored edge that is not the move at its place or whose permutation does not take that move to its target, which `lasso` reports as `LassoFault::Replay` (it had an `expect` and two `assert!`s). Test: `core/explore/orbit/liveness.rs::an_edge_its_permutation_does_not_explain_is_a_replay_error`. **Unchecked internal invariants.** The non-test code of `reduce/lift.rs`, `reduce/partition.rs::Succ` and `explore/{orbit, orbit/liveness, orbit/findings, liveness, properties, graph, mod}.rs` keeps these `expect`s, `panic!`s and `unreachable!`s, each a panic in a release build. *In the lifts:* `reduce/lift.rs::lift_stop`'s `reduction()`, a precondition of its caller `decide_liveness_reduced`; a lifted lasso's state list is nonempty, since it starts with the lifted start; the cycle search of `lift_stop`'s own walk graph (a strongly connected component of two or more states has a cycle through its entry, and every state the search reaches has a parent); `explore/orbit.rs::run_orbits_annotating`'s `steps.last()` for an `after` violation: `explore/orbit.rs::lift` appends the violating step to the stored path, a reduced system keeps an `after` assertion only when the action of each of its steps is a T action (`reduce/mod.rs::drop_unreadable_checks`), and `reduce/lift.rs::lift` lifts a T step as exactly that step or returns an error, so the lifted path is not empty whatever path is lifted; the deadlock trace of `explore/orbit/findings.rs::deadlocks` (`trace_mut()`), which holds because `findings.rs::deadlock` always builds a `StateDiag::Deadlock`, which has a trace; and `explore/mod.rs::faulted`'s `unreachable!`, whose callers (`run_orbits_annotating`, `lifted`, `trace_violations`) pass it only the diagnostic of a run's state-rule or `after` violation, or a `LiftFault` it made. *In the searches before the lift:* in `explore/orbit/liveness.rs`, `Product::new`'s permutations, a precondition of `OrbitRun::decide_liveness` (a run from `run_annotated_orbits`); the look-ups of the pair search (`lasso` finds each BFS parent edge among its source's edges and each `toward` step among the pair's real edges; `thread_walk` finds a covering edge in a component the search marked fair; `walk_in` joins two pairs of one strongly connected component); and `threads_covered`'s look-up of an enabled instance, which asks only for the instance of a real edge of the state or for an entry of the state's enabled list, a list built from exactly those instances. In `explore/liveness.rs`, their counterparts on a plain run: `edge_between` finds the edge a `toward` step came from, since `toward` follows the predecessors of the adjacency built from the run's own edges; and `fair_loop` calls `walk_in` only inside a component `avoid` marked as a fair cycle (two or more states, expanded whole, and every instance enabled in all its states taken by one of its edges), so each instance not yet covered is disabled at one of its states or taken by one of its edges, the strongly connected component reaches it, and neither `walk_in`'s `panic!` nor `fair_loop`'s `expect` that the walk is not empty fires. *Preconditions of the caller:* `liveness_search` (under `decide_liveness` and `decide_liveness_reduced`) and `Product::search` (under `OrbitRun::decide_liveness`) panic on a form that is not `eventually` or `leads_to`; `cli/src/verify/native.rs` reaches them only for a property whose `LtlKind::is_liveness` holds (`Answer::of`, `native_property`'s branch up to symmetry, and `decide_liveness_reduced` through `PropertyJob::wf`, which `cli/src/verify/jobs.rs` sets for liveness cones only). `ComponentRun::decide_property` returns `None` for exactly those two forms, and its callers never pass them: `Answer::of` sends them to `decide_liveness`, and `TransitionSystem::decide_property` runs, from `cli/src/verify/bfs.rs::explored_properties`, only for the forms `LtlKind::is_explored` names. `TransitionSystem::decide_property` finds the property in its cone's system: `cone.rs::property_seed` holds what the property reads, both arms build the system through `restrict.rs::restrict_to` (`reduced_cone` by `cone_system`), which keeps a property whose reads it holds, and the reduction, whose seed is that one, observes those reads and so `drop_unreadable_checks` keeps it (an `always` has no fairness). Also `decide_liveness_reduced`'s `reduction()`, called only when `cone.is_reduced()`; `OrbitRun::perms` in `explore/orbit/findings.rs`, since both callers of `targets.rs::read_orbits` pass a run of `run_annotated_orbits`; and `explore/mod.rs::bfs_on`'s group, which it reads only when asked to annotate, and only `run_orbits_annotating` asks, with a group. *Outside those files, on a lift's way:* `reduce/lift.rs::lift` rebuilds the reduction's extended sub-lifecycle and explores it again. `reduce/extended.rs::Extended::rebuild` calls `Extended::build`, which keeps `expect`s (`"in S ∪ inputs"`, `"an S action is kept"`), as do its helpers `fold_param` (`"an S action is kept"`, `"the group's first"`), `fold_linked` (`unreachable!("a linked fold")`, `"an S action is kept"`, `"a linked fold's guard holds its node"`) and `renumber` (`"an S param is kept"`), and the code of `restrict.rs` that `build` reaches (`drop_params`, `renumber_by`, `Remap::e`, `Remap::v`). Then `sub.run` and `run_orbits_fixing` explore the extended sub-lifecycle under the inner reduction, which reaches `reduce/mod.rs::TransitionSystem::moves_of_into`'s `expect("a reduced state holds a representative")` and its `panic!` on a T step's rise, and `explore/moves.rs::TransitionSystem::initial_states`'s `expect("an initial S state has a class")`, which `lift` also reaches directly through `sub.initial_states()`. None of these reads the lifted path: each is about the cone, its split, its folds and the inner reduction, and each held when the reduction was built, since `reduce/mod.rs::TransitionSystem::reduced_with` ran `Extended::of`, the same `build`, on the cone, and `reduce/partition.rs::Classes::of_graph` read the classes off a complete run of that sub-lifecycle under that inner reduction. So they hold in the lift if `rebuild` reproduces that build. `rebuild` passes the folds group by group where `of` passed the split's folds in their own order, and runs on the cone after `drop_unreadable_checks` dropped some of its checks; the first fold of each group is the same in either order, but two linked folds of one action can add their params in the other order, and that no premise of these `expect`s changes was not checked: they are unchecked internal invariants. `explore/orbit.rs::lift_path` calls `explore/symmetry/canon.rs::Canon::canonical`, whose `split` keeps `expect("as many places as rows")`, which holds by counting: a tie of `k` rows has `k` places, and a placement (an injection, `canon.rs::injections`) gives `j` of them to the tie's `j` named rows, which leaves `k − j` places for its `k − j` other rows. `lasso.rs::TransitionSystem::replay_lasso`, `::explain_property` and `::unfair_loop` take `states.last()` of a replay, which holds its start since `trace.rs::TransitionSystem::replay` returns `ReplayError::Empty` for a path with no state; `explain_property` also indexes the back edge's target, which `replay_lasso` looked up with `get`. Two more on the way hold whatever path is lifted: `trace.rs::TransitionSystem::base_state`'s `expect` (reached from `initial_states`), since it asks `state_from` for every var's base and so always gets a state, and `explore/moves.rs::TransitionSystem::each_successor`'s `expect("tick without a clock")`, since the build makes the `Tick` action only when it declared `now` (`build/vars.rs::Builder::tick`); whether every restriction that keeps `Tick` keeps `now` was not read. Beyond these the row does not enumerate the step relation, the BFS, the state store and the group code that the runs of `sub` go through, as every run does; their release panics are those of N1 to N4 ([native.md](./native.md)), not the lift's. Left out as bookkeeping: conversions of a count to `u32` or `usize`, the look-up of an entry inserted just before (`"just added"`, `"just read"`), and likewise `Succ::shortest_path`'s `parent[&at]` (every state its search queues, other than `from`, has its parent recorded before it is queued; the twin of `lift_stop`'s `"the walk's parent"`) and `Product::new`'s `key_index[..]` (each key it indexes was inserted when the key was made), indexing into the tables a run, a reduction or a layout built (`blocks`, `ext.acts`, a run's states, `comp`) by indices from the same run, the `assert!`s that a caller passes caps that keep the edges or does not read a released run, and the `shadow`-only and `debug_assert!` checks. The lift also indexes by the path's own states and actions (`reduce/mod.rs::Reduction::key`, `reduce/mod.rs::Reduction::write` and `reduce/mod.rs::Reduction::stages` on a step's successor, `ext.acts` by an action of the inner lift): those are in range for a path of the system's own state layout and action ids, which every caller passes (stored states and steps of the run), not for any sequence of bytes. Two read a lifted path, `lift_stop`'s state list and `run_orbits_annotating`'s `steps.last()`, and both hold whatever path of the system's own states is lifted. A failure of any of them stops the command; none can print a trace that does not replay. | `core/explore/graph.rs::ComponentRun::lifted_path`; `core/explore/orbit.rs::replays`, `::lift_path`; `core/explore/orbit/liveness.rs::Product::lift`; `core/reduce/lift.rs::lift`; `core/explore/properties.rs::ComponentRun::decide_property` |
-| P21 | evidence | fixed in #469; reproduced | **A stopped native run was recorded as `ok` for the per-run comparison.** `verify/native.rs::Answer::outcome` mapped `Stopped` to `Outcome::Ok`, which entered `Native::runs`, so a native run stopped at a cap beside a TLC counterexample read as a disagreement (`tool_error`), against rule 1, and `liveness_up_to_symmetry` could report a false `tool_error` ([tlc-agreement.md](./tlc-agreement.md#2-the-agreement-rules)). **Fix.** `Answer::outcome` maps `Stopped` to `None`, so a stopped run is not decided and compared with nothing; reproduced before the fix with `temporal_unmet.rdra` at `--max-states 3`. The explored-form message names the time budget. The `OK:` line after `result: not decided` stays, as compatibility.md documents. Test: `cli/tests/verify_cli.rs::a_property_run_stopped_at_the_cap_is_no_disagreement_with_tlc`. | `cli/src/verify/native.rs::Answer::outcome`, `cli/src/verify/compare.rs::disagreements` |
-| P22 | guarantee | fixed in #475 (definition) and #494 (vacuity, language reference) | **D17 omitted the stuttering exemption of `after` assertions.** D17 said an `after(UC).assert(ψ)` holds iff ψ holds after every step of the last step of `UC`; neither engine checks a step whose successor equals its pre-state (the TLA+ form `[][(\A p : UC(p) => post')]_vars`; `Bfs::take` continues before `check_after` on `Probe::Loop`). P51 is the same item found from the native side. **Fix.** #475 made D17 quantify over steps with `s' ≠ s`. #494, the owner's call to align with TLA+: the language reference says a last step that changes nothing is not checked, semantics.md S6 is resolved, and D18's vacuity check counts only steps with `s' ≠ s`, so an assert whose last step only ever stutters warns `Vacuous_AfterAssert_*` (`UnmetPremise::OnlyStutters`, `Ends::moved`). Test: `core/tests/vacuous.rs::an_assert_after_a_step_that_only_stutters_holds_vacuously`, P51's model at one and two instances. | semantics.md D17; `core/explore/bfs.rs::Bfs::take`; `core/targets.rs::TransitionSystem::vacuity` |
-| P23 | evidence | fixed in #503 | **The per-run `WfNext` comparison could pair runs on two different systems.** The native `WfNext` run of a reduced liveness cone (`decide_liveness_reduced`, A15) was paired with TLC's `_WF` module, printed from the unreduced cone, so Proposition 0 of tlc-agreement.md (both engines decide the same `T'`) failed on that path. **Fix.** Runs are paired by the system each decides (`verify/jobs.rs::RunOn`: property, graph, fairness); the native WF run on the reduced cone is printed native-only and meets TLC only in the final verdict. Test: `cli/tests/verify_cli.rs::a_wf_run_on_the_reduced_cone_is_named_native_only`. | `cli/src/verify/jobs.rs::RunOn`; `cli/src/verify/compare.rs::disagreements` |
-| P24 | evidence | fixed in #485; reproduced | **Multi-target transitions: the printer and the native step agreed only under an unstated builder invariant.** Natively a `Transition` chooses only when the current source has two or more targets; the printer turned the whole effect into `Post::ChooseIn` when any source had two. With an `Assign` after it or a `Choose` before it on the same `(var, param)`, the two gave different successors; a guarded `sets(UC, E.col == v).when(Cond)` on the lifecycle column of a row `UC` creates, with a two-arm `transitions` line, built that shape (reproduced: `EngineDisagreement` on main). **Fix.** `Builder::finish` fails any action that writes one `(var, param)` twice with `ConflictingEffects` (`Action::slots_written_twice`), so the invariant is enforced and that model fails to load. Test: corpus `safety_created_set_beside_transitions` (#500). | `core/types.rs::Action::slots_written_twice`; `core/build/`; `core/explore/moves.rs::each_successor`; `emit/tla/module.rs::effects` |
-| P25 | evidence | fixed in #507 | **The graph comparison did not compare an edge's params.** `engine_equivalence.rs::check_cone` compared BFS's and TLC's edges as `(from, to, action)`, since TLC's `-dump dot,actionlabels` labels a step with the action operator alone, so a step taken under the wrong binding was invisible. **Fix.** The comparison prints the cone with one `Next` disjunct per binding (`emit/tla/mod.rs::print_bound`, `TlaNames::bound_action`), and edges compare as `(from, to, action, params)`; a class move of a reduced cone prints no params and compares by action. Tests: `cli/tests/engine_equivalence.rs::bfs_and_tlc_agree_on_the_binding_of_each_edge` (release jobs; two edges that differ only in params), `emit/tla/tests.rs::a_bound_module_names_each_binding_of_an_action`. | `cli/tests/engine_equivalence.rs::check_cone`; `emit/tla/mod.rs::print_bound`; `emit/tla/names.rs::TlaNames::bound_action` |
-| P26 | evidence | partly fixed<br>the builder on a subset, and z3's `proved` checked at wider ranges: fixed in #492<br>outside the subset, the verdicts of properties, the cone choice, the ladder, the quotient tables, `TlaNames`: open | **TLC agreement cannot see a fault in the builder.** Both engines read the one `T` that `TransitionSystem::build` makes, and the same cone choice, property-cone ladder, quotient tables and `TlaNames`, so a wrong `T` moves both verdicts at once ([tlc-agreement.md](./tlc-agreement.md#residual-risk), item 1). **Fix (partial).** `core/tests/reference/` reads a subset of the language from the `SemanticModel` without the builder, explores it by brute force on plain values, and compares initial states, reachable states, labelled edges, rule names and violated rules with the native run of the whole model. Tests: `core/tests/reference/mod.rs::the_builder_agrees_with_the_reference_on_the_corpus` (every corpus case and formal-verification sample in the subset, at three bounds; at least 90 systems), `::the_builder_agrees_with_the_reference_on_random_models` (seeds 0..300, per pull request), `::the_builder_agrees_with_the_reference_on_many_random_models` (300..3000, main only), `::a_value_past_a_byte_is_not_wrapped` (P40, P54); with z3, `core/tests/reference/proofs.rs::a_rule_proved_at_one_int_range_holds_at_wider_ones` (P43), `::a_guarded_null_beside_a_guarded_present_is_no_proof` (P66, since #544) and `::rules_proved_on_random_models_hold_at_wider_int_ranges` (200 seeds, main only) check z3's `proved` at `m` against the reference at `m + 1` and `m + 3`. **Still open:** everything `RefModel::read` refuses, which is more than the "Out (refused)" doc comment of `interp.rs` names (the list, read from the code, is in [claims.md, I1](./claims.md#0-the-build); among it owners and `relate`, `@unique`, `chooses`, `drives`, links, copies, `invokes`, `compensates`, `triggers` and counted triggers, published entities, `@derived`, `now`, multi-entity rules and quantifiers, `after` assertions, use cases that write two entities or both create and delete, `transitions` on a created or deleted row), the verdicts of properties, the cone choice, the ladder, the quotient tables and `TlaNames` have no independent check, and the reference shares the parser, `build_model`, the rule names, and which Int columns are numbers. | `core/tests/reference/` |
-| P30 | evidence | fixed in #488<br>reads outside guards: refuted, pinned in #537 | **The symmetry scan did not check that no predicate reads an absent row's owner.** Theorem A18 of [cones.md](./cones.md#instance-symmetry) needs every guard, rule, and property to have the same value on `s` and `g(s)`; `Group::apply` does not relabel an owner on an absent row, so a predicate that read it could change value under `g`. No model was known to reach it. **Fix.** The scan leaves the parent's class out when a guard reads, before the step, the key of the row the step creates (`Rule::AbsentOwner`); no sample or corpus cone fires it. Test: `core/explore/symmetry/witnesses.rs::absent_owner_has_a_witness`. **Outside guards** (#537) no rule is needed: invariants, `after` assertions, properties and `can_reach` read an owner only on a present or deleted row in every read a verdict depends on, whatever the predicate, which `apply` relabels (G5). An invariant binds and quantifies present slots; an `after` assertion reads the state after its step, where each parameter's row is present or deleted; a property's trigger is `present ∧ link` and its other reads are gated by it or by presence after the step, and its goal is read after a trigger, where a row is present or deleted, since a slot never becomes absent again; `can_reach` gates its link and goal by presence. Test: `core/explore/symmetry/g6.rs::reads_outside_guards_meet_no_absent_owner`, on a model of shops and orders at 2 instances that reads the order's owner through a cross `forbidden` with `.along`, an `at_most` invariant, two `after` assertions, and `leads_to`, `eventually`, `can_reach`, `stable` and `precedes` with `.along` (no `always` or `unchanged`): each gated read is the same on every reachable state of the plain run and its canonical form, the `eventually` and `leads_to` verdicts and the safety findings of the plain run and the run up to symmetry agree, and a goal given a read of an absent row's key by hand differs only on rows never created, which no verdict reads. | `core/explore/symmetry/breaks.rs::scan`, `core/explore/symmetry/mod.rs::Rule`; `core/lasso.rs::triggers`, `core/expr.rs::find_violation`, `core/reach.rs::reach_failure` |
-| P31 | evidence, prose | partly fixed<br>prose: fixed in #475<br>fold evidence: fixed in #516 and #521<br>Lemma 6 as a whole: argued, not proved | **The reduction's proof omitted the step that ties the extended sub-lifecycle to the cone.** cone-soundness.md, "Proof obligation", used without stating it that every reachable cone state's `S` part, inputs, and bits form a reachable state of the extended system, and that a silent edge from there is a step of the cone (Lemma 6 of cones.md); its fold half rested on `Fold::holds` matching the folded guard, compared with a second implementation only (`Twin::FoldHolds`). Prose: instance-symmetry.md listed five of the group rules; cone-soundness.md omitted `MAX_COPIES` and that the `_WF` run rests on the monotone rule. **Fix.** #475 corrected the prose and stated Lemma 6. #516 and #521 test the fold equivalence against the cone's own step relation, in CI's formal-verify step: `core/tests/reduce.rs::reduced_domain_cones_hold_each_fold_bit_where_its_action_runs` (the bit holds wherever the action runs, 71 folds of the domain samples), `::reduced_domain_cones_step_by_a_true_fold_bit_only_where_the_cone_steps` (every silent step of the extended sub-lifecycle from a projected state is a move of the cone), and `::case_fold_bits_hold_exactly_where_their_actions_run_past_slot_0` (both halves past slot 0). Planted bits fail each. CI runs them with release optimisations and, since #511, overflow checks (profile `ci-checked`). Lemma 6 as a whole stays argued; the tests check the fold equivalence it assumes, on these models and bounds. | `core/reduce/extended.rs::Extended::build`, `core/reduce/fold.rs`, `core/reduce/lift.rs::lift_cycle`; cone-soundness.md; instance-symmetry.md |
-| P32 | guarantee | fixed in #477; reproduced | **An entity cone with a left-out mark could miss a state-model finding.** `targets.rs::entity_findings` and `findings.rs::state_model_findings` decided `NoWitness`, `Deadlock`, `NeverRuns`, arms never taken, and values never chosen on the entity's cone; these existential or branching checks are not covered by Theorem A2, and a cone that left a raised mark out ran the handler without the event, which could hide a deadlock of `T` or clear a `NeverRuns` for the whole run (`RunsSoFar`): a wrong "no finding", that is, a wrong `ok` ([cones.md](./cones.md#safety-cones)). **Fix.** An entity's cone is its exact cone whenever its own cone would leave a mark out (`cone.rs::target_cone`), so every cone that feeds `RunsSoFar` and the state-model findings is exact for marks. Tests: corpus `cone_entity_mark_left_out` (#502; the deadlock and the missing witness the left-out mark hid), and the helper `core/tests/cone.rs::assert_cones_exact`, run by `::cone_exploration_equals_the_projection_of_the_whole_system` (the samples), `::a_cone_that_leaves_a_mark_out_keeps_the_whole_systems_verdict_and_view`, `::an_after_assert_step_follows_its_params_into_a_cone`, and four single-model tests in `core/tests/{along_guards,joins,copies}.rs`, which asserts that no entity cone leaves a mark out (on cones that free no slots; a cone that frees slots is checked for `⊆` only), `⊆` on a check's cone that does, and equality on exact cones. | `core/cone.rs::target_cone`; `core/targets.rs::entity_findings`; `core/findings.rs::state_model_findings` |
-| P33 | evidence | closed<br>`PinnedStart`: fixed in #512<br>`Reduced` and `Observed` reasons: closed in #516 (a cost question, not a soundness one) | **Group rules were kept without a witness.** Claim A20 said every rule that leaves a class out has a witness, but `PinnedStart`, the `Reduced` reasons and four `Observed` reasons had none. **`PinnedStart` (#512):** dropping it keeps the quotient a bisimulation with the same verdicts, but the run stores the canonical form of an initial state, which need not be one, and the lifted counterexample fails the always-on replay (`orbit.rs::replays`, `NotInitial`); test `core/explore/symmetry/witnesses.rs::pinned_start_has_a_witness`. **The rest (#516):** each `Reduced` or `Observed` reason only adds an entity to what `Group::leaving_out` leaves out, which gives a subgroup, and by A20 (Theorem A18 holds for every subgroup of `G_s`) an extra reason can cost states, never a verdict. The soundness risk is a missing reason, held by the always-on assertion that `H` moves nothing the quotient reads (`up_to_h`), the `reduced_orbit_run` twin, and the bisimulation checks of `assert_up_to_g_t`. A sweep that dropped each of the ten on every engine-corpus case changed no verdict. | `core/explore/symmetry/breaks.rs`, `witnesses.rs`, `snapshot.rs::KEPT`; `core/reduce/mod.rs::fixed_why` |
-| P34 | guarantee | not a bug; recorded with a test in #519 | **Does `Deadlock` survive a divergence-blind reduction?** The reduction (A8) does not keep "no step at all", but `StateDiag::Deadlock` does not read that: it is "no path changes the column or deletes the row" (`findings.rs::can_leave`, defined in [semantics.md, D25](./semantics.md#d25)), an existential reachability over non-silent edges that stuttering bisimulation keeps. Both kinds of stuck state are deadlocks on the cone and on the reduced cone. TLC's deadlock (no successor) is the other reading; the corpus records where the two differ (`cone_reduced_loop_unreached`). Test: `core/tests/reduce.rs::a_silent_cycle_and_a_stuck_state_give_the_same_deadlocks_reduced`. | `core/findings.rs::can_leave`; `core/reduce/partition.rs` |
-| P35 | evidence | fixed in #491 (debug and `shadow` builds) | **Nothing checked that a step changes only the variables `Wr(a)` names.** Lemma 2 of [cones.md](./cones.md) reads `Wr(a)` (`cone.rs::action_writes`) as every variable a step of `a` can change; a step relation that wrote another would make a cone drop a writer it needs. **Fix.** A debug or `shadow` build keeps per action the state bytes `Wr(a)` holds (`Plan::writes`) and holds every step to them (`TransitionSystem::check_writes`), panicking with the action and the variable; a `shadow` build counts it as the `writes` twin, so CI's shadow job checks every step of the samples and the corpus. Test: `core/tests/cone.rs::a_step_that_changes_a_var_its_action_does_not_write_is_caught`. A release build does not check it. | `core/cone.rs::action_writes`, `core/explore/plan.rs::check_writes` |
-| P40 | guarantee | fixed in #470; reproduced | **The top Int value of a nullable column was null at `--int-range-max 255`.** `types.rs::Domain::of_number` returned `Value(n as u8 + 1)` for a nullable Int, whose domain at `m = 255` has 257 values, so a written or default 255 wrapped to `Value(0)`, null, while a rule's literal compared as a number. `sets(Top, Item.n == 255)` with `forbidden(Item, n == 255)` printed `proved:` and `ok`; a `present` write also produced null. Both engines read the same wrong system, so they agreed; the verdict was wrong with respect to the model text (claim I1 failed). P54 is the same fault with its Enum cases. **Fix.** A column domain of more than 256 values is the build error `DomainTooLarge` (`build/vars.rs`), so no engine checks such a model. Tests: corpus `width_nullable_int_top`, `core/tests/reference/mod.rs::a_value_past_a_byte_is_not_wrapped`. | `core/types.rs::Domain::of_number`; `core/build/vars.rs` (`DomainTooLarge`) |
-| P41 | prose | fixed in #490; reproduced | **A `.lemma()` rule could be checked, and refuted, by BFS.** B11 said a lemma "gets no BFS cone, so it is never `refuted`", and formal-verification.md said "`verify` runs no cone for it"; but a lemma whose reads lie inside another selected rule's cone is checked there, and a false one printed `refuted: lemma Forbidden_Door_0` and `result: counterexample`. Failing the run is right; the prose was wrong. **Fix.** formal-verification.md and B11 say a lemma is checked by another rule's cone that reads it and can be `refuted`. Test: `cli/tests/prove_cli.rs::a_false_lemma_is_refuted_where_bfs_reaches_it_and_dropped_where_not`. | `cli/src/verify/mod.rs` (target filter); formal-verification.md; claims.md B11 |
-| P42 | evidence | partly fixed<br>reachability: fixed in #477 and #509<br>exactness: checked in #490 for checks that ran out; z3's own give-ups counted, not asserted | **"Refuting a rule changes no other verdict" needed two unchecked conditions.** It holds when the BFS violation is reachable in `T` and every z3 answer is exact ([z3.md](./z3.md#interaction-with-bfs), Proposition 8). **Fix.** Only a violation its cone vouches for, or the refined or exact cone found, refutes a rule (P1). `cli/tests/proof_equivalence.rs::a_refuted_rule_left_out_changes_no_other_verdict` (release jobs: `engine-equivalence` runs it on every pull request that can change a verdict and on main; marks as in [claims.md](./claims.md#how-to-read-a-row)) asserts that no check of either proof ran out of its limit (`canceled`); the checks z3 gives up on by itself (Houdini rounds without MBQI) are counted, not asserted. No `proved` becomes wrong either way. | `cli/src/verify/refuted.rs::refuted`; `core/prove/mod.rs::prove` |
-| P43 | guarantee | fixed in #481; reproduced | **A `.when`-guarded `present` write to a nullable Int kept the run's top in the proof.** `sets(UC, E.n == present).when(C)` built a `Choose` of `1 … m+1` at the run's bound, and `build/transitions.rs::arm_guards` turned that list into the guard `⋁_v (next.n = v ∧ C)`, which the encoding asserted as built, so the encoded step never wrote more than `m`. `forbidden(Item, n > 5)` printed `proved` at `--int-range-max 5`, and BFS refuted it at 7 ([z3.md](./z3.md#reproductions)). **Fix.** The builder records the choice of every number as such (`Effect::Choose` with `numbers`), `Enc::one_of` widens on it, and `arm_guards` drops those values for a single `!= null` arm, so the guard is the same at every `m'` (`build/sets.rs` records `numbers`; `build/transitions.rs::arm_guards` keeps them one arm; `prove/encode.rs::Enc::one_of` reads them as every index from `from`). Tests: corpus `z3_guarded_present_past_the_top`; `core/tests/reference/proofs.rs::a_rule_proved_at_one_int_range_holds_at_wider_ones`. | `core/build/sets.rs`, `core/build/transitions.rs::arm_guards`; `core/prove/encode.rs::Enc::one_of` |
-| P44 | evidence | fixed in #490 | **The differential test of the proof skipped silently.** `cli/tests/proof_equivalence.rs` skipped any cone whose BFS did not finish under its `STATE_CAP` (300,000) without reporting how many. **Fix.** `report_skipped` prints the skipped comparisons and asserts their number (130 on the samples, 0 on the corpus), so a comparison that starts to be skipped fails the test. Tests: `cli/tests/proof_equivalence.rs::no_proved_rule_has_a_bounded_counterexample`, `::no_proved_rule_has_a_bounded_counterexample_in_the_corpus` (release jobs). Without z3 the test is skipped unless `RDRA_REQUIRE_Z3=1`, which CI sets. | `cli/tests/proof_equivalence.rs::report_skipped`, `::skipped` |
-| P50 | guarantee | fixed in #479 and #510; reproduced | **Packing past 65,535 bits merged states.** `Packing`'s bit offsets (its field `offs`, built by `packing.rs::offsets`) were stored as `u16`, saturating at `u16::MAX`, and `Packing::patch` and `Packing::cell` used them, so a cell past bit 65,535 was written and read at bit 65,535: a plain run stored wrong rows and merged distinct successors. Reproduced on a 34-Int-column entity at 255 instances (69,870 bits): a spurious `counterexample` and a wrong `ok` ([native.md](./native.md#the-state-store-and-its-encoding)). **Fix.** #479 made offsets `u32`; #510 made a state past the bits a packed state addresses the build error `StateTooWide` (`build/mod.rs::too_wide`), before any engine packs it. Tests: `cli/tests/verify_cli.rs::a_state_past_bit_65535_keeps_its_verdicts` (main only; both reproductions' models at 255 instances only, each held to the verdict the test writes in, the one they gave at 8: `counterexample` and `ok`), `core/explore/packing.rs::tests::a_state_past_bit_65535_packs_patches_and_reads_back`, `core/build/mod.rs::a_state_past_the_packed_width_is_a_build_error` (the threshold function `too_wide` one bit past a width, and the P50 model, past bit 65,535, building without `StateTooWide`). | `core/explore/packing.rs::offsets`; `core/build/mod.rs::too_wide` |
-| P51 | guarantee | closed: duplicate of P22; reproduced | **`after` assertions skipped steps that change nothing.** Found from the native side: a use case whose every step is a self-loop and whose assertion fails after it gave `ok` on both engines ([native.md](./native.md#safety)). Handled as P22 (#475, #494); the model is the test `core/tests/vacuous.rs::an_assert_after_a_step_that_only_stutters_holds_vacuously`. | `core/explore/bfs.rs::Bfs::take`; semantics.md D17 |
-| P52 | evidence | fixed in #487 (state rules and `after`); the checks inside `lift` are P20's | **A reduced safety trace whose lift no longer violated printed silently.** `ComponentRun::trace_violations` kept the reduced message and printed the lifted trace with no fault when the lifted last state did not violate. **Fix.** Such a violation becomes `LiftFault` carrying `LassoFault::Satisfies`, printed as `error[LassoFault]`, counted with the tool errors, with no trace. Tests: `core/explore/tests.rs::a_violation_that_does_not_lift_is_a_lift_fault`, `cli/src/verify/bfs.rs::a_violation_that_does_not_lift_makes_the_cone_a_tool_error`. The checks inside `lift` and the reduced `always` re-evaluation are P20's. | `core/explore/mod.rs::ComponentRun::trace_violations` |
-| P53 | evidence | fixed in #484; reproduced | **One step of memory-stop determinism was not shown for the CLI's reruns.** A safety cone with partner properties whose run to the end met the limit beside another fell back to its early-stopping run unmarked, so `RDRA_JOBS=8` printed `(15150 states)` where 1 printed `(65793 states)`. **Fix.** The first run's stop marks it, and every rerun of the safety and property passes goes alone under an explicit room (`Caps::alone`), as `targets.rs::TransitionSystem::run_cones` does. Test: `cli/tests/memory_cli.rs::safety_and_property_passes_stop_where_they_stop_one_at_a_time` (main only). | `cli/src/verify/bfs.rs::bfs_cones`, `cli/src/verify/native.rs`; `crates/rdra-ish-core/src/memory.rs::MemoryPool` |
-| P54 | guarantee | fixed in #470; reproduced | **A value past a byte wrapped when the build encoded it.** Its nullable-Int case is P40. `Domain::of_variant` returned `Value((i + shift) as u8)`: in a nullable Enum of 256 values `v255` became null, and in a non-null Enum of 257 values `v256` became `v0`. Reproduced at one instance by the review of [native.md](./native.md#the-state-store-and-its-encoding): `sets(Create, Row.n == 255)` with `n: Int @null` and `forbidden(Row, Row.n >= 200)` at `m = 255` gave `ok`, and a nullable Enum of 256 values gave `ok` for `v255`. **Fix.** `DomainTooLarge` (P40). Tests: corpus `width_nullable_enum_256`, `width_nullable_int_top`; `cli/tests/check_cli.rs::an_enum_column_takes_no_more_values_than_a_state_holds` (under `check` and `verify`, a nullable Enum of 256 values and a non-null Enum of 257 are `DomainTooLarge` errors and stop `verify` before any engine runs, while a nullable Enum of 255 and a non-null Enum of 256 still build and break the rule; the TLA+ export refuses the same columns); `core/tests/reference/mod.rs::a_value_past_a_byte_is_not_wrapped`. | `core/types.rs::Domain::of_variant`; `core/build/vars.rs` |
-| P55 | guarantee | fixed in #479 | **The edge index wrapped past 2^32 edges.** `Steps::read` recorded each state's first edge as `self.moves as u32`, a bare cast, so `source_of` could attribute edges to wrong sources and liveness, `can_reach` and deadlocks read a graph that is not `G`. Not reproduced. **Fix.** Every edge number goes through `edges.rs::edge_number`, which panics past the last `u32` below `INITIAL` instead of wrapping. Test: `core/explore/edges.rs::an_edge_number_past_u32_panics`. | `core/explore/edges.rs::edge_number` |
-| P56 | guarantee | fixed in #475 | **D20 did not say that a step that changes nothing takes nothing.** D20 required `s' ≠ s` for an instance to be enabled but defined *taken* without it, while the code (`core/explore/liveness.rs::fair_steps`) and `WF_vars` read *taken* as requiring a change of state; read literally, D20 let a stuttering self-loop satisfy `Fair_P` ([native.md](./native.md#the-fairness-model), assumption τ). **Fix.** D20 says a step with `s' = s` neither enables nor takes an instance, as `⟨A⟩_vars` and `lasso.rs::unfair_loop` read it. Test: `core/tests/liveness.rs::a_self_loop_is_neither_a_step_nor_enabling`. | semantics.md D20; `core/explore/liveness.rs::fair_steps` |
-| P60 | prose, evidence | partly fixed<br>text: fixed in #493<br>evidence for I1: open, as P26 | **semantics.md defined `T_β(M)` as what the build constructs.** D4 and D13 defined the initial states and `T_β(M)` as what `TransitionSystem::initial_states` and `::build` compute, so a builder fault was part of the specification, and native.md's "`T` is not `T_β(M)`" (P54) was false by definition. **Fix.** D1 to D13 and D24 define `T_β(M)` from the model's surface syntax, with code only in **Implemented by** notes, and that the build implements them is claim I1; P40, P43, P54, z3.md's Lemma U (now Lemma U₀ for the definition and Lemma U for the build), and the theme documents were reworded to match. semantics.md still takes which models are well-formed from the code's list of error diagnostics. | semantics.md; claims.md I1 |
-| P61 | — | not filed | No problem. The owner's review asked whether D11's latch, which lets one raise run a handler any number of times and never makes a raiser wait, is intended. It is: [semantics.md, D11](./semantics.md#d11) states the decision, and `.counted(k)` states "one run per raise". The number is left unused so that the review's numbering stays as recorded. | semantics.md D11 |
-| P62 | prose, guarantee | fixed in #501 | **Null had readings that trap modelers.** D5 reads a comparison two-valued, so `x != 3` holds on a null `x` and `not (x < 3)` holds on `⊥` while `x >= 3` does not; a logical `@derived` reads the comparison three-valued (`passes`). **Fix.** The language reference carries a truth table, computed by a test through the builder and the evaluator and compared with the page, and the lint warning `negated-order-admits-null` flags `not` over an ordering with a nullable operand in a `@check` or a `property`, unless the expression names that column's null. Tests: `core/tests/null_table.rs::the_null_truth_table_in_the_reference_is_the_evaluators`, `crates/rdra-ish-core/src/lint/null_tests.rs` (`a_negated_order_on_a_nullable_column_is_a_warning`, `a_negated_order_that_means_what_it_says_is_not_flagged`). No sample or corpus model draws the warning. | `core/expr.rs::compare`, `core/build/preds/mod.rs::columns_cmp`, `core/build/preds/checks.rs::passes`, `crates/rdra-ish-core/src/lint/nulls.rs`; language-reference.md § Null; semantics.md D5 |
-| P63 | guarantee | partly fixed<br>warnings and documentation: fixed in #501<br>executing the actions: open (the owner's call) | **`.on_delete(cascade)`, `set_null`, and `set_default` are not executed by verification, while the SQL export writes them.** D9 guards only `restrict` / `no_action` / unset keys; for the other three the delete removes the one row and the children stay. The SQL export writes `ON DELETE CASCADE` / `SET NULL` / `SET DEFAULT` (`emit/sql.rs::foreign_key_clause`), so a rule over the children can be `ok` in the model and broken against that database. **Fix.** `DeleteLeavesChildren` is a warning, and the new warning `DeleteLeavesChildKeys` covers `set_null` and `set_default`; neither is drawn for a `@soft_delete` parent. The language reference says verification executes no referential action. Tests: corpus `safety_delete_set_null`, `core/tests/effects.rs::a_delete_leaves_the_keys_of_a_set_null_or_set_default_key_and_says_so`. | `core/build/preds/entity_rules.rs::cascade_deletes`, `core/diag.rs`, `emit/sql.rs::foreign_key_clause`, `emit/codegen/mod.rs::obligations`; language-reference.md § Deleting a parent; semantics.md D9 |
-| P64 | feature | added in #495 (owner decision, 2026-11-28) | **A goal could not ask for a present row.** P6 keeps D21's reading as the default, so deleting a row meets a goal its `@default`s satisfy. `.present()` on `eventually` / `leads_to` conjoins every bound row's presence with the trigger and the goal; a deleted slot is never reused, so a delete before the goal leaves it unmet for good. The build lowers it into the goal predicate (`build/preds/temporal.rs::goal`), so every engine reads one predicate, and the cone is unchanged. Any other form takes no `.present()` (`PresentOnNonGoalProperty`); the build hints `GoalMetByDelete` where a plain goal holds on the base values of a binder some use case deletes. D21 gains the definition. Tests: corpus `presence_goal_present_modifier`, `presence_goal_present_both_ok`; `core/tests/liveness.rs::present_keeps_a_delete_from_meeting_the_goal`, `::present_adds_nothing_to_the_property_cone`. | `core/build/preds/temporal.rs::goal`, `crates/rdra-ish-core/src/analysis/property.rs`; language-reference.md |
-| P65 | guarantee | fixed in #513; test in #515; reproduced | **The reduction's monotonicity test missed every write to a column of 256 values.** `TransitionSystem::monotone_vars` listed the values a non-creating write starts from as `0..domain.size() as u8`, empty for a 256-value domain (a non-null Int at `--int-range-max 255`, or an Enum of 256), so such a column read as monotone even when a use case set it up and down, against the premise of the sub-lifecycle reduction that every T var S reads is monotone. Reproduced on a gate whose `level` two use cases set to 1 and to 0; on it and four variants the CLI printed the same verdicts before and after the fix, so no wrong verdict was seen. **Fix.** #513 lists the values through the checked `narrow::id8` (found by the `cast_possible_truncation` deny). Test: `core/tests/reduce.rs::a_256_value_column_set_both_ways_is_not_monotone`. | `core/reduce/split.rs::monotone_vars`; `core/narrow.rs` |
-| P66 | guarantee | fixed in #544; reproduced | **A `.when`-guarded `null` beside a `.when`-guarded `present` of one nullable Int was no step of the proof.** `build/sets.rs::Builder::guarded_set` joins every `.when`-guarded `sets` line of one column into one `Effect::Choose`: the `present` line sets `numbers` (`from = 1`), and the `null` line lists `Value(0)` beside it. `prove/encode.rs::Enc::one_of` read only `numbers`, as `c ≥ from`, so the encoded step never wrote null, while `explore/moves.rs::each_successor`, the TLA+ printer and `build/transitions.rs::arm_guards` (which keeps value 0 its own arm) all have that step; Proposition 2 and Theorem 1 of [z3.md](./z3.md#faithfulness-of-the-encoding) failed for such a model (F3), and by Corollary 6 a cone stopped at the memory limit could have read `ok` from a wrong `proved` (not reproduced: this model's cone is too small to stop there). Found by reading in the fourth audit; reproduced at `d44128aa`: on `sets(Fill, Item.n == present).when(IsOpen)` with `sets(Fill, Item.n == null).when(IsClosed)` and `forbidden(Item, n == null)`, BFS and TLC refute the rule in three steps (Add, Close, Fill), and `verify --prove --instance-count 1 --max-states 3` printed `proved: Forbidden_Item_0`, with the cone `not decided` and the run's `OK:` line. No sample or corpus case had the shape (the samples that mix the two writes use `String @null`, which takes no `numbers`). **Fix.** `one_of` keeps every listed value below `from` as a disjunct, `c ≥ from ∨ ⋁ { c = t : t listed, value < from }`; a choice that lists none is encoded as before, so no other model's script changed. Tests: `cli/tests/prove_cli.rs::a_guarded_null_beside_a_guarded_present_is_a_step_of_the_proof`; `core/tests/reference/proofs.rs::a_guarded_null_beside_a_guarded_present_is_no_proof` (it fails when z3 proves a rule the reference interpreter breaks at `m + 1` or `m + 3`; it does not itself assert that the reference breaks this rule, which holds by a reading of `interp.rs`); corpus `z3_guarded_null_beside_present` (z3 `unproved`; by the case's header comment BFS breaks the rule at `--int-range-max 6`, which no test runs). | `core/prove/encode.rs::Enc::one_of`; `core/build/sets.rs::Builder::guarded_set` |
-| P67 | guarantee | fixed in #547; reproduced | **A parameter on a stub binds in the extended sub-lifecycle.** `X` keeps a parent in `T` of an owner variable in `S` as a stub, absent in every state, and `restrict_to` keeps a parameter on it with its role. `Extended::build` binds every such parameter whose role needs a present row (`Existing`, `Parent`, `Triggered`) to any slot (`bind_stub_params`): a fold's `T` parameters, key or not, and a rise's. So every `S_a` step of the cone is a silent edge of `X` and every `T_a` step that changes the inputs has its rise, which Lemma 6 needs and Theorem A8.1 reads ([cones.md, Lemma 6](./cones.md#the-reduction-by-an-independent-sub-lifecycle), "Parameters"). An unfolded `S_a` action has no parameter on a stub (its raw reads make the entity an input), which a `shadow` build asserts. Tests: `core/tests/reduce.rs::a_triggered_param_on_a_stub_binds_in_the_extended_sub_lifecycle`, `::a_rise_with_a_param_on_a_stub_is_a_rise_of_the_extended_sub_lifecycle`; `fold_bits_hold_where_their_actions_run` checks that every `S_a` move of the cone is a silent step of `X` to the same state, on the domain samples, the case fold and the first test's model, where every reduced state's path also lifts to a real path of the cone; corpus `cone_triggered_param_on_a_stub`, `cone_rise_param_on_a_stub`. | `core/reduce/extended.rs::bind_stub_params`; `core/restrict.rs::restrict_to_mapped` |
-
-## Errata
-
-- **2026-11-28, P66; re-pin to `9857092a`** (the merge of #544), with every theme document.
-  #544 added the P66 row with its status "fixed in 27341191 (after the pin)"; the row now
-  cites #544. The paragraph on items that bore on a verdict counts P66 among them and among
-  the reproduced ones, the reproduced list and the Numbering paragraph name it, the
-  Conclusion places it beside P43 (an encoding fault no comparison with TLC reaches), P26
-  names #544's reference test, and P15 counts 87 corpus cases.
-- **2026-11-28, fourth audit; re-pin to `5ae62f2c`** (the merge of #542), with every theme
-  document. The Conclusion and the P20 row stated what #541 changed after the pin
-  `5f59fae2`, and credited it to #529 and #531: the search for a class move's S path,
-  `Succ::shortest_path`, still ended in a `panic!` at `5f59fae2`, which the second audit's
-  list of panics left out. The index is now pinned past #541, P20's status names it, and the
-  row and the Conclusion credit it. P20's list of what still panics was bounded by the files
-  it names: it now covers the `expect`s a lift reaches outside them (the rebuilt extended
-  sub-lifecycle and its runs, `Canon::canonical`, the lasso replays), says which of them rest
-  on `Extended::rebuild` reproducing `Extended::of` (not checked), and names the indexing it
-  leaves out and the path-keyed indexing that holds only for a path of the system's own
-  states. It no longer says the second half of `a_path_that_does_not_replay_is_a_fault`
-  runs: `SHOP` has no rule; the `LiftFault` naming is cited to
-  `a_violation_that_does_not_lift_is_a_lift_fault`, and the gap (no test drives a replay
-  failure in `trace_violations`) is stated. Its lift tests say which branches they reach.
-- **2026-11-28, third audit at `5f59fae2`.** The Status paragraph defines the qualifiers
-  the Status column uses (refined, decided as documented, checked, refuted and pinned,
-  argued, not proved, and the others). The paragraph on items that bore on a verdict says
-  why P2, P11, P22 and P62 are not among them. P16 names #497, the CHANGELOG erratum the
-  theme document named. P19, P42, P50 and P53 mark their main-only tests; P50 says its CLI test runs
-  at 255 only, against verdicts written into it, and what the build test checks. P26's
-  out-of-subset list now refers to I1, which lists what `RefModel::read` refuses from the
-  code. P32 names the tests that run `assert_cones_exact`. P54 cites
-  `check_cli.rs::an_enum_column_takes_no_more_values_than_a_state_holds`.
-- **2026-11-28, second audit at `5f59fae2`.** P20's list of the `expect`s and `panic!`s left was incomplete: it
-  now names the files it covers, adds the deadlock lift's trace slot, the last step of an
-  `after` violation (which reads the lifted path), `faulted`'s `unreachable!`, the
-  plain-run look-ups of `explore/liveness.rs`, `threads_covered`, and the callers'
-  preconditions, gives each the reason it holds, and says what it leaves out; the
-  Conclusion no longer says none is on the path being lifted, and the 2026-11-28 entry
-  below on #529 counts the list as it stood then. P20 also says what the second half of
-  `a_path_that_does_not_replay_is_a_fault` checks. P30 no longer claims 507 states or every
-  form, and says which verdicts its test compares. P32 says `assert_cones_exact` checks
-  marks on cones that free no slots. P26 takes its out-of-subset list from `interp.rs`.
-  The Conclusion calls P24 an evidence item, and the Status paragraph counts P6 as
-  reproduced.
-- **2026-11-28, re-pin to `5f59fae2`** (the merge of #537), with every theme document. P14
-  counts 25 `VERIFY_FALLBACK` cones (#526), and its claim that oidc-auth's 2-instance header
-  selects none of them was read (`select.rs`) and run. P11 names the corpus reader of #535.
-  P20's status names #531, the symmetric lasso lift its body already described, and the
-  Conclusion no longer calls P20 partly fixed.
-  P26 and P43 lose their `unread@pin`: `interp.rs`, `build/sets.rs`,
-  `build/transitions.rs::arm_guards` and `Enc::one_of` were read.
-- **2026-11-28, P20 closed (#529).** The row said the lift's internal invariants panicked and a lifted reduced `always` was not re-evaluated; #529 turned each look-up into a `ReplayError` fault, added the release checks in `decide_property`, and lists the three `expect`s left as unchecked internal invariants.
-- **2026-11-28, re-pin to `307ee4e8`.** The index described `b83b9544`. It now describes
-  `307ee4e8` (after #525 and #511), and the Documents table no longer states the other documents'
-  pins: each names its own. The Conclusion was rewritten: it had listed P40, P54, P32, P43
-  and P50 as live faults "with nothing in the run that notices", said a printed
-  counterexample is checked "in some cases", and called P26 a planned mitigation in progress
-  on a branch; all were fixed or merged (#470, #477, #479, #481, #492, #518, #522). The
-  preamble of the table had said the `ok` of P51 and P56 was not licensed by D17 or D20 as
-  written; both definitions were fixed (#475, #494). The status legend now has one meaning
-  per word and the Kinds legend defines **feature** (P64). The semantics definitions run to
-  D25 (deadlock, #520), not D24.
-- **2026-11-28, row histories moved here.** Rows had recorded how their own text changed:
-  P1, P7, P10, P30, P32, P62 and P63 began their status with "Was: read"; P20 said "Corrected
-  by native.md: an earlier wording said a reduced liveness lasso is replayed only on the
-  reduced system and that safety traces in general are re-evaluated"; P14, P16 and P21 had
-  "Extended" paragraphs from tlc-agreement.md, folded into the rows; P14 said "claims.md T5
-  said reduced and unreduced"; P22's kind changed from prose to guarantee when its text was
-  fixed in #475; P3 and P5 had "Re-read for z3.md" paragraphs; P32 said formal-verification.md
-  stated "an `ok` is sound" without restriction until the pull request that added cones.md
-  corrected it. Rows also carried in-progress text that no longer held: P32 "a fix is in
-  progress (lane L1)", P40 "P54 … not yet in this table; #470 takes up both", P43 "Fix lane
-  L2 is changing the code", P42 "reachability rests on P1", P26 "lane L6, in progress".
-- **2026-11-28, statuses corrected.** P6, P8, P9, P17, P19, P35 and P56 had a status of read
-  or reported while their bodies recorded the fix; P18 said read although its fix was
-  partial; P22 said both "the gap stays open" and "Fixed in #494"; P33 said read but was
-  closed; P4 had three fix marks without saying which part each fixed; P5 said "fixed in
-  #490" while the CTI line was unchanged until #525; P20 said fixed while the lift's
-  internal `expect`s could still panic. P50 cited #479 alone for a check that #510 added
-  (`StateTooWide`), P65 cited #513 for a test that #515 added, and P16 said the mutation run
-  mutates no TLC-side file, which #508 changed. P17 said 25 twins; #491 made it 26. P64 had
-  no pull request number, and P65 had no Where cell. Paths written `core/lifecycle/…` or
-  `core/src/lifecycle/…` (P26, P34, P62 to P64) now follow the `core/` convention, and the
-  two files outside `lifecycle/` are cited in full.
